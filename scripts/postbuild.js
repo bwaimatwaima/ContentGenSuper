@@ -26,65 +26,25 @@ for (const file of requiredFiles) {
 const files = fs.readdirSync(distDir);
 console.log(`[Postbuild] Build artifacts verified (${files.length} items in dist: ${files.join(', ')})`);
 
-// Check if running inside AI Studio or Cloud deployment environment
-const isAiStudioOrCloud = Boolean(
-  process.env.APPLET_ID ||
-  process.env.APPLET_DIR ||
-  process.env.CONTROL_PLANE_PORT ||
-  process.env.K_SERVICE ||
-  process.env.K_REVISION ||
-  process.env.GAE_ENV ||
-  process.env.CI
-);
-
-if (isAiStudioOrCloud) {
-  console.log('[Postbuild] AI Studio / Cloud environment detected. Skipping desktop packaging aliases.');
-}
-
-// In AI Studio / Cloud Run, create a 'build' directory by deeply copying 'dist' so the artifact uploader finds it (no symlinks).
-if (isAiStudioOrCloud) {
-  console.log('[Postbuild] AI Studio / Cloud environment detected. Copying dist to build for artifact uploader.');
-  for (const dirName of ['build']) {
-    const targetDir = path.join(rootDir, dirName);
-    try {
+// Unconditionally mirror 'dist' to 'build' as a physical directory (no symlinks) so AI Studio and all deployment runners find valid artifacts.
+const targetDirs = ['build', 'dist-electron'];
+for (const dirName of targetDirs) {
+  const targetDir = path.join(rootDir, dirName);
+  try {
+    if (fs.existsSync(targetDir)) {
       const stats = fs.lstatSync(targetDir);
       if (stats.isSymbolicLink() || stats.isFile()) {
         fs.unlinkSync(targetDir);
       } else {
         fs.rmSync(targetDir, { recursive: true, force: true });
       }
-    } catch {}
-    try {
-      fs.cpSync(distDir, targetDir, { recursive: true });
-      console.log(`[Postbuild] Mirrored artifacts to ${dirName} for deployment runner.`);
-    } catch (cpErr) {
-      console.warn(`[Postbuild] Could not mirror to ${dirName}:`, cpErr.message);
     }
-  }
-} else {
-  // Local desktop builds only
-  const fallbackDirs = ['build', 'dist-electron'];
-  for (const dirName of fallbackDirs) {
-    const targetDir = path.join(rootDir, dirName);
-    try {
-      if (fs.existsSync(targetDir)) {
-        const stats = fs.lstatSync(targetDir);
-        if (stats.isSymbolicLink()) {
-          fs.unlinkSync(targetDir);
-        } else {
-          fs.rmSync(targetDir, { recursive: true, force: true });
-        }
-      }
-      fs.symlinkSync('dist', targetDir, 'junction');
-      console.log(`[Postbuild] Created artifact alias ${dirName} -> dist`);
-    } catch (err) {
-      try {
-        fs.cpSync(distDir, targetDir, { recursive: true });
-        console.log(`[Postbuild] Mirrored artifacts to ${dirName}`);
-      } catch (cpErr) {
-        console.warn(`[Postbuild] Could not mirror to ${dirName}:`, cpErr.message);
-      }
-    }
+  } catch {}
+  try {
+    fs.cpSync(distDir, targetDir, { recursive: true });
+    console.log(`[Postbuild] Mirrored artifacts to ${dirName} for deployment runner.`);
+  } catch (cpErr) {
+    console.warn(`[Postbuild] Could not mirror to ${dirName}:`, cpErr.message);
   }
 }
 

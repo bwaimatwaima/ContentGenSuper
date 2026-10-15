@@ -25,6 +25,8 @@ import {
   handleTimelineClick,
   handleTimelineMouseDown,
 } from "./videoController";
+import { enhanceTimelineDom } from "./director-workspace";
+
 
 let previewResizeObserver: ResizeObserver | null = null;
 let latestTimelineStateCache = {
@@ -1768,6 +1770,7 @@ export function renderBrollEditor(
           dom.timelineEditorContainer.classList.add("hidden");
         }
       }
+      enhanceTimelineDom();
     }
   }
 

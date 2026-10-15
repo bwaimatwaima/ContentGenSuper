@@ -1658,6 +1658,405 @@ export function enhanceGraphicsGalleryCards() {
       });
     }
   });
+
+  initGraphicPresetCanvasPreviews();
+}
+
+/**
+ * Renders a static resting frame for each graphic preset card and animates
+ * ONLY the currently hovered card at 60fps.
+ */
+export function initGraphicPresetCanvasPreviews(): void {
+  const grid = document.getElementById('mg-preset-grid');
+  if (!grid) return;
+
+  const themeSelect = document.getElementById('graphics-theme-select') as HTMLSelectElement | null;
+  const accentInput = (document.getElementById('graphics-accent-color-input') ||
+    document.getElementById('graphics-accent-color')) as HTMLInputElement | null;
+
+  const getTheme = () => themeSelect?.value || 'minimal';
+  const getAccent = () => accentInput?.value || '#4f8ff7';
+
+  // Redraw all resting cards when theme or accent color changes
+  if (themeSelect && !themeSelect.dataset.vsCanvasListening) {
+    themeSelect.dataset.vsCanvasListening = '1';
+    themeSelect.addEventListener('change', () => initGraphicPresetCanvasPreviews());
+  }
+  if (accentInput && !accentInput.dataset.vsCanvasListening) {
+    accentInput.dataset.vsCanvasListening = '1';
+    accentInput.addEventListener('input', () => initGraphicPresetCanvasPreviews());
+  }
+
+  // Draw a preview frame for a given preset ID at normalized progress t in [0..1]
+  function renderPresetMiniPreview(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    presetId: string,
+    t: number
+  ) {
+    const accent = getAccent();
+    const theme = getTheme();
+    ctx.clearRect(0, 0, w, h);
+
+    // Subtle dark stage grid background (matches video-studio player stage)
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, w, h);
+
+    // Ease-out cubic curve for entrance preview
+    const ease = 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+
+    ctx.save();
+    switch (presetId) {
+      case 'lowerThird': {
+        const slideX = (1 - ease) * -40;
+        ctx.translate(slideX, 0);
+        ctx.fillStyle = accent;
+        ctx.fillRect(14, h - 28, 3, 18);
+        ctx.fillStyle = 'rgba(24, 24, 28, 0.88)';
+        ctx.fillRect(19, h - 28, w * 0.62 * ease, 18);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 9px Inter, sans-serif';
+        ctx.fillText('DR. ELENA VANCE', 24, h - 19);
+        ctx.fillStyle = accent;
+        ctx.font = '500 7px Inter, sans-serif';
+        ctx.fillText('LEAD RESEARCHER', 24, h - 12);
+        break;
+      }
+      case 'titleCard': {
+        ctx.globalAlpha = ease;
+        const scale = 0.88 + 0.12 * ease;
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CHAPTER 01', 0, -2);
+        ctx.fillStyle = accent;
+        ctx.fillRect(-22, 4, 44 * ease, 2);
+        break;
+      }
+      case 'statCounter': {
+        const val = Math.round(1250 * ease).toLocaleString();
+        ctx.fillStyle = accent;
+        ctx.font = '700 16px "Roboto Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${val}+`, w / 2, h / 2 + 4);
+        ctx.fillStyle = '#a9a9b1';
+        ctx.font = '500 7.5px Inter, sans-serif';
+        ctx.fillText('ACTIVE NODES', w / 2, h / 2 + 15);
+        break;
+      }
+      case 'donutChart': {
+        const cx = w / 2;
+        const cy = h / 2;
+        const r = 16;
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = 'round';
+        // Track
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Progress arc
+        ctx.strokeStyle = accent;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * 0.72 * ease));
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${Math.round(72 * ease)}%`, cx, cy);
+        break;
+      }
+      case 'bulletPanel': {
+        const lines = ['First key takeaway', 'Realtime GPU engine', 'High-res video export'];
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        lines.forEach((line, i) => {
+          const lineEase = Math.min(1, Math.max(0, (ease - i * 0.2) / 0.6));
+          if (lineEase <= 0) return;
+          const y = 20 + i * 16;
+          ctx.globalAlpha = lineEase;
+          ctx.fillStyle = accent;
+          ctx.beginPath();
+          ctx.arc(18, y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#e4e4e7';
+          ctx.font = '500 8.5px Inter, sans-serif';
+          ctx.fillText(line, 26, y);
+        });
+        break;
+      }
+      case 'socialBadge': {
+        const scale = 0.85 + 0.15 * ease;
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = ease;
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(-38, -12, 76, 24, 12);
+        } else {
+          ctx.rect(-38, -12, 76, 24);
+        }
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SUBSCRIBE 🔔', 0, 0);
+        break;
+      }
+      default: {
+        renderHyperFrameOrGenericPreview(ctx, w, h, presetId, ease, accent);
+        break;
+      }
+    }
+    ctx.restore();
+  }
+
+  function renderHyperFrameOrGenericPreview(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    presetId: string,
+    ease: number,
+    accent: string
+  ) {
+    const cx = w / 2;
+    const cy = h / 2;
+
+    switch (presetId) {
+      case 'hyperFrame:flash-sale': {
+        const scale = 0.85 + 0.15 * ease;
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(-42, -14, 84, 28, 6);
+        } else {
+          ctx.rect(-42, -14, 84, 28);
+        }
+        ctx.fill();
+        ctx.fillStyle = '#000000';
+        ctx.font = '900 11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚡ 50% OFF', 0, 0);
+        break;
+      }
+      case 'hyperFrame:trust-reviews': {
+        ctx.globalAlpha = ease;
+        ctx.fillStyle = '#10b981';
+        ctx.font = '700 13px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★★★★★', cx, cy - 6);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 8.5px Inter, sans-serif';
+        ctx.fillText('4.9 / 5.0 Rating', cx, cy + 9);
+        break;
+      }
+      case 'hyperFrame:ecommerce-cta': {
+        const scale = 0.88 + 0.12 * ease;
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#6366f1';
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(-42, -13, 84, 26, 13);
+        } else {
+          ctx.rect(-42, -13, 84, 26);
+        }
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SHOP NOW →', 0, 0);
+        break;
+      }
+      case 'hyperFrame:price-slash': {
+        ctx.globalAlpha = ease;
+        ctx.font = '700 11px "Roboto Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#71717a';
+        ctx.fillText('$99', cx - 22, cy);
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 32, cy + 5);
+        ctx.lineTo(cx - 12, cy - 5);
+        ctx.stroke();
+
+        ctx.fillStyle = '#22c55e';
+        ctx.font = '800 15px "Roboto Mono", monospace';
+        ctx.fillText('$49', cx + 18, cy);
+        break;
+      }
+      case 'hyperFrame:reels-hook': {
+        const scale = 0.9 + 0.1 * ease;
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#eab308';
+        ctx.fillRect(-45, -12, 90, 24);
+        ctx.fillStyle = '#000000';
+        ctx.font = '900 9.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('WAIT FOR IT 🤯', 0, 0);
+        break;
+      }
+      case 'hyperFrame:pattern-wait':
+      case 'hyperFrame:pattern-mistake': {
+        ctx.globalAlpha = ease;
+        ctx.fillStyle = presetId.includes('mistake') ? '#ef4444' : '#f59e0b';
+        ctx.font = '800 11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(presetId.includes('mistake') ? '❌ STOP THIS!' : '⚠️ WATCH OUT', cx, cy - 4);
+        ctx.fillStyle = '#d4d4d8';
+        ctx.font = '500 7.5px Inter, sans-serif';
+        ctx.fillText('Critical Mistake', cx, cy + 9);
+        break;
+      }
+      case 'hyperFrame:soundwave-ribbon':
+      case 'hyperFrame:podcast-speaker': {
+        const barCount = 12;
+        const barW = 3.5;
+        const gap = 3;
+        const totalW = barCount * (barW + gap) - gap;
+        const startX = cx - totalW / 2;
+        ctx.fillStyle = accent;
+        for (let i = 0; i < barCount; i++) {
+          const wave = Math.sin((i / barCount) * Math.PI * 2 + ease * Math.PI * 2);
+          const barH = 6 + Math.abs(wave) * 22 * ease;
+          ctx.fillRect(startX + i * (barW + gap), cy - barH / 2, barW, barH);
+        }
+        break;
+      }
+      case 'hyperFrame:stat-metric': {
+        ctx.globalAlpha = ease;
+        ctx.fillStyle = '#10b981';
+        ctx.font = '800 15px "Roboto Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`+${Math.round(284 * ease)}%`, cx, cy - 3);
+        ctx.fillStyle = '#a1a1aa';
+        ctx.font = '500 7.5px Inter, sans-serif';
+        ctx.fillText('ANNUAL GROWTH', cx, cy + 11);
+        break;
+      }
+      case 'hyperFrame:breaking-news': {
+        ctx.fillStyle = '#dc2626';
+        ctx.fillRect(0, cy - 11, w, 22);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 8.5px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🔴 BREAKING NEWS', cx, cy);
+        break;
+      }
+      case 'hyperFrame:neon-cyber': {
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(16, 12, w - 32, h - 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`TARGET LOCKED [${Math.round(100 * ease)}%]`, cx, cy);
+        break;
+      }
+      default: {
+        ctx.globalAlpha = ease;
+        const scale = 0.85 + 0.15 * ease;
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = accent;
+        ctx.fillRect(-24, -2, 48 * ease, 3);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '600 9px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = presetId.replace('hyperFrame:', '').replace(/-/g, ' ').toUpperCase();
+        ctx.fillText(label.slice(0, 16), 0, -8);
+        break;
+      }
+    }
+  }
+
+  grid.querySelectorAll<HTMLElement>('.graphic-preset-card, .mg-card').forEach((card) => {
+    const presetId = card.getAttribute('data-gallery-preset');
+    if (!presetId) return;
+
+    let canvas = card.querySelector<HTMLCanvasElement>('canvas.tile-canvas');
+    let previewBox = card.querySelector<HTMLElement>('.tile-preview');
+
+    if (!canvas) {
+      if (!previewBox) {
+        previewBox = document.createElement('div');
+        previewBox.className = 'tile-preview mb-2 w-full aspect-video rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 relative';
+        const favBtn = card.querySelector('.tile-fav, .mg-fav-btn');
+        if (favBtn && favBtn.nextSibling) {
+          card.insertBefore(previewBox, favBtn.nextSibling);
+        } else {
+          card.prepend(previewBox);
+        }
+      }
+      canvas = document.createElement('canvas');
+      canvas.className = 'tile-canvas w-full h-full block';
+      canvas.width = 160;
+      canvas.height = 90;
+      previewBox.appendChild(canvas);
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw idle frame at progress = 0.65
+    renderPresetMiniPreview(ctx, canvas.width, canvas.height, presetId, 0.65);
+
+    if (!card.dataset.vsCanvasBound) {
+      card.dataset.vsCanvasBound = '1';
+      let animFrameId: number | null = null;
+      let startTime = 0;
+      const DURATION = 850; // ms for entrance cycle
+
+      const startAnimation = () => {
+        startTime = performance.now();
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        const tick = (now: number) => {
+          const elapsed = now - startTime;
+          const progress = Math.min(1, elapsed / DURATION);
+          renderPresetMiniPreview(ctx!, canvas!.width, canvas!.height, presetId, progress);
+          if (progress < 1) {
+            animFrameId = requestAnimationFrame(tick);
+          } else {
+            animFrameId = null;
+          }
+        };
+        animFrameId = requestAnimationFrame(tick);
+      };
+
+      const resetToIdle = () => {
+        if (animFrameId) {
+          cancelAnimationFrame(animFrameId);
+          animFrameId = null;
+        }
+        renderPresetMiniPreview(ctx!, canvas!.width, canvas!.height, presetId, 0.65);
+      };
+
+      card.addEventListener('mouseenter', startAnimation);
+      card.addEventListener('mouseleave', resetToIdle);
+      card.addEventListener('focus', startAnimation);
+      card.addEventListener('blur', resetToIdle);
+    }
+  });
 }
 
 // ----- Canvas Interaction -----
@@ -2327,6 +2726,7 @@ User Request: "${prompt}"`
     }
 
     enhanceGraphicsGalleryCards();
+    initGraphicPresetCanvasPreviews();
     applyPresetGalleryFilters();
 
     const mgAiPromptInput = document.getElementById('mg-ai-prompt-input') as HTMLInputElement | null;

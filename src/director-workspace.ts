@@ -6,6 +6,7 @@
 import * as dom from './dom';
 import { drawVideoFrame } from './videoRenderer';
 import { state } from './state';
+import { getActiveAspectRatio } from './handlers-effects';
 
 const WORKSPACE_FLAG_KEY = 'cg_flag_vs_workspace';
 
@@ -146,6 +147,8 @@ export function activateVsWorkspace(): boolean {
     if (dom.shotInspectorDrawer) {
       dom.shotInspectorDrawer.classList.remove('hidden', 'translate-x-full');
       moveNode(dom.shotInspectorDrawer, shellEl.querySelector('#vs-insp-tab-shot'));
+      mountInspectorPositionGlyphs();
+      mountInspectorSpeedChips();
     }
 
     // 2. Dock Camera Keyframes & Cinematography into Right Inspector -> Cinematography tab
@@ -186,7 +189,10 @@ export function activateVsWorkspace(): boolean {
     // 5. Dock Graphic Editor into Right Inspector if active
     syncGraphicEditorToInspector();
 
-    // 6. Return to Storyboard & Classic Fallback Buttons
+    // 6. Mount Player Stage Overlays & Toolbar
+    mountPlayerStageOverlays();
+
+    // 7. Return to Storyboard & Classic Fallback Buttons
     shellEl.querySelector('#vs-exit-classic-btn')?.addEventListener('click', () => {
       setVsWorkspaceEnabled(false);
     });
@@ -307,3 +313,342 @@ export function syncGraphicEditorToInspector(): void {
     graphicSlot.appendChild(modal);
   }
 }
+
+/**
+ * Automatically injects video-studio timeline and track CSS classes onto
+ * ContentGen's rendered timeline elements without altering internal DOM IDs or state.
+ */
+export function enhanceTimelineDom(): void {
+  const container = document.getElementById('timeline-editor-container');
+  if (!container) return;
+
+  // Mark container with video-studio styling scope
+  container.classList.add('vs-timeline-shell');
+
+  // Assign track row classes based on order or data attributes
+  container.querySelectorAll<HTMLElement>('.tl-lane, tr, [data-track-lane]').forEach((lane, idx) => {
+    if (idx === 0) lane.classList.add('main', 'is-main');
+    else if (lane.textContent?.toLowerCase().includes('audio') || lane.textContent?.toLowerCase().includes('voice')) {
+      lane.classList.add('audio', 'is-audio');
+    } else {
+      lane.classList.add('overlay', 'is-overlay');
+    }
+  });
+
+  // Assign clip classes
+  container.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach((clip) => {
+    if (!clip.classList.contains('tl-clip')) clip.classList.add('tl-clip');
+    if (clip.dataset.type === 'image' || clip.dataset.type === 'video') {
+      clip.classList.add('kind-video');
+    } else if (clip.dataset.type === 'audio') {
+      clip.classList.add('kind-audio');
+    } else if (clip.dataset.type === 'text') {
+      clip.classList.add('kind-text');
+    }
+  });
+}
+
+interface PosGlyphSpec {
+  value: string;
+  label: string;
+  glyphClass: string;
+  title: string;
+}
+
+const PIP_CORNER_GLYPHS: PosGlyphSpec[] = [
+  { value: 'top_left', label: 'TL', glyphClass: 'pos-tl', title: 'Top Left' },
+  { value: 'top_right', label: 'TR', glyphClass: 'pos-tr', title: 'Top Right' },
+  { value: 'center_left', label: 'CL', glyphClass: 'pos-cl', title: 'Center Left' },
+  { value: 'center_right', label: 'CR', glyphClass: 'pos-cr', title: 'Center Right' },
+  { value: 'bottom_left', label: 'BL', glyphClass: 'pos-bl', title: 'Bottom Left' },
+  { value: 'bottom_right', label: 'BR', glyphClass: 'pos-br', title: 'Bottom Right' },
+  { value: 'custom', label: 'Drag', glyphClass: 'pos-custom', title: 'Custom (Drag on Canvas)' },
+];
+
+const TALKING_HEAD_GLYPHS: PosGlyphSpec[] = [
+  { value: 'none', label: 'Off', glyphClass: 'pos-none', title: 'Hidden (B-Roll Only)' },
+  { value: 'full', label: 'Full', glyphClass: 'pos-full', title: 'Full Screen A-Roll' },
+  { value: 'split', label: 'Split', glyphClass: 'pos-split', title: 'Split Screen' },
+  { value: 'pip-tl', label: 'TL', glyphClass: 'pos-tl', title: 'Corner PiP (Top Left)' },
+  { value: 'pip-tr', label: 'TR', glyphClass: 'pos-tr', title: 'Corner PiP (Top Right)' },
+  { value: 'pip-bl', label: 'BL', glyphClass: 'pos-bl', title: 'Corner PiP (Bottom Left)' },
+  { value: 'pip-br', label: 'BR', glyphClass: 'pos-br', title: 'Corner PiP (Bottom Right)' },
+];
+
+function attachGlyphStripToSelect(
+  selectEl: HTMLSelectElement | null,
+  stripId: string,
+  specs: PosGlyphSpec[]
+): void {
+  if (!selectEl) return;
+  const existing = document.getElementById(stripId);
+  if (existing) {
+    (existing as any).__sync?.();
+    return;
+  }
+
+  const strip = document.createElement('div');
+  strip.id = stripId;
+  strip.className = 'vs-pos-strip';
+  strip.setAttribute('role', 'radiogroup');
+
+  // Only render glyphs whose option values exist in the underlying <select>
+  const validValues = new Set(Array.from(selectEl.options).map((o) => o.value));
+  const activeSpecs = specs.filter((s) => validValues.size === 0 || validValues.has(s.value));
+
+  for (const spec of activeSpecs) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'vs-pos-btn';
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', String(selectEl.value === spec.value));
+    btn.dataset.posValue = spec.value;
+    btn.title = spec.title;
+    btn.innerHTML = `<span class="pos-glyph ${spec.glyphClass}" aria-hidden="true"></span><span>${spec.label}</span>`;
+
+    btn.addEventListener('click', () => {
+      selectEl.value = spec.value;
+      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+      syncGlyphSelection();
+    });
+
+    strip.appendChild(btn);
+  }
+
+  function syncGlyphSelection() {
+    const cur = selectEl!.value;
+    strip.querySelectorAll<HTMLButtonElement>('.vs-pos-btn').forEach((btn) => {
+      btn.setAttribute('aria-checked', String(btn.dataset.posValue === cur));
+    });
+  }
+
+  (strip as any).__sync = syncGlyphSelection;
+
+  // Keep glyph strip in sync when Shot Inspector loads a different shot
+  selectEl.addEventListener('change', syncGlyphSelection);
+  const observer = new MutationObserver(syncGlyphSelection);
+  observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
+
+  // Insert glyph strip right after the .insp-row containing the <select>
+  const row = selectEl.closest('.insp-row') || selectEl;
+  row.insertAdjacentElement('afterend', strip);
+}
+
+/**
+ * Mounts visual 9-grid position glyph buttons for both B-Roll PiP Corner
+ * (#inspector-pip-position-select) and Presenter Talking Head framing
+ * (#inspector-talking-head-mode-select).
+ */
+export function mountInspectorPositionGlyphs(): void {
+  const pipSelect = document.getElementById('inspector-pip-position-select') as HTMLSelectElement | null;
+  const thSelect = document.getElementById('inspector-talking-head-mode-select') as HTMLSelectElement | null;
+
+  attachGlyphStripToSelect(pipSelect, 'vs-pip-pos-glyph-strip', PIP_CORNER_GLYPHS);
+  attachGlyphStripToSelect(thSelect, 'vs-th-pos-glyph-strip', TALKING_HEAD_GLYPHS);
+}
+
+/**
+ * Mounts video-studio's one-click speed preset chips (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x)
+ * directly beneath #inspector-clip-speed-slider.
+ */
+export function mountInspectorSpeedChips(): void {
+  const slider = document.getElementById('inspector-clip-speed-slider') as HTMLInputElement | null;
+  const label = document.getElementById('inspector-clip-speed-label');
+  if (!slider) return;
+  const existingChips = document.getElementById('vs-inspector-speed-chips');
+  if (existingChips) {
+    (existingChips as any).__sync?.();
+    return;
+  }
+
+  const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  const chipRow = document.createElement('div');
+  chipRow.id = 'vs-inspector-speed-chips';
+  chipRow.className = 'chip-row';
+  chipRow.setAttribute('role', 'group');
+  chipRow.setAttribute('aria-label', 'Speed Presets');
+
+  for (const s of speeds) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.speedVal = String(s);
+    chip.textContent = `${s}x`;
+
+    chip.addEventListener('click', () => {
+      slider.value = String(s);
+      if (label) label.textContent = `${s.toFixed(2)}x`;
+      // Fire both 'input' (live preview) and 'change' (history/state commit)
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      slider.dispatchEvent(new Event('change', { bubbles: true }));
+      syncActiveSpeedChip();
+    });
+
+    chipRow.appendChild(chip);
+  }
+
+  function syncActiveSpeedChip() {
+    const currentVal = parseFloat(slider!.value || '1');
+    chipRow.querySelectorAll<HTMLButtonElement>('.chip').forEach((chip) => {
+      const chipVal = parseFloat(chip.dataset.speedVal || '1');
+      const isMatch = Math.abs(currentVal - chipVal) < 0.015;
+      chip.setAttribute('aria-pressed', String(isMatch));
+    });
+  }
+
+  (chipRow as any).__sync = syncActiveSpeedChip;
+
+  slider.addEventListener('input', syncActiveSpeedChip);
+  slider.addEventListener('change', syncActiveSpeedChip);
+  syncActiveSpeedChip();
+
+  const row = slider.closest('.insp-row') || slider.parentElement;
+  row?.insertAdjacentElement('afterend', chipRow);
+}
+
+const STAGE_GUIDES_STORAGE_KEY = 'cg_vs_stage_guides_v1';
+
+interface StageGuidesState {
+  grid: boolean;
+  center: boolean;
+  safe: boolean;
+}
+
+function loadGuidesState(): StageGuidesState {
+  try {
+    const raw = localStorage.getItem(STAGE_GUIDES_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { grid: false, center: false, safe: false };
+}
+
+function saveGuidesState(st: StageGuidesState): void {
+  try {
+    localStorage.setItem(STAGE_GUIDES_STORAGE_KEY, JSON.stringify(st));
+  } catch {}
+}
+
+/**
+ * Mounts Rule-of-Thirds, Center Crosshair, and 9:16 TikTok/Reels + 16:9 Title/Action
+ * Safe-Zone overlays directly over the Video Director preview canvas container,
+ * plus a compact toggle bar in the player toolbar.
+ */
+export function mountPlayerStageOverlays(): void {
+  // Locate the Video Director preview canvas (never touch #export-render-canvas)
+  const previewCanvas =
+    (document.getElementById('video-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('video-director-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('director-preview-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('video-preview-canvas') as HTMLCanvasElement | null) ||
+    document.querySelector<HTMLCanvasElement>('canvas:not(#export-render-canvas):not(#vfx-preview-canvas):not(.tile-canvas)');
+
+  if (!previewCanvas || !previewCanvas.parentElement) return;
+  if (document.getElementById('vs-player-guides-overlay')) return;
+
+  const host = previewCanvas.parentElement;
+  host.classList.add('vs-stage-overlay-host');
+
+  const st = loadGuidesState();
+
+  // 1. Create the pointer-events:none overlay layer
+  const guidesEl = document.createElement('div');
+  guidesEl.id = 'vs-player-guides-overlay';
+  guidesEl.className = 'vs-player-guides';
+  guidesEl.setAttribute('aria-hidden', 'true');
+  guidesEl.dataset.grid = st.grid ? 'on' : 'off';
+  guidesEl.dataset.center = st.center ? 'on' : 'off';
+  guidesEl.dataset.safe = st.safe ? 'on' : 'off';
+  guidesEl.dataset.aspect = getActiveAspectRatio();
+
+  guidesEl.innerHTML = `
+    <div class="vs-guide-thirds"></div>
+    <div class="vs-guide-center"></div>
+    <div class="vs-guide-safe">
+      <!-- 16:9 / 1:1 / 4:3 Broadcast Action (90%) & Title (80%) Safe Boxes -->
+      <div class="vs-safe-action-box"></div>
+      <div class="vs-safe-title-box"></div>
+
+      <!-- 9:16 TikTok / Reels / Shorts UI Hazard Overlay -->
+      <div class="vs-safe-social-ui">
+        <div class="vs-social-top-mask">TOP UI / SEARCH BAR</div>
+        <div class="vs-social-right-mask">ACTIONS</div>
+        <div class="vs-social-bottom-mask">@handle · caption & audio marquee (avoid placing subtitles here)</div>
+        <div class="vs-social-safe-frame"></div>
+      </div>
+    </div>
+  `;
+
+  host.appendChild(guidesEl);
+
+  // 2. Keep overlay bounds locked to the rendered canvas box inside the stage
+  const syncOverlayBoundsToCanvas = () => {
+    const hostRect = host.getBoundingClientRect();
+    const canvasRect = previewCanvas.getBoundingClientRect();
+    if (hostRect.width === 0 || canvasRect.width === 0) return;
+
+    guidesEl.style.left = `${Math.round(canvasRect.left - hostRect.left)}px`;
+    guidesEl.style.top = `${Math.round(canvasRect.top - hostRect.top)}px`;
+    guidesEl.style.width = `${Math.round(canvasRect.width)}px`;
+    guidesEl.style.height = `${Math.round(canvasRect.height)}px`;
+    guidesEl.dataset.aspect = getActiveAspectRatio();
+  };
+
+  const ro = new ResizeObserver(syncOverlayBoundsToCanvas);
+  ro.observe(host);
+  ro.observe(previewCanvas);
+  window.addEventListener('resize', syncOverlayBoundsToCanvas);
+  requestAnimationFrame(syncOverlayBoundsToCanvas);
+
+  // Listen for aspect-ratio dropdown changes so 9:16 vs 16:9 safe zones switch automatically
+  const aspectSelectors = [
+    document.getElementById('video-director-aspect-select'),
+    document.getElementById('image-resolution'),
+    document.getElementById('aspect-ratio-select'),
+  ];
+  aspectSelectors.forEach((sel) => {
+    sel?.addEventListener('change', () => {
+      setTimeout(syncOverlayBoundsToCanvas, 30);
+    });
+  });
+
+  // 3. Create the toggle button pill (Rule of Thirds / Crosshair / Safe Zone)
+  const toolbar = document.createElement('div');
+  toolbar.id = 'vs-stage-guides-toolbar';
+  toolbar.className = 'vs-stage-tools-bar';
+  toolbar.setAttribute('role', 'group');
+  toolbar.setAttribute('aria-label', 'Canvas Composition Guides');
+
+  toolbar.innerHTML = `
+    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="grid" aria-pressed="${st.grid}" title="Toggle Rule-of-Thirds Grid (G)">
+      <span>⊞</span><span>Grid</span>
+    </button>
+    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="center" aria-pressed="${st.center}" title="Toggle Center Crosshair">
+      <span>⌖</span><span>Center</span>
+    </button>
+    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="safe" aria-pressed="${st.safe}" title="Toggle 9:16 Social / 16:9 Broadcast Safe Zones">
+      <span>⊡</span><span>Safe Zone</span>
+    </button>
+  `;
+
+  toolbar.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-guide-toggle]');
+    if (!btn) return;
+    const key = btn.dataset.guideToggle as keyof StageGuidesState;
+    st[key] = !st[key];
+    btn.setAttribute('aria-pressed', String(st[key]));
+    guidesEl.dataset[key] = st[key] ? 'on' : 'off';
+    syncOverlayBoundsToCanvas();
+    saveGuidesState(st);
+  });
+
+  // Mount the toggle pill in the Video Studio topbar center slot or right beneath the player stage
+  const topbarSlot = document.getElementById('vs-topbar-center-slot');
+  if (topbarSlot) {
+    topbarSlot.appendChild(toolbar);
+  } else {
+    host.insertAdjacentElement('afterend', toolbar);
+  }
+}
+
+
+

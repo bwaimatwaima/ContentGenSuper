@@ -15,6 +15,7 @@ import { presetToKeyframes } from './utils';
 import type { CameraKeyframesConfig } from './types';
 import { openMapStudioModal } from './map-studio';
 import { removeSecondaryMedia } from './memoryManager';
+import { mountInspectorPositionGlyphs, mountInspectorSpeedChips } from './director-workspace';
 
 export let activeShotId: string | null = null;
 
@@ -711,6 +712,10 @@ export function openInspectorForShot(shotId?: string) {
 
     // Highlight target shot card in storyboard grid
     highlightShotCard(target.shot.id);
+
+    // Refresh visual position glyphs and speed preset chips
+    mountInspectorPositionGlyphs();
+    mountInspectorSpeedChips();
 }
 
 /**

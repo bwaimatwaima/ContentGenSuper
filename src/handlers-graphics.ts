@@ -1503,6 +1503,159 @@ export function deleteGraphicEvent(id: string) {
     ui.showStatus('🗑️ Overlay deleted', false, 2000);
 }
 
+const MG_FAVORITES_KEY = 'cg_mg_favorite_presets_v1';
+
+export function getFavoritePresets(): Set<string> {
+  try {
+    const raw = localStorage.getItem(MG_FAVORITES_KEY);
+    return new Set(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function toggleFavoritePreset(presetId: string): boolean {
+  const favs = getFavoritePresets();
+  const isNowFav = !favs.has(presetId);
+  if (isNowFav) favs.add(presetId);
+  else favs.delete(presetId);
+  try {
+    localStorage.setItem(MG_FAVORITES_KEY, JSON.stringify([...favs]));
+  } catch {}
+  return isNowFav;
+}
+
+/**
+ * Phase 1 & 2 compatible filter:
+ * - Supports multi-category cards (e.g. data-mg-category="callouts,lower-thirds")
+ * - Supports the new "favorites" category
+ * - Syncs both .active and [aria-current="true"] on #mg-category-tabs buttons
+ * - Shows a clear empty state when no cards match
+ */
+export function applyPresetGalleryFilters() {
+  const tabsContainer = document.getElementById('mg-category-tabs');
+  const searchInput = document.getElementById('mg-preset-search') as HTMLInputElement | null;
+  const grid = document.getElementById('mg-preset-grid');
+  if (!grid) return;
+
+  const activeBtn = tabsContainer?.querySelector<HTMLElement>(
+    '[aria-current="true"], .active, [data-active="true"]'
+  ) || document.querySelector<HTMLElement>('.mg-filter-btn.active, .mg-filter-btn[aria-current="true"]');
+  const selectedCategory = (activeBtn?.getAttribute('data-mg-category') || activeBtn?.getAttribute('data-mg-filter') || 'all').toLowerCase().trim();
+  const query = (searchInput?.value || '').toLowerCase().trim();
+  const favs = getFavoritePresets();
+
+  const cards = Array.from(grid.querySelectorAll<HTMLElement>('.graphic-preset-card'));
+  let visibleCount = 0;
+
+  for (const card of cards) {
+    const presetId = card.getAttribute('data-gallery-preset') || '';
+    const rawCats = (card.getAttribute('data-mg-category') || '')
+      .toLowerCase()
+      .split(/[\s,]+/)
+      .filter(Boolean);
+    const searchableText = (card.textContent || '').toLowerCase();
+
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      (selectedCategory === 'favorites' ? favs.has(presetId) : rawCats.includes(selectedCategory));
+
+    const matchesSearch = !query || searchableText.includes(query) || presetId.toLowerCase().includes(query);
+    const show = matchesCategory && matchesSearch;
+
+    card.classList.toggle('hidden', !show);
+    card.hidden = !show;
+    card.style.display = show ? '' : 'none';
+    if (show) visibleCount++;
+  }
+
+  // Empty / No-Search-Results State
+  let emptyEl = document.getElementById('mg-preset-empty-state');
+  if (visibleCount === 0) {
+    if (!emptyEl) {
+      emptyEl = document.createElement('div');
+      emptyEl.id = 'mg-preset-empty-state';
+      emptyEl.className = 'col-span-full py-8 px-4 text-center text-xs text-zinc-400';
+      grid.appendChild(emptyEl);
+    }
+    emptyEl.textContent =
+      selectedCategory === 'favorites' && favs.size === 0
+        ? 'No favorite graphics yet. Click the ★ icon on any preset to pin it here.'
+        : `No graphics match "${searchInput?.value || selectedCategory}".`;
+    emptyEl.classList.remove('hidden');
+    emptyEl.style.display = '';
+  } else if (emptyEl) {
+    emptyEl.classList.add('hidden');
+    emptyEl.style.display = 'none';
+  }
+}
+
+/**
+ * Enhances existing .graphic-preset-card elements in #mg-preset-grid with
+ * video-studio's ★ favorite toggle and + add-at-playhead badge without breaking
+ * delegated click handlers on .graphic-preset-card.
+ */
+export function enhanceGraphicsGalleryCards() {
+  const grid = document.getElementById('mg-preset-grid');
+  const tabs = document.getElementById('mg-category-tabs');
+  if (!grid) return;
+
+  // Ensure "Favorites" category button exists in #mg-category-tabs
+  if (tabs && !tabs.querySelector('[data-mg-category="favorites"]')) {
+    const favTab = document.createElement('button');
+    favTab.type = 'button';
+    favTab.className = 'asset-cat';
+    favTab.setAttribute('data-mg-category', 'favorites');
+    favTab.innerHTML = `<span class="asset-cat-label">★ Favorites</span>`;
+    const allTab = tabs.querySelector('[data-mg-category="all"]');
+    if (allTab?.nextSibling) tabs.insertBefore(favTab, allTab.nextSibling);
+    else tabs.prepend(favTab);
+  }
+
+  // Sync aria-current on category click + keyboard arrow navigation
+  if (tabs && !tabs.dataset.vsBound) {
+    tabs.dataset.vsBound = '1';
+    tabs.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-mg-category]');
+      if (!btn) return;
+      tabs.querySelectorAll<HTMLElement>('[data-mg-category]').forEach((b) => {
+        const isCurrent = b === btn;
+        b.classList.toggle('active', isCurrent);
+        b.setAttribute('aria-current', isCurrent ? 'true' : 'false');
+      });
+      applyPresetGalleryFilters();
+    });
+  }
+
+  const favs = getFavoritePresets();
+  grid.querySelectorAll<HTMLElement>('.graphic-preset-card').forEach((card) => {
+    const presetId = card.getAttribute('data-gallery-preset');
+    if (!presetId || card.dataset.vsEnhanced === '1') return;
+    card.dataset.vsEnhanced = '1';
+
+    const favBtn = document.createElement('button');
+    favBtn.type = 'button';
+    favBtn.className = `tile-fav ${favs.has(presetId) ? 'on' : ''}`;
+    favBtn.title = 'Toggle favorite';
+    favBtn.setAttribute('aria-label', 'Favorite preset');
+    favBtn.textContent = '★';
+    favBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation(); // Do not trigger dropGraphicAtPlayhead() when starring
+      const on = toggleFavoritePreset(presetId);
+      favBtn.classList.toggle('on', on);
+      applyPresetGalleryFilters();
+    });
+
+    const plusBtn = document.createElement('span');
+    plusBtn.className = 'tile-plus';
+    plusBtn.title = 'Add at playhead';
+    plusBtn.setAttribute('aria-hidden', 'true');
+    plusBtn.textContent = '+';
+
+    card.prepend(favBtn, plusBtn);
+  });
+}
+
 // ----- Canvas Interaction -----
 let draggingGraphicId: string | null = null;
 let isDraggingGraphic = false;
@@ -2149,39 +2302,28 @@ User Request: "${prompt}"`
         btn.addEventListener('click', () => {
             const filter = btn.getAttribute('data-mg-filter') || 'all';
             document.querySelectorAll('.mg-filter-btn').forEach(b => {
-                b.classList.remove('bg-gradient-to-r', 'from-sky-600', 'to-indigo-600', 'bg-sky-600', 'bg-teal-600', 'text-white', 'shadow-md', 'shadow-sm', 'font-bold');
+                b.classList.remove('bg-gradient-to-r', 'from-sky-600', 'to-indigo-600', 'bg-sky-600', 'bg-teal-600', 'text-white', 'shadow-md', 'shadow-sm', 'font-bold', 'active');
                 b.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-gray-800', 'font-medium');
+                b.setAttribute('aria-current', 'false');
             });
             btn.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-gray-800', 'font-medium');
-            btn.classList.add('bg-gradient-to-r', 'from-sky-600', 'to-indigo-600', 'text-white', 'shadow-md', 'font-bold');
+            btn.classList.add('bg-gradient-to-r', 'from-sky-600', 'to-indigo-600', 'text-white', 'shadow-md', 'font-bold', 'active');
+            btn.setAttribute('aria-current', 'true');
+            btn.setAttribute('data-mg-category', filter);
 
-            const query = (document.getElementById('mg-preset-search') as HTMLInputElement)?.value.toLowerCase().trim() || '';
-            applyPresetGalleryFilters(filter, query);
+            applyPresetGalleryFilters();
         });
     });
 
     const presetSearchInput = document.getElementById('mg-preset-search') as HTMLInputElement | null;
     if (presetSearchInput) {
         presetSearchInput.addEventListener('input', () => {
-            const query = presetSearchInput.value.toLowerCase().trim();
-            const activeFilter = document.querySelector('.mg-filter-btn.text-white')?.getAttribute('data-mg-filter') || 'hyperframe';
-            applyPresetGalleryFilters(activeFilter, query);
+            applyPresetGalleryFilters();
         });
     }
 
-    function applyPresetGalleryFilters(category: string, query: string) {
-        const cards = document.querySelectorAll<HTMLElement>('.graphic-preset-card');
-        cards.forEach(card => {
-            const cardCat = (card.getAttribute('data-mg-category') || '').toLowerCase();
-            const cardText = card.innerText.toLowerCase();
-            const matchesCat = (category === 'all') || cardCat.includes(category);
-            const matchesQuery = !query || cardText.includes(query);
-            card.style.display = (matchesCat && matchesQuery) ? '' : 'none';
-        });
-    }
-
-    // Initial filter execution: Show HyperFrames by default
-    applyPresetGalleryFilters('hyperframe', '');
+    enhanceGraphicsGalleryCards();
+    applyPresetGalleryFilters();
 
     const mgAiPromptInput = document.getElementById('mg-ai-prompt-input') as HTMLInputElement | null;
     const mgAiPromptBtn = document.getElementById('mg-ai-prompt-btn') as HTMLButtonElement | null;

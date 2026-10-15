@@ -26,7 +26,7 @@ for (const file of requiredFiles) {
 const files = fs.readdirSync(distDir);
 console.log(`[Postbuild] Build artifacts verified (${files.length} items in dist: ${files.join(', ')})`);
 
-// Unconditionally mirror 'dist' to 'build' as a physical directory (no symlinks) so AI Studio and all deployment runners find valid artifacts.
+// Unconditionally mirror 'dist' to 'build' and fallback directories as physical copies (no symlinks)
 const targetDirs = ['build', 'dist-electron'];
 for (const dirName of targetDirs) {
   const targetDir = path.join(rootDir, dirName);
@@ -39,12 +39,10 @@ for (const dirName of targetDirs) {
         fs.rmSync(targetDir, { recursive: true, force: true });
       }
     }
-  } catch {}
-  try {
     fs.cpSync(distDir, targetDir, { recursive: true });
-    console.log(`[Postbuild] Mirrored artifacts to ${dirName} for deployment runner.`);
-  } catch (cpErr) {
-    console.warn(`[Postbuild] Could not mirror to ${dirName}:`, cpErr.message);
+    console.log(`[Postbuild] Physical mirror created: ${dirName} -> dist`);
+  } catch (err) {
+    console.warn(`[Postbuild] Could not mirror to ${dirName}:`, err.message);
   }
 }
 

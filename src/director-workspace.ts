@@ -857,7 +857,7 @@ export function initStudioCommandPalette(): void {
   modal.style.cssText = `
     position: fixed; inset: 0; z-index: 99999;
     background: rgba(0, 0, 0, 0.68); backdrop-filter: blur(4px);
-    display: flex; align-items: flex-start; justify-content: center;
+    display: none; align-items: flex-start; justify-content: center;
     padding-top: 12vh;
   `;
 
@@ -931,6 +931,7 @@ export function initStudioCommandPalette(): void {
   }
 
   function openPalette() {
+    modal.style.display = 'flex';
     modal.classList.remove('hidden');
     inputEl.value = '';
     selectedIndex = 0;
@@ -939,6 +940,7 @@ export function initStudioCommandPalette(): void {
   }
 
   function closePalette() {
+    modal.style.display = 'none';
     modal.classList.add('hidden');
   }
 
@@ -951,9 +953,9 @@ export function initStudioCommandPalette(): void {
         // Allow if modal isn't open and it's not a text field they want to type in
       }
       e.preventDefault();
-      if (modal.classList.contains('hidden')) openPalette();
+      if (modal.style.display === 'none' || modal.classList.contains('hidden')) openPalette();
       else closePalette();
-    } else if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+    } else if (e.key === 'Escape' && modal.style.display !== 'none' && !modal.classList.contains('hidden')) {
       closePalette();
     }
   });

@@ -14,6 +14,8 @@ import { drawVideoFrame, videoRenderContext } from './videoRenderer';
 import { forcePausePlayback, handleVideoPlayPause, normalizeTimeline, handleSplitClip, handleTrimClip, handleSetEditMode, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, rippleCutMasterAudio, resyncTimeline } from './videoController';
 import { clearAIDirectorCache } from './videoDirector';
 import { getImageBlobFromClipboardEvent, processAndRoutePastedImage } from './handlers-images';
+import { initStudioCommandPalette } from './director-workspace';
+
 
 function isTypingTarget(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
@@ -185,6 +187,7 @@ function trimClipUnderPlayhead(side: 'in' | 'out') {
 }
 
 export function initKeyboardShortcuts() {
+    initStudioCommandPalette();
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         // Never hijack typing or the existing devtools-security handler
         if (isTypingTarget(e.target)) return;

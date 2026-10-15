@@ -6,6 +6,8 @@
  */
 
 import { sliceAudioBuffer } from '../audioBufferUtils';
+import { getExportFlags } from './export-flags';
+import { softClipAudioBuffer } from './wsola-stretcher';
 
 export interface AudioSegmentChunk {
   buffer: AudioBuffer;
@@ -69,22 +71,11 @@ export function getAudioMixTelemetry(): AudioMixTelemetry {
 }
 
 /**
- * Feature flag check: disabled by default until Phase 3 regression tests pass.
- * Enable in DevTools via:
- *   localStorage.setItem('cg_chunked_audio_export', '1')
- * or:
- *   window.__CG_CHUNKED_AUDIO_EXPORT = true
+ * Connected to unified export flags (enabled by default; can be overridden via
+ * localStorage.setItem('cg_chunked_audio_export', '0') or window.__CG_CHUNKED_AUDIO_EXPORT).
  */
 export function isChunkedAudioExportEnabled(): boolean {
-  try {
-    if (typeof window !== 'undefined' && typeof (window as any).__CG_CHUNKED_AUDIO_EXPORT === 'boolean') {
-      return (window as any).__CG_CHUNKED_AUDIO_EXPORT;
-    }
-    if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem('cg_chunked_audio_export') === '1';
-    }
-  } catch {}
-  return false;
+  return getExportFlags().useChunkedAudioMix;
 }
 
 export interface CreateSegmentedAudioProviderOptions {
@@ -106,7 +97,10 @@ export function createSegmentedAudioProvider(
   const sampleRate = opts.sampleRate || 44100;
   const numberOfChannels = opts.numberOfChannels || 2;
   const totalDurationSec = Math.max(0, opts.totalDurationSec);
-  const segmentDurationSec = Math.max(2, opts.segmentDurationSec || 15);
+  const segmentDurationSec = Math.max(
+    2,
+    opts.segmentDurationSec || getExportFlags().audioSegmentDurationSec || 15
+  );
   const boundaryPadSec = Math.max(0, opts.boundaryPadSec ?? 0.12);
 
   const totalSamples = Math.ceil(totalDurationSec * sampleRate);
@@ -138,7 +132,8 @@ export function createSegmentedAudioProvider(
 
       // Render with lookbehind/lookahead padding so ducking ramps and dynamics stay continuous across cuts
       const padBeforeSec = startSample > 0 ? Math.min(boundaryPadSec, exactStartSec) : 0;
-      const padAfterSec = endSample < totalSamples ? Math.min(boundaryPadSec, totalDurationSec - exactEndSec) : 0;
+      const padAfterSec =
+        endSample < totalSamples ? Math.min(boundaryPadSec, totalDurationSec - exactEndSec) : 0;
 
       const renderStartSec = exactStartSec - padBeforeSec;
       const renderEndSec = exactEndSec + padAfterSec;
@@ -151,7 +146,6 @@ export function createSegmentedAudioProvider(
 
       let trimmedBuffer: AudioBuffer;
       if (!rawBuffer) {
-        // Silent segment fallback if mixSegmentFn returns null for a silent range
         const OfflineCtx = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
         const silentCtx = new OfflineCtx(actualChannels, wantedFrames, actualRate);
         trimmedBuffer = silentCtx.createBuffer(actualChannels, wantedFrames, actualRate);
@@ -164,6 +158,9 @@ export function createSegmentedAudioProvider(
       } else {
         trimmedBuffer = rawBuffer;
       }
+
+      // Apply video-studio polynomial soft-clip limiter so summed buses never clip harshly
+      softClipAudioBuffer(trimmedBuffer);
 
       recordAudioSegmentMixed(trimmedBuffer.length, actualRate);
 

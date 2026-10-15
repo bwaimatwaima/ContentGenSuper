@@ -2,11 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Phase 2 — Sequential Video-Frame Source for Local & Electron Export.
- * Adapted from video-studio/src/engine/frame-source.js.
+ * Phase 2 — Sequential & Pair-Blended Video-Frame Source for Local & Electron Export.
+ * Adapted from video-studio/src/engine/frame-source.js, src/model/slow-motion.js,
+ * and src/review/time.js.
  */
 
 import { Input, BlobSource, ALL_FORMATS, CanvasSink } from 'mediabunny';
+import { getExportFlags } from './export-flags';
 
 export type VideoSlotRole = 'primary' | 'talkingHead' | 'secondary';
 
@@ -25,6 +27,7 @@ interface SharedAssetEntry {
   width: number;
   height: number;
   duration: number;
+  fps: number;
 }
 
 interface WrappedCanvasFrame {
@@ -37,9 +40,11 @@ interface ClipSlotCursor {
   cursorKey: string;
   src: string;
   sink: CanvasSink;
+  pairSink: CanvasSink;
   iterator: AsyncGenerator<WrappedCanvasFrame, void, unknown> | null;
   curr: WrappedCanvasFrame | null;
   next: WrappedCanvasFrame | null;
+  blendCanvas: HTMLCanvasElement | OffscreenCanvas | null;
   lastTargetSec: number;
   failed: boolean;
 }
@@ -47,6 +52,7 @@ interface ClipSlotCursor {
 export interface VideoSyncTelemetry {
   sequentialHits: number;
   sequentialResets: number;
+  blendedSlowMoFrames: number;
   htmlFallbackSeeks: number;
   htmlSeekTimeouts: number;
 }
@@ -54,6 +60,7 @@ export interface VideoSyncTelemetry {
 const telemetry: VideoSyncTelemetry = {
   sequentialHits: 0,
   sequentialResets: 0,
+  blendedSlowMoFrames: 0,
   htmlFallbackSeeks: 0,
   htmlSeekTimeouts: 0,
 };
@@ -61,6 +68,7 @@ const telemetry: VideoSyncTelemetry = {
 export function resetVideoSyncTelemetry(): void {
   telemetry.sequentialHits = 0;
   telemetry.sequentialResets = 0;
+  telemetry.blendedSlowMoFrames = 0;
   telemetry.htmlFallbackSeeks = 0;
   telemetry.htmlSeekTimeouts = 0;
 }
@@ -74,26 +82,64 @@ export function recordHtmlSeek(timedOut = false): void {
   if (timedOut) telemetry.htmlSeekTimeouts++;
 }
 
-/**
- * Feature flag check: disabled by default until parity tests pass.
- * Enable in DevTools via:
- *   localStorage.setItem('cg_seq_video_export', '1')
- * or:
- *   window.__CG_SEQ_VIDEO_EXPORT = true
- */
 export function isSequentialVideoExportEnabled(): boolean {
-  try {
-    if (typeof window !== 'undefined' && typeof (window as any).__CG_SEQ_VIDEO_EXPORT === 'boolean') {
-      return (window as any).__CG_SEQ_VIDEO_EXPORT;
-    }
-    if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem('cg_seq_video_export') === '1';
-    }
-  } catch {}
-  return false;
+  return getExportFlags().useSequentialVideoDecoder;
+}
+
+/**
+ * Ported from video-studio/src/review/time.js (seekSeconds):
+ * Targets the temporal center of the frame ((frameIndex + 0.5) / fps) so
+ * rounding in the demuxer/decoder never lands on the neighboring frame.
+ */
+export function seekMidFrameSeconds(sec: number, fps = 30): number {
+  if (!getExportFlags().useMidFrameSeeking) return Math.max(0, sec);
+  const f = Number.isFinite(fps) && fps >= 1 && fps <= 240 ? fps : 30;
+  const frameIdx = Math.max(0, Math.floor((Math.max(0, sec) + 0.5 / 1_000_000) * f));
+  return (frameIdx + 0.5) / f;
+}
+
+/**
+ * Ported from video-studio/src/model/slow-motion.js:
+ * Position of source time `sec` between consecutive frames `a` and `b` (0..1).
+ */
+export const FRAME_SNAP = 1e-3;
+
+export function framePosition(sec: number, a: number, b: number): number {
+  if (!(b > a)) return 0;
+  return Math.min(1, Math.max(0, (sec - a) / (b - a)));
+}
+
+export function needsBetween(frac: number): boolean {
+  return frac > FRAME_SNAP && frac < 1 - FRAME_SNAP;
 }
 
 const DISCONTINUITY_THRESHOLD_SEC = 1.5;
+
+function createScratchCanvas(w: number, h: number): HTMLCanvasElement | OffscreenCanvas {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    return new OffscreenCanvas(w, h);
+  }
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+function attachVideoMetadata(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  width: number,
+  height: number,
+  currentTime: number,
+  duration: number
+): RenderableVideoFrame {
+  const renderable = canvas as RenderableVideoFrame;
+  renderable.videoWidth = (canvas as any).width || width;
+  renderable.videoHeight = (canvas as any).height || height;
+  renderable.readyState = 4;
+  renderable.currentTime = currentTime;
+  renderable.duration = duration;
+  return renderable;
+}
 
 export class ExportVideoFrameSource {
   private assets = new Map<string, Promise<SharedAssetEntry | null>>();
@@ -120,11 +166,30 @@ export class ExportVideoFrameSource {
             return null;
           }
           const duration = (await track.computeDuration().catch(() => 0)) || 0;
-          const width = track.displayWidth || track.codedWidth || 1920;
-          const height = track.displayHeight || track.codedHeight || 1080;
-          return { src, input, track, width, height, duration };
+          const width =
+            (await track.getDisplayWidth?.().catch(() => 0)) ||
+            track.displayWidth ||
+            track.codedWidth ||
+            1920;
+          const height =
+            (await track.getDisplayHeight?.().catch(() => 0)) ||
+            track.displayHeight ||
+            track.codedHeight ||
+            1080;
+          let fps = 30;
+          try {
+            const stats = await track.computePacketStats?.(60);
+            if (stats?.averagePacketRate) {
+              fps = Math.round(stats.averagePacketRate * 100) / 100;
+            }
+          } catch {}
+          return { src, input, track, width, height, duration, fps };
         } catch (err) {
-          console.warn('[ExportVideoFrameSource] Asset open failed, using HTMLVideoElement fallback:', src, err);
+          console.warn(
+            '[ExportVideoFrameSource] Asset open failed, using HTMLVideoElement fallback:',
+            src,
+            err
+          );
           return null;
         }
       })();
@@ -142,7 +207,8 @@ export class ExportVideoFrameSource {
     role: VideoSlotRole,
     videoEl: HTMLVideoElement,
     rawSourceSec: number,
-    shouldLoop = false
+    shouldLoop = false,
+    blendSlowMotion = false
   ): Promise<RenderableVideoFrame | null> {
     const src = videoEl.currentSrc || videoEl.src;
     if (!src) return null;
@@ -154,8 +220,8 @@ export class ExportVideoFrameSource {
       asset.duration > 0
         ? asset.duration
         : Number.isFinite(videoEl.duration) && videoEl.duration > 0
-          ? videoEl.duration
-          : 0;
+        ? videoEl.duration
+        : 0;
 
     let targetSec = Math.max(0, rawSourceSec);
     if (effectiveDuration > 0) {
@@ -177,13 +243,20 @@ export class ExportVideoFrameSource {
         fit: 'contain',
         poolSize: 3, // Strictly bounded: curr + next + 1 scratch canvas
       });
+      const pairSink = new CanvasSink(asset.track, {
+        height: targetH,
+        fit: 'contain',
+        poolSize: 4, // Secondary pool for frame-pair access (video-studio parity)
+      });
       cursor = {
         cursorKey,
         src,
         sink,
+        pairSink,
         iterator: null,
         curr: null,
         next: null,
+        blendCanvas: null,
         lastTargetSec: -1,
         failed: false,
       };
@@ -201,11 +274,13 @@ export class ExportVideoFrameSource {
       if (!cursor.iterator || soughtBackward || jumpedDiscontinuously) {
         telemetry.sequentialResets++;
         await cursor.iterator?.return?.();
-        cursor.iterator = cursor.sink.canvases(targetSec) as AsyncGenerator<WrappedCanvasFrame, void, unknown>;
-
+        cursor.iterator = cursor.sink.canvases(targetSec) as AsyncGenerator<
+          WrappedCanvasFrame,
+          void,
+          unknown
+        >;
         const first = await cursor.iterator.next();
         cursor.curr = first.done ? null : (first.value ?? null);
-
         if (cursor.curr) {
           const second = await cursor.iterator.next();
           cursor.next = second.done ? null : (second.value ?? null);
@@ -221,29 +296,102 @@ export class ExportVideoFrameSource {
         }
       }
 
-      if (!cursor.curr?.canvas) {
+      cursor.lastTargetSec = targetSec;
+
+      if (!cursor.curr) {
         return null;
       }
 
-      cursor.lastTargetSec = targetSec;
       telemetry.sequentialHits++;
 
-      const frameCanvas = cursor.curr.canvas as RenderableVideoFrame;
-      frameCanvas.videoWidth = asset.width || frameCanvas.width;
-      frameCanvas.videoHeight = asset.height || frameCanvas.height;
-      frameCanvas.readyState = 4;
-      frameCanvas.currentTime = targetSec;
-      frameCanvas.duration = effectiveDuration;
+      // Automatic frame-blending when clip plays slower than 1x
+      const isSlowed =
+        blendSlowMotion || (videoEl.playbackRate > 0 && videoEl.playbackRate < 1 - 1e-3);
+      if (isSlowed && cursor.next) {
+        const frac = framePosition(targetSec, cursor.curr.timestamp, cursor.next.timestamp);
+        if (needsBetween(frac)) {
+          const w = (cursor.curr.canvas as any).width || asset.width;
+          const h = (cursor.curr.canvas as any).height || asset.height;
+          if (
+            !cursor.blendCanvas ||
+            (cursor.blendCanvas as any).width !== w ||
+            (cursor.blendCanvas as any).height !== h
+          ) {
+            cursor.blendCanvas = createScratchCanvas(w, h);
+          }
+          const ctx = cursor.blendCanvas.getContext('2d') as
+            | CanvasRenderingContext2D
+            | OffscreenCanvasRenderingContext2D
+            | null;
+          if (ctx) {
+            ctx.clearRect(0, 0, w, h);
+            ctx.globalAlpha = 1;
+            ctx.drawImage(cursor.curr.canvas as CanvasImageSource, 0, 0, w, h);
+            ctx.globalAlpha = frac;
+            ctx.drawImage(cursor.next.canvas as CanvasImageSource, 0, 0, w, h);
+            ctx.globalAlpha = 1;
+            telemetry.blendedSlowMoFrames++;
+            return attachVideoMetadata(cursor.blendCanvas, w, h, targetSec, effectiveDuration);
+          }
+        }
+      }
 
-      return frameCanvas;
+      return attachVideoMetadata(
+        cursor.curr.canvas,
+        asset.width,
+        asset.height,
+        targetSec,
+        effectiveDuration
+      );
     } catch (err) {
-      console.warn(`[ExportVideoFrameSource] Decode error on ${cursorKey}, falling back to HTMLVideoElement:`, err);
+      console.warn('[ExportVideoFrameSource] Decode iteration error for cursor:', cursorKey, err);
       cursor.failed = true;
       await cursor.iterator?.return?.().catch(() => {});
       cursor.iterator = null;
-      cursor.curr = null;
-      cursor.next = null;
       return null;
+    }
+  }
+
+  /**
+   * Ported from video-studio/src/engine/frame-source.js (pair):
+   * Fetches two consecutive frames `{ a, b }` around `sec` using the isolated `pairSink`.
+   */
+  async getFramePairForClipSlot(
+    clipId: string,
+    role: VideoSlotRole,
+    videoEl: HTMLVideoElement,
+    sec: number
+  ): Promise<{ a: WrappedCanvasFrame; b: WrappedCanvasFrame | null } | null> {
+    const src = videoEl.currentSrc || videoEl.src;
+    if (!src) return null;
+    const asset = await this.getOrOpenAsset(src);
+    if (!asset) return null;
+
+    const cursorKey = `${clipId}::${role}`;
+    let cursor = this.cursors.get(cursorKey);
+    if (!cursor) {
+      await this.getFrameForClipSlot(clipId, role, videoEl, sec);
+      cursor = this.cursors.get(cursorKey);
+    }
+    if (!cursor || cursor.failed) return null;
+
+    const it = cursor.pairSink.canvases(Math.max(0, sec)) as AsyncGenerator<
+      WrappedCanvasFrame,
+      void,
+      unknown
+    >;
+    try {
+      const first = await it.next();
+      if (first.done || !first.value) return null;
+      const second = await it.next();
+      return {
+        a: first.value,
+        b: second.done ? null : (second.value ?? null),
+      };
+    } catch {
+      return null;
+    } finally {
+      await it.return?.().catch(() => {});
     }
   }
 
@@ -257,59 +405,39 @@ export class ExportVideoFrameSource {
     cursor.iterator = null;
     cursor.curr = null;
     cursor.next = null;
-  }
-
-  /**
-   * Releases decoders for clips that are no longer within the active timeline window.
-   */
-  async retainOnlyActiveCursors(activeCursorKeys: Set<string>): Promise<void> {
-    const removals: Promise<void>[] = [];
-    for (const key of this.cursors.keys()) {
-      if (!activeCursorKeys.has(key)) {
-        removals.push(this.releaseCursor(key));
-      }
-    }
-    if (removals.length > 0) {
-      await Promise.all(removals);
-    }
+    cursor.blendCanvas = null;
   }
 
   async dispose(): Promise<void> {
     const cursorKeys = Array.from(this.cursors.keys());
-    await Promise.all(cursorKeys.map((k) => this.releaseCursor(k)));
-
-    const assetPromises = Array.from(this.assets.values());
+    for (const key of cursorKeys) {
+      await this.releaseCursor(key);
+    }
+    const pendingAssets = Array.from(this.assets.values());
     this.assets.clear();
-    for (const p of assetPromises) {
+    for (const p of pendingAssets) {
       try {
-        const entry = await p;
-        entry?.input?.dispose?.();
+        const asset = await p;
+        asset?.input?.dispose?.();
       } catch {}
     }
   }
 }
 
-let activeExportFrameSource: ExportVideoFrameSource | null = null;
+let sharedExportFrameSource: ExportVideoFrameSource | null = null;
 
-export function getOrCreateExportFrameSource(maxHeight = 2160): ExportVideoFrameSource {
-  if (!activeExportFrameSource) {
-    activeExportFrameSource = new ExportVideoFrameSource(maxHeight);
+export function getOrCreateExportFrameSource(maxDecodeHeight = 2160): ExportVideoFrameSource {
+  if (!sharedExportFrameSource) {
+    sharedExportFrameSource = new ExportVideoFrameSource(maxDecodeHeight);
   }
-  return activeExportFrameSource;
+  return sharedExportFrameSource;
 }
 
-export async function disposeExportFrameSource(clips?: any[]): Promise<void> {
-  if (clips && Array.isArray(clips)) {
-    for (const c of clips) {
-      if (!c) continue;
-      delete c._exportVideoFrame;
-      delete c._exportTalkingHeadFrame;
-      delete c._exportSecondaryFrame;
-    }
-  }
-  if (activeExportFrameSource) {
-    const src = activeExportFrameSource;
-    activeExportFrameSource = null;
-    await src.dispose();
-  }
+export const getExportFrameSource = getOrCreateExportFrameSource;
+
+export async function disposeExportFrameSource(): Promise<void> {
+  if (!sharedExportFrameSource) return;
+  const instance = sharedExportFrameSource;
+  sharedExportFrameSource = null;
+  await instance.dispose();
 }

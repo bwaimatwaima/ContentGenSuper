@@ -1539,13 +1539,13 @@ export function applyPresetGalleryFilters() {
   if (!grid) return;
 
   const activeBtn = tabsContainer?.querySelector<HTMLElement>(
-    '[aria-current="true"], .active, [data-active="true"]'
-  ) || document.querySelector<HTMLElement>('.mg-filter-btn.active, .mg-filter-btn[aria-current="true"]');
+    '[aria-current="true"], .active, .on, [data-active="true"]'
+  ) || document.querySelector<HTMLElement>('.mg-filter-btn.active, .mg-filter-btn.on, .mg-filter-btn[aria-current="true"]');
   const selectedCategory = (activeBtn?.getAttribute('data-mg-category') || activeBtn?.getAttribute('data-mg-filter') || 'all').toLowerCase().trim();
   const query = (searchInput?.value || '').toLowerCase().trim();
   const favs = getFavoritePresets();
 
-  const cards = Array.from(grid.querySelectorAll<HTMLElement>('.graphic-preset-card'));
+  const cards = Array.from(grid.querySelectorAll<HTMLElement>('.graphic-preset-card, .mg-card'));
   let visibleCount = 0;
 
   for (const card of cards) {
@@ -1591,9 +1591,9 @@ export function applyPresetGalleryFilters() {
 }
 
 /**
- * Enhances existing .graphic-preset-card elements in #mg-preset-grid with
+ * Enhances existing .graphic-preset-card / .mg-card elements in #mg-preset-grid with
  * video-studio's ★ favorite toggle and + add-at-playhead badge without breaking
- * delegated click handlers on .graphic-preset-card.
+ * delegated click handlers on gallery cards.
  */
 export function enhanceGraphicsGalleryCards() {
   const grid = document.getElementById('mg-preset-grid');
@@ -1601,26 +1601,28 @@ export function enhanceGraphicsGalleryCards() {
   if (!grid) return;
 
   // Ensure "Favorites" category button exists in #mg-category-tabs
-  if (tabs && !tabs.querySelector('[data-mg-category="favorites"]')) {
+  if (tabs && !tabs.querySelector('[data-mg-category="favorites"], [data-mg-filter="favorites"]')) {
     const favTab = document.createElement('button');
     favTab.type = 'button';
-    favTab.className = 'asset-cat';
+    favTab.className = 'mg-filter-btn';
+    favTab.setAttribute('data-mg-filter', 'favorites');
     favTab.setAttribute('data-mg-category', 'favorites');
-    favTab.innerHTML = `<span class="asset-cat-label">★ Favorites</span>`;
-    const allTab = tabs.querySelector('[data-mg-category="all"]');
+    favTab.innerHTML = `★ Favorites`;
+    const allTab = tabs.querySelector('[data-mg-category="all"], [data-mg-filter="all"]');
     if (allTab?.nextSibling) tabs.insertBefore(favTab, allTab.nextSibling);
     else tabs.prepend(favTab);
   }
 
-  // Sync aria-current on category click + keyboard arrow navigation
+  // Sync aria-current & on/active class on category click
   if (tabs && !tabs.dataset.vsBound) {
     tabs.dataset.vsBound = '1';
     tabs.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-mg-category]');
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-mg-category], [data-mg-filter]');
       if (!btn) return;
-      tabs.querySelectorAll<HTMLElement>('[data-mg-category]').forEach((b) => {
+      tabs.querySelectorAll<HTMLElement>('[data-mg-category], [data-mg-filter]').forEach((b) => {
         const isCurrent = b === btn;
         b.classList.toggle('active', isCurrent);
+        b.classList.toggle('on', isCurrent);
         b.setAttribute('aria-current', isCurrent ? 'true' : 'false');
       });
       applyPresetGalleryFilters();
@@ -1628,31 +1630,33 @@ export function enhanceGraphicsGalleryCards() {
   }
 
   const favs = getFavoritePresets();
-  grid.querySelectorAll<HTMLElement>('.graphic-preset-card').forEach((card) => {
+  grid.querySelectorAll<HTMLElement>('.graphic-preset-card, .mg-card').forEach((card) => {
     const presetId = card.getAttribute('data-gallery-preset');
-    if (!presetId || card.dataset.vsEnhanced === '1') return;
+    if (!presetId) return;
+
+    let favBtn = card.querySelector<HTMLElement>('.mg-fav-btn, .tile-fav');
+    if (!favBtn && card.dataset.vsEnhanced !== '1') {
+      const buttonEl = document.createElement('button');
+      buttonEl.type = 'button';
+      buttonEl.className = `tile-fav mg-fav-btn ${favs.has(presetId) ? 'on' : ''}`;
+      buttonEl.title = 'Toggle favorite';
+      buttonEl.setAttribute('aria-label', 'Favorite preset');
+      buttonEl.textContent = '★';
+      favBtn = buttonEl;
+      card.prepend(favBtn);
+    }
     card.dataset.vsEnhanced = '1';
 
-    const favBtn = document.createElement('button');
-    favBtn.type = 'button';
-    favBtn.className = `tile-fav ${favs.has(presetId) ? 'on' : ''}`;
-    favBtn.title = 'Toggle favorite';
-    favBtn.setAttribute('aria-label', 'Favorite preset');
-    favBtn.textContent = '★';
-    favBtn.addEventListener('click', (ev) => {
-      ev.stopPropagation(); // Do not trigger dropGraphicAtPlayhead() when starring
-      const on = toggleFavoritePreset(presetId);
-      favBtn.classList.toggle('on', on);
-      applyPresetGalleryFilters();
-    });
-
-    const plusBtn = document.createElement('span');
-    plusBtn.className = 'tile-plus';
-    plusBtn.title = 'Add at playhead';
-    plusBtn.setAttribute('aria-hidden', 'true');
-    plusBtn.textContent = '+';
-
-    card.prepend(favBtn, plusBtn);
+    if (favBtn && !favBtn.dataset.vsBound) {
+      favBtn.dataset.vsBound = '1';
+      favBtn.classList.toggle('on', favs.has(presetId));
+      favBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation(); // Do not trigger dropGraphicAtPlayhead() when starring
+        const on = toggleFavoritePreset(presetId);
+        favBtn!.classList.toggle('on', on);
+        applyPresetGalleryFilters();
+      });
+    }
   });
 }
 

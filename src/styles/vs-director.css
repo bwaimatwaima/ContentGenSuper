@@ -434,3 +434,227 @@
   display: flex !important;
   flex-direction: column !important;
 }
+
+/* ==========================================================================
+   Shot Inspector & Graphic Editor Modal (video-studio inspector.css port)
+   Works both as standalone drawer/modal and when docked in .vs-director
+   ========================================================================== */
+
+.vs-inspector-scope {
+  --insp-label-w: 88px;
+  --insp-stage: #1d1d21;
+  --insp-stage-fg: #e9e9ec;
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  color: var(--text, #ececee);
+  background: var(--bg-panel, #222224);
+  border-color: var(--border, #323236);
+}
+
+/* Sub-tabs (Prompts / Cinematography / Layout & PiP / Audio / Color) */
+.vs-inspector-scope .insp-tabs.subtabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-input, #18181a);
+  border: 1px solid var(--border, #323236);
+}
+
+.vs-inspector-scope .subtabs .insp-tab {
+  flex: 1 1 auto;
+  padding: 0 6px;
+  height: 26px;
+  border-radius: var(--radius-xs, 4px);
+  border: 0;
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2, #a9a9b1);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.vs-inspector-scope .subtabs .insp-tab:hover {
+  color: var(--text, #ececee);
+}
+
+.vs-inspector-scope .subtabs .insp-tab[aria-selected="true"],
+.vs-inspector-scope .subtabs .insp-tab.active {
+  background: var(--bg-active, rgba(255, 255, 255, 0.12));
+  color: var(--text, #ececee);
+}
+
+/* Dense 2-Column Property Rows (Label Left, Control Right) */
+.vs-inspector-scope .insp-row {
+  display: grid;
+  grid-template-columns: var(--insp-label-w) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vs-inspector-scope .field-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-2, #a9a9b1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vs-inspector-scope .insp-row-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vs-inspector-scope .input,
+.vs-inspector-scope .select,
+.vs-inspector-scope .textarea {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--border, #323236);
+  background: var(--bg-input, #18181a);
+  color: var(--text, #ececee);
+  font-size: 12px;
+  transition: border-color 120ms;
+}
+
+.vs-inspector-scope .textarea {
+  height: auto;
+  min-height: 68px;
+  padding: 6px 8px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.vs-inspector-scope .input:focus,
+.vs-inspector-scope .select:focus,
+.vs-inspector-scope .textarea:focus {
+  border-color: var(--accent, #4f8ff7);
+  outline: none;
+}
+
+.vs-inspector-scope .num-input {
+  width: 54px;
+  height: 24px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs, 4px);
+  border: 1px solid var(--border, #323236);
+  background: var(--bg-input, #18181a);
+  color: var(--text, #ececee);
+  text-align: right;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  flex: none;
+}
+
+.vs-inspector-scope .num-readout {
+  min-width: 42px;
+  text-align: right;
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--text-2, #a9a9b1);
+  flex: none;
+}
+
+/* Range Sliders */
+.vs-inspector-scope input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 40px;
+  height: 18px;
+  background: transparent;
+  margin: 0;
+  cursor: pointer;
+}
+
+.vs-inspector-scope input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border-strong, #44444a);
+}
+
+.vs-inspector-scope input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent, #4f8ff7);
+}
+
+/* Collapsible Property Sections (.prop-section) */
+.vs-inspector-scope .prop-section {
+  border: 1px solid var(--border, #323236);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-panel-2, #2a2a2d);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.vs-inspector-scope .prop-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text, #ececee);
+  letter-spacing: 0.01em;
+}
+
+/* Preview Stage inside Shot Inspector */
+.vs-inspector-scope #inspector-media-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--insp-stage);
+  border: 1px solid var(--border, #323236);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Graphic Editor Modal Dialog (from ai-create.css & export.css) */
+#graphic-editor-modal.vs-inspector-scope .vs-dialog-card {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(82vh, 720px);
+  background: var(--bg-panel, #222224);
+  border: 1px solid var(--border-strong, #44444a);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* When #graphic-editor-modal is docked inside the Right Inspector in Phase 4 */
+.vs-director #graphic-editor-modal.is-docked {
+  position: static !important;
+  inset: auto !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  padding: 0 !important;
+  display: block !important;
+}
+
+.vs-director #graphic-editor-modal.is-docked .vs-dialog-card {
+  width: 100% !important;
+  max-height: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}

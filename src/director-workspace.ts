@@ -183,7 +183,10 @@ export function activateVsWorkspace(): boolean {
     // 4. Wire Resizable Splitters (video-studio style CSS custom properties)
     bindResizers(shellEl);
 
-    // 5. Return to Storyboard & Classic Fallback Buttons
+    // 5. Dock Graphic Editor into Right Inspector if active
+    syncGraphicEditorToInspector();
+
+    // 6. Return to Storyboard & Classic Fallback Buttons
     shellEl.querySelector('#vs-exit-classic-btn')?.addEventListener('click', () => {
       setVsWorkspaceEnabled(false);
     });
@@ -250,4 +253,57 @@ function bindResizers(root: HTMLElement): void {
     const ratio = Math.max(0.35, Math.min(0.75, (e.clientY - rect.top) / rect.height));
     workspace.style.setProperty('--upper', ratio.toFixed(3));
   });
+}
+
+
+/**
+ * Docks #graphic-editor-modal inside the Right Inspector when the video-studio
+ * workspace is active, or leaves it as a modal dialog in classic mode.
+ */
+export function syncGraphicEditorToInspector(): void {
+  const modal = document.getElementById('graphic-editor-modal');
+  const rightInspector = document.getElementById('vs-right-inspector-panel');
+  if (!modal) return;
+
+  modal.classList.add('vs-inspector-scope');
+
+  if (!isVsWorkspaceEnabled() || !rightInspector) {
+    modal.classList.remove('is-docked');
+    return;
+  }
+
+  // Create the Graphic Inspector tab slot once if not present
+  let graphicSlot = document.getElementById('vs-insp-tab-graphic');
+  const tabBar = rightInspector.querySelector('.insp-tabs.top-tabs');
+
+  if (!graphicSlot && tabBar) {
+    const tabBtn = document.createElement('button');
+    tabBtn.type = 'button';
+    tabBtn.className = 'insp-tab';
+    tabBtn.setAttribute('role', 'tab');
+    tabBtn.setAttribute('aria-selected', 'false');
+    tabBtn.dataset.vsInspTab = 'graphic';
+    tabBtn.textContent = 'Graphic';
+    tabBar.appendChild(tabBtn);
+
+    graphicSlot = document.createElement('div');
+    graphicSlot.id = 'vs-insp-tab-graphic';
+    graphicSlot.className = 'inspector-body hidden';
+    graphicSlot.style.cssText = 'flex:1;overflow-y:auto;';
+    rightInspector.appendChild(graphicSlot);
+
+    tabBtn.addEventListener('click', () => {
+      rightInspector.querySelectorAll<HTMLButtonElement>('[data-vs-insp-tab]').forEach((b) => {
+        b.setAttribute('aria-selected', String(b === tabBtn));
+      });
+      ['shot', 'cinema', 'graphic'].forEach((k) => {
+        rightInspector.querySelector(`#vs-insp-tab-${k}`)?.classList.toggle('hidden', k !== 'graphic');
+      });
+    });
+  }
+
+  if (graphicSlot && modal.parentElement !== graphicSlot) {
+    modal.classList.add('is-docked');
+    graphicSlot.appendChild(modal);
+  }
 }

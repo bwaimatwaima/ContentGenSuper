@@ -2006,7 +2006,7 @@ export function initDOM() {
     enableSafeRephraseCheckbox = document.getElementById('enable-safe-rephrase-checkbox') as HTMLInputElement;
     enableRightClickCheckbox = document.getElementById('enable-right-click-checkbox') as HTMLInputElement;
     enableTextOverlayCheckbox = document.getElementById('enable-text-overlay-checkbox') as HTMLInputElement;
-    enableMotionGraphicsCheckbox = document.getElementById('enable-motion-graphics-checkbox') as HTMLInputElement;
+    enableMotionGraphicsCheckbox = (document.getElementById('enable-motion-graphics-checkbox') || document.getElementById('motion-graphics-enabled-toggle')) as HTMLInputElement;
     useInstantTimestampsCheckbox = document.getElementById('use-instant-timestamps') as HTMLInputElement;
     timestampModeHint = document.getElementById('timestamp-mode-hint') as HTMLParagraphElement;
     bRollEditorWorkspace = document.getElementById('b-roll-editor-workspace') as HTMLDivElement;
@@ -2444,10 +2444,10 @@ export function initDOM() {
     inspectorPasteBtn = document.getElementById('inspector-paste-btn') as HTMLButtonElement;
     inspectorMediaContainer = document.getElementById('inspector-media-container') as HTMLDivElement;
     inspectorNarrativeText = document.getElementById('inspector-narrative-text') as HTMLParagraphElement;
-    inspectorCameraAngleSelect = document.getElementById('inspector-camera-angle') as HTMLSelectElement;
+    inspectorCameraAngleSelect = (document.getElementById('inspector-camera-angle-select') || document.getElementById('inspector-camera-angle')) as HTMLSelectElement;
     inspectorCustomAngleContainer = document.getElementById('inspector-custom-angle-container') as HTMLDivElement;
-    inspectorCustomAngleInput = document.getElementById('inspector-custom-angle') as HTMLInputElement;
-    inspectorCameraMovementSelect = document.getElementById('inspector-camera-movement') as HTMLSelectElement;
+    inspectorCustomAngleInput = (document.getElementById('inspector-custom-angle-input') || document.getElementById('inspector-custom-angle')) as HTMLInputElement;
+    inspectorCameraMovementSelect = (document.getElementById('inspector-camera-movement-select') || document.getElementById('inspector-camera-movement')) as HTMLSelectElement;
     inspectorToggleKeyframesBtn = document.getElementById('inspector-toggle-keyframes-btn') as HTMLButtonElement;
     inspectorKeyframesToggleIcon = document.getElementById('inspector-keyframes-toggle-icon') as HTMLSpanElement;
     inspectorKeyframesContainer = document.getElementById('inspector-keyframes-container') as HTMLDivElement;
@@ -2478,9 +2478,9 @@ export function initDOM() {
     inspectorPipAnimationSelect = document.getElementById('inspector-pip-animation-select') as HTMLSelectElement;
     inspectorPipScaleRange = document.getElementById('inspector-pip-scale-range') as HTMLInputElement;
     inspectorPipScaleVal = document.getElementById('inspector-pip-scale-val') as HTMLSpanElement;
-    inspectorTalkingHeadModeSelect = document.getElementById('inspector-talking-head-mode') as HTMLSelectElement;
-    inspectorTalkingHeadShapeSelect = document.getElementById('inspector-talking-head-shape') as HTMLSelectElement;
-    inspectorTalkingHeadSizeSelect = document.getElementById('inspector-talking-head-size') as HTMLSelectElement;
+    inspectorTalkingHeadModeSelect = (document.getElementById('inspector-talking-head-mode-select') || document.getElementById('inspector-talking-head-mode')) as HTMLSelectElement;
+    inspectorTalkingHeadShapeSelect = (document.getElementById('inspector-talking-head-shape-select') || document.getElementById('inspector-talking-head-shape')) as HTMLSelectElement;
+    inspectorTalkingHeadSizeSelect = (document.getElementById('inspector-talking-head-size-select') || document.getElementById('inspector-talking-head-size')) as HTMLSelectElement;
     inspectorPreserveContentToggle = document.getElementById('inspector-preserve-content-toggle') as HTMLInputElement;
     inspectorDualMediaPanel = document.getElementById('inspector-dual-media-panel') as HTMLDivElement;
     inspectorSwapLayersBtn = document.getElementById('inspector-swap-layers-btn') as HTMLButtonElement;
@@ -2505,8 +2505,8 @@ export function initDOM() {
     inspectorClipSpeedSlider = document.getElementById('inspector-clip-speed-slider') as HTMLInputElement;
     inspectorClipSpeedLabel = document.getElementById('inspector-clip-speed-label') as HTMLSpanElement;
     inspectorTalkingHeadHint = document.getElementById('inspector-talking-head-hint') as HTMLElement;
-    inspectorLightingPresetSelect = document.getElementById('inspector-lighting-preset') as HTMLSelectElement;
-    inspectorLightingPromptInput = document.getElementById('inspector-lighting-prompt') as HTMLTextAreaElement;
+    inspectorLightingPresetSelect = (document.getElementById('inspector-lighting-preset-select') || document.getElementById('inspector-lighting-preset')) as HTMLSelectElement;
+    inspectorLightingPromptInput = (document.getElementById('inspector-lighting-prompt-input') || document.getElementById('inspector-lighting-prompt')) as HTMLTextAreaElement;
     inspectorDurationSlider = document.getElementById('inspector-duration-slider') as HTMLInputElement;
     inspectorDurationInput = document.getElementById('inspector-duration-input') as HTMLInputElement;
     inspectorFitDurationContainer = document.getElementById('inspector-fit-duration-container') as HTMLDivElement;
@@ -2520,8 +2520,8 @@ export function initDOM() {
     inspectorSetOffsetFromVideoBtn = document.getElementById('inspector-set-offset-from-video-btn') as HTMLButtonElement;
     inspectorResetOffsetBtn = document.getElementById('inspector-reset-offset-btn') as HTMLButtonElement;
     inspectorVideoPlayRangeInfo = document.getElementById('inspector-video-play-range-info') as HTMLDivElement;
-    inspectorImagePromptInput = document.getElementById('inspector-image-prompt') as HTMLTextAreaElement;
-    inspectorBRollPromptInput = document.getElementById('inspector-broll-prompt') as HTMLInputElement;
+    inspectorImagePromptInput = (document.getElementById('inspector-image-prompt-input') || document.getElementById('inspector-image-prompt')) as HTMLTextAreaElement;
+    inspectorBRollPromptInput = (document.getElementById('inspector-broll-prompt-input') || document.getElementById('inspector-broll-prompt')) as HTMLInputElement;
     inspectorApplyBtn = document.getElementById('inspector-apply-btn') as HTMLButtonElement;
     inspectorGenerateImgBtn = document.getElementById('inspector-generate-img-btn') as HTMLButtonElement;
     inspectorAnimateBtn = document.getElementById('inspector-animate-btn') as HTMLButtonElement;

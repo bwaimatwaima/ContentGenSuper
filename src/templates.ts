@@ -2581,585 +2581,513 @@ export const MODAL_TEMPLATES = `
 </div>
 
 <!-- Collapsible Metadata Side-Panel (Shot Inspector Drawer) -->
-<div id="shot-inspector-drawer" class="fixed right-0 top-0 bottom-0 w-80 sm:w-96 bg-gray-900/95 backdrop-blur-md border-l border-gray-700/80 shadow-2xl z-[85] transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col hidden">
-    <!-- Drawer Header -->
-    <div class="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/90 flex-shrink-0">
-        <div class="flex items-center gap-2">
-            <span class="text-amber-400 font-bold text-base">🎛️ Shot Inspector</span>
-            <span id="inspector-shot-badge" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold">Shot #1</span>
-        </div>
-        <div class="flex items-center gap-1">
-            <button id="inspector-prev-shot-btn" class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition" title="Previous Shot">◀</button>
-            <button id="inspector-next-shot-btn" class="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition" title="Next Shot">▶</button>
-            <button id="close-inspector-btn" class="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded-lg transition ml-2" title="Close Inspector">✕</button>
-        </div>
+<aside
+  id="shot-inspector-drawer"
+  class="vs-inspector-scope fixed top-0 right-0 z-50 h-full w-full max-w-md translate-x-full transition-transform duration-200 hidden flex flex-col border-l"
+  aria-label="Shot Details Inspector"
+>
+  <!-- Top Header: Shot Badge, Prev/Next Navigation, Paste & Close -->
+  <div class="panel-head" style="height: 38px; padding: 0 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+    <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+      <span
+        id="inspector-shot-badge"
+        style="padding: 2px 7px; border-radius: var(--radius-xs); background: var(--accent-soft); color: var(--accent-text); font-family: var(--font-mono); font-size: 11px; font-weight: 600;"
+      >
+        Shot 1
+      </span>
+      <div style="display: inline-flex; gap: 2px;">
+        <button type="button" id="inspector-prev-shot-btn" class="icon-btn small" title="Previous Shot">‹</button>
+        <button type="button" id="inspector-next-shot-btn" class="icon-btn small" title="Next Shot">›</button>
+      </div>
     </div>
 
-    <!-- Drawer Body -->
-    <div class="p-4 overflow-y-auto space-y-4 flex-grow text-xs custom-scrollbar">
-        <!-- Media Preview Box -->
-        <div class="bg-gray-950/80 border border-gray-800 rounded-xl p-3 flex flex-col gap-2">
-            <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-gray-400">Media</span>
-                <button id="inspector-paste-btn" type="button" class="text-[10px] bg-gray-800 hover:bg-gray-700 text-cyan-300 border border-cyan-500/30 px-2 py-1 rounded transition flex items-center gap-1" title="Paste image from clipboard (Ctrl+V)">
-                    📋 Paste Image
-                </button>
-            </div>
-            <div id="inspector-media-container" class="w-full aspect-[16/9] compact-img-wrapper bg-gray-900 rounded-lg overflow-hidden flex items-center justify-center border border-gray-800 relative">
-                <span class="text-xs text-gray-500 italic">No image or video generated</span>
-            </div>
-            <p id="inspector-narrative-text" class="text-xs text-gray-400 italic line-clamp-3 bg-gray-900/60 p-2 rounded-md border border-gray-800/60 font-serif">"Narrative text..."</p>
+    <div style="display: flex; align-items: center; gap: 4px;">
+      <button type="button" id="inspector-paste-btn" class="btn small" title="Paste image from clipboard (Ctrl+V)">
+        📋 Paste
+      </button>
+      <button type="button" id="close-inspector-btn" class="icon-btn small" title="Close Inspector" aria-label="Close">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- Scrollable Inspector Body -->
+  <div class="inspector-body" style="flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px;">
+    <!-- 1. Media Preview Stage & Narrative Line -->
+    <div class="insp-block">
+      <div id="inspector-media-container"></div>
+      <p
+        id="inspector-narrative-text"
+        style="margin: 6px 0 0; padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); font-size: 11.5px; color: var(--text-2); line-height: 1.4;"
+      ></p>
+    </div>
+
+    <!-- Quick Synthesis Action Bar -->
+    <div class="insp-actions" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px;">
+      <button type="button" id="inspector-generate-img-btn" class="btn small primary">🖼 Regen Image</button>
+      <button type="button" id="inspector-animate-btn" class="btn small">🎬 Animate</button>
+      <button type="button" id="inspector-map-btn" class="btn small">🗺 Map Shot</button>
+    </div>
+
+    <!-- 2. Timing, Duration & Source Video Trim -->
+    <section class="prop-section">
+      <div class="prop-section-head">
+        <span>Timing & Trim</span>
+        <div id="inspector-fit-duration-container" class="hidden" style="display: inline-flex; align-items: center; gap: 6px;">
+          <span id="inspector-media-duration-text" class="num-readout"></span>
+          <button type="button" id="inspector-fit-duration-btn" class="btn small" style="height: 22px; padding: 0 6px; font-size: 10.5px;">
+            Fit Media
+          </button>
+        </div>
+      </div>
+
+      <div class="insp-row">
+        <label class="field-label" for="inspector-duration-slider">Duration (s)</label>
+        <div class="insp-row-control">
+          <input type="range" id="inspector-duration-slider" min="0.5" max="30" step="0.1" value="5" />
+          <input type="number" id="inspector-duration-input" class="num-input" min="0.5" max="120" step="0.1" value="5" />
+        </div>
+      </div>
+
+      <!-- Source Video Trim Offset Controls (shown for video clips) -->
+      <div id="inspector-video-trim-container" class="hidden" style="border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px; color: var(--text-3);">
+          <span id="inspector-video-duration-badge">Clip: 0.0s</span>
+          <span id="inspector-video-offset-val-text" style="font-family: var(--font-mono); color: var(--text-2);">In: 0.0s</span>
         </div>
 
-        <!-- Shot Color Grade / Filter -->
-        <div class="space-y-2 bg-gray-800/40 p-3 rounded-xl border border-gray-700/50">
-            <div class="flex items-center justify-between">
-                <label for="inspector-color-filter-select" class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 cursor-pointer">
-                    <span>🎨 Shot Color Grade / Filter</span>
-                </label>
-                <span id="inspector-filter-status-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700 font-mono">Original</span>
-            </div>
-
-            <div>
-                <select id="inspector-color-filter-select" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer">
-                    <option value="none">None (Natural / Original)</option>
-                    <option value="noir">🌑 Film Noir (High-Contrast Black & White)</option>
-                    <option value="noir_grain">📽️ Classic Noir + 35mm Grain & Vignette</option>
-                    <option value="vintage">📼 Vintage 70s / Warm Retro Kodachrome</option>
-                    <option value="sepia">📜 Antique Sepia / Historical</option>
-                    <option value="warm">🌅 Golden Hour Sunset (Amber Warmth)</option>
-                    <option value="cool">❄️ Cinematic Cold Teal / Blue Shadow</option>
-                    <option value="cyberpunk">🏙️ Cyberpunk Neon (Magenta / Cyan Contrast)</option>
-                    <option value="technicolor">🌈 Technicolor 3-Strip (Lush & Vibrant)</option>
-                    <option value="bleach_bypass">🎬 Bleach Bypass (Silver Screen / Desaturated)</option>
-                    <option value="moody_dark">🌒 Moody Dark / Deep Underexposed Shadows</option>
-                    <option value="emerald">🟢 Matrix Emerald / Sci-Fi Green Cast</option>
-                    <option value="crt">📺 Retro CRT Arcade Monitor / Scanlines</option>
-                </select>
-            </div>
-
-            <!-- Intensity Slider (appears when filter selected) -->
-            <div id="inspector-filter-intensity-container" class="space-y-1 pt-1 hidden">
-                <div class="flex items-center justify-between text-[11px] text-gray-300">
-                    <label for="inspector-filter-intensity-slider" class="font-medium text-gray-400">Filter Intensity</label>
-                    <span id="inspector-filter-intensity-val" class="font-mono text-amber-400 font-semibold">100%</span>
-                </div>
-                <input type="range" id="inspector-filter-intensity-slider" min="10" max="100" step="5" value="100" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-            </div>
+        <div class="insp-row">
+          <label class="field-label" for="inspector-video-offset-slider">Start Offset</label>
+          <div class="insp-row-control">
+            <input type="range" id="inspector-video-offset-slider" min="0" max="60" step="0.1" value="0" />
+            <input type="number" id="inspector-video-offset-input" class="num-input" min="0" max="600" step="0.1" value="0" />
+          </div>
         </div>
 
-        <!-- Camera Angle & Movement -->
-        <div class="space-y-2.5 bg-gray-800/40 p-3.5 rounded-xl border border-gray-700/50">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <span>📷 Camera Angle & Framing</span>
-            </h4>
-            
-            <div>
-                <label for="inspector-camera-angle" class="block text-xs font-medium text-gray-300 mb-1">Camera Angle Preset</label>
-                <select id="inspector-camera-angle" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none">
-                    <option value="default">Auto (Director Default)</option>
-                    <option value="eye-level shot">Eye-Level Shot</option>
-                    <option value="low-angle shot">Low Angle Shot</option>
-                    <option value="high-angle shot">High Angle Shot</option>
-                    <option value="dutch angle shot">Dutch Angle / Tilted</option>
-                    <option value="aerial view / overhead shot">Aerial / Overhead View</option>
-                    <option value="extreme close-up">Extreme Close-Up</option>
-                    <option value="close-up">Close-Up</option>
-                    <option value="medium shot">Medium Shot</option>
-                    <option value="full shot">Full / Cowboy Shot</option>
-                    <option value="wide shot">Wide / Establishing Shot</option>
-                    <option value="point of view">POV (Point of View)</option>
-                    <option value="custom">Custom Angle...</option>
-                </select>
-            </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+          <div id="inspector-video-play-range-info" style="font-size: 11px; color: var(--text-3); font-family: var(--font-mono);"></div>
+          <div style="display: inline-flex; gap: 4px;">
+            <button type="button" id="inspector-set-offset-from-video-btn" class="btn small" style="height: 22px; font-size: 11px;">Use Current</button>
+            <button type="button" id="inspector-reset-offset-btn" class="btn small ghost" style="height: 22px; font-size: 11px;">Reset</button>
+          </div>
+        </div>
+      </div>
+    </section>
 
-            <div id="inspector-custom-angle-container" class="hidden">
-                <label for="inspector-custom-angle" class="block text-xs font-medium text-gray-400 mb-1">Custom Camera Angle Description</label>
-                <input type="text" id="inspector-custom-angle" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none" placeholder="e.g. Over-the-shoulder low angle close-up">
-            </div>
+    <!-- 3. Cinematography, Camera Motion & Keyframes (Phase 4 Integration) -->
+    <section class="prop-section">
+      <div class="prop-section-head">
+        <span>Cinematography & Motion</span>
+        <button
+          type="button"
+          id="inspector-toggle-keyframes-btn"
+          class="btn small"
+          style="height: 22px; padding: 0 8px; font-size: 11px;"
+        >
+          <span id="inspector-keyframes-toggle-icon">▸</span> Keyframes
+        </button>
+      </div>
 
-            <div>
-                <div class="flex items-center justify-between mb-1">
-                    <label for="inspector-camera-movement" class="block text-xs font-medium text-gray-300">Camera Movement</label>
-                    <button type="button" id="inspector-toggle-keyframes-btn" class="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition">
-                        <span>🎬 Keyframes</span>
-                        <span id="inspector-keyframes-toggle-icon">▼</span>
-                    </button>
-                </div>
-                <select id="inspector-camera-movement" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none">
-                    <option value="static">Static Shot</option>
-                    <option value="zoom_in">Slow Zoom In</option>
-                    <option value="zoom_out">Slow Zoom Out</option>
-                    <option value="pan_left">Pan Left</option>
-                    <option value="pan_right">Pan Right</option>
-                    <option value="pan_up">Tilt / Pan Up</option>
-                    <option value="pan_down">Tilt / Pan Down</option>
-                    <option value="pan_slow">Slow Panning Tracking Shot</option>
-                    <option value="dolly_zoom">Dolly Zoom (Vertigo Effect)</option>
-                    <option value="whip_pan">Whip Pan (Fast Blur Pan)</option>
-                    <option value="custom_keyframes">⚙️ Custom 2-Keyframe Move</option>
-                </select>
-            </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-camera-angle-select">Camera Angle</label>
+        <div class="insp-row-control">
+          <select id="inspector-camera-angle-select" class="select">
+            <option value="eye_level">Eye Level</option>
+            <option value="wide_shot">Wide Establishing</option>
+            <option value="medium_shot">Medium Shot</option>
+            <option value="close_up">Close-Up</option>
+            <option value="extreme_close_up">Extreme Close-Up</option>
+            <option value="low_angle">Low Hero Angle</option>
+            <option value="high_angle">High Angle</option>
+            <option value="aerial_drone">Aerial / Drone</option>
+            <option value="dutch_angle">Dutch Tilt</option>
+            <option value="over_shoulder">Over the Shoulder</option>
+            <option value="custom">Custom Angle...</option>
+          </select>
+        </div>
+      </div>
 
-            <!-- Custom 2-Keyframe Camera Motion Controls -->
-            <div id="inspector-keyframes-container" class="hidden p-3 bg-gray-900/80 border border-amber-500/30 rounded-xl space-y-3">
-                <div class="flex items-center justify-between pb-1 border-b border-gray-800">
-                    <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">Custom Camera Keyframes</span>
-                    <div class="flex items-center gap-1.5">
-                        <button type="button" id="inspector-preset-to-kf-btn" class="text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition" title="Initialize keyframes from current preset">
-                            Load Preset
-                        </button>
-                        <button type="button" id="inspector-reverse-kf-btn" class="text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded transition" title="Swap Start and End keyframes">
-                            ⇄ Reverse
-                        </button>
-                    </div>
-                </div>
+      <div id="inspector-custom-angle-container" class="insp-row hidden">
+        <label class="field-label" for="inspector-custom-angle-input">Custom Angle</label>
+        <div class="insp-row-control">
+          <input type="text" id="inspector-custom-angle-input" class="input" placeholder="e.g., Bird's-eye macro..." />
+        </div>
+      </div>
 
-                <!-- Start Keyframe (t = 0) -->
-                <div class="bg-gray-950/60 p-2.5 rounded-lg border border-gray-800 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[11px] font-semibold text-gray-200">🟢 Start Keyframe (0%)</span>
-                        <span id="inspector-kf-start-summary" class="text-[10px] text-gray-400 font-mono">1.0x (0, 0)</span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Zoom / Scale</span>
-                                <span id="inspector-kf-start-scale-val">1.00x</span>
-                            </div>
-                            <input type="range" id="inspector-kf-start-scale" min="1.0" max="2.5" step="0.05" value="1.0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Rotation</span>
-                                <span id="inspector-kf-start-rot-val">0°</span>
-                            </div>
-                            <input type="range" id="inspector-kf-start-rot" min="-30" max="30" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Pan X</span>
-                                <span id="inspector-kf-start-x-val">0%</span>
-                            </div>
-                            <input type="range" id="inspector-kf-start-x" min="-50" max="50" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Pan Y</span>
-                                <span id="inspector-kf-start-y-val">0%</span>
-                            </div>
-                            <input type="range" id="inspector-kf-start-y" min="-50" max="50" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                    </div>
-                </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-camera-movement-select">Camera Move</label>
+        <div class="insp-row-control">
+          <select id="inspector-camera-movement-select" class="select">
+            <option value="static">Static</option>
+            <option value="slow_zoom_in">Slow Push-In</option>
+            <option value="slow_zoom_out">Slow Pull-Out</option>
+            <option value="pan_left">Pan Left</option>
+            <option value="pan_right">Pan Right</option>
+            <option value="tilt_up">Tilt Up</option>
+            <option value="tilt_down">Tilt Down</option>
+            <option value="handheld">Handheld Documentary</option>
+            <option value="drone_flyover">Dynamic Orbit / Drone</option>
+          </select>
+        </div>
+      </div>
 
-                <!-- End Keyframe (t = 100%) -->
-                <div class="bg-gray-950/60 p-2.5 rounded-lg border border-gray-800 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[11px] font-semibold text-gray-200">🔴 End Keyframe (100%)</span>
-                        <span id="inspector-kf-end-summary" class="text-[10px] text-gray-400 font-mono">1.15x (0, 0)</span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Zoom / Scale</span>
-                                <span id="inspector-kf-end-scale-val">1.15x</span>
-                            </div>
-                            <input type="range" id="inspector-kf-end-scale" min="1.0" max="2.5" step="0.05" value="1.15" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Rotation</span>
-                                <span id="inspector-kf-end-rot-val">0°</span>
-                            </div>
-                            <input type="range" id="inspector-kf-end-rot" min="-30" max="30" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Pan X</span>
-                                <span id="inspector-kf-end-x-val">0%</span>
-                            </div>
-                            <input type="range" id="inspector-kf-end-x" min="-50" max="50" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
-                                <span>Pan Y</span>
-                                <span id="inspector-kf-end-y-val">0%</span>
-                            </div>
-                            <input type="range" id="inspector-kf-end-y" min="-50" max="50" step="1" value="0" class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
-                        </div>
-                    </div>
-                </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-lighting-preset-select">Lighting</label>
+        <div class="insp-row-control">
+          <select id="inspector-lighting-preset-select" class="select">
+            <option value="">Default Scene Lighting</option>
+            <option value="golden_hour">Golden Hour</option>
+            <option value="cinematic_noir">High-Contrast Noir</option>
+            <option value="neon_cyberpunk">Neon Rim Light</option>
+            <option value="soft_studio">Soft Studio Key</option>
+            <option value="moonlit">Cold Moonlight</option>
+          </select>
+        </div>
+      </div>
 
-                <!-- Motion Easing -->
-                <div class="flex items-center justify-between gap-2 pt-1">
-                    <label for="inspector-kf-easing-select" class="text-[11px] text-gray-300 font-medium whitespace-nowrap">Motion Easing:</label>
-                    <select id="inspector-kf-easing-select" class="bg-gray-950 text-white text-[11px] border border-gray-700 rounded p-1.5 flex-1 focus:ring-1 focus:ring-amber-500 outline-none">
-                        <option value="ease-in-out">Ease In-Out (Smooth Cine)</option>
-                        <option value="ease-out">Ease Out (Gentle Decel)</option>
-                        <option value="ease-in">Ease In (Accelerate)</option>
-                        <option value="linear">Linear (Constant Speed)</option>
-                        <option value="whip">Whip (Rapid Center Acceleration)</option>
-                    </select>
-                </div>
-            </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-lighting-prompt-input">Light Notes</label>
+        <div class="insp-row-control">
+          <textarea id="inspector-lighting-prompt-input" class="textarea" style="min-height: 44px;" placeholder="Optional lighting overrides..."></textarea>
+        </div>
+      </div>
+
+      <!-- Collapsible Advanced Start/End Camera Keyframes -->
+      <div id="inspector-keyframes-container" class="hidden" style="border-top: 1px solid var(--border); padding-top: 8px; margin-top: 6px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 8px;">
+          <button type="button" id="inspector-preset-to-kf-btn" class="btn small" style="flex: 1; height: 24px; font-size: 11px;">
+            Convert Move → Keyframes
+          </button>
+          <button type="button" id="inspector-reverse-kf-btn" class="btn small" style="height: 24px; font-size: 11px;" title="Swap Start & End">
+            ⇄ Reverse
+          </button>
         </div>
 
-        <!-- Display Layer Mode (Fullscreen vs Pop-Up PiP Overlay) -->
-        <div class="space-y-2 pt-2 border-t border-gray-700">
-            <div class="flex items-center justify-between">
-                <label for="inspector-display-mode-select" class="text-[10px] uppercase font-mono text-gray-400 font-medium">Layer & Layout Mode</label>
-                <span class="text-[9px] text-amber-400 font-mono">B-Roll PiP</span>
+        <!-- Start Frame -->
+        <div style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; margin-bottom: 6px;">
+            <span style="color: var(--accent-text);">Start Keyframe</span>
+            <span id="inspector-kf-start-summary" class="num-readout">1.00x · (0.5, 0.5)</span>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-start-scale">Scale</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-start-scale" min="0.5" max="2.5" step="0.01" value="1" />
+              <span id="inspector-kf-start-scale-val" class="num-readout">1.00x</span>
             </div>
-            <select id="inspector-display-mode-select" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-white outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer">
-                <option value="fullscreen">🖼️ Fullscreen Cutaway</option>
-                <option value="pip_overlay">🪟 Pop-Up Overlay (PiP Callout)</option>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-start-rot">Rotation</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-start-rot" min="-45" max="45" step="0.5" value="0" />
+              <span id="inspector-kf-start-rot-val" class="num-readout">0.0°</span>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-start-x">Center X</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-start-x" min="0" max="1" step="0.01" value="0.5" />
+              <span id="inspector-kf-start-x-val" class="num-readout">0.50</span>
+            </div>
+          </div>
+          <div class="insp-row" style="margin-bottom: 0;">
+            <label class="field-label" for="inspector-kf-start-y">Center Y</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-start-y" min="0" max="1" step="0.01" value="0.5" />
+              <span id="inspector-kf-start-y-val" class="num-readout">0.50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- End Frame -->
+        <div style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; margin-bottom: 6px;">
+            <span style="color: var(--warning);">End Keyframe</span>
+            <span id="inspector-kf-end-summary" class="num-readout">1.10x · (0.5, 0.5)</span>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-end-scale">Scale</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-end-scale" min="0.5" max="2.5" step="0.01" value="1.1" />
+              <span id="inspector-kf-end-scale-val" class="num-readout">1.10x</span>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-end-rot">Rotation</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-end-rot" min="-45" max="45" step="0.5" value="0" />
+              <span id="inspector-kf-end-rot-val" class="num-readout">0.0°</span>
+            </div>
+          </div>
+          <div class="insp-row">
+            <label class="field-label" for="inspector-kf-end-x">Center X</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-end-x" min="0" max="1" step="0.01" value="0.5" />
+              <span id="inspector-kf-end-x-val" class="num-readout">0.50</span>
+            </div>
+          </div>
+          <div class="insp-row" style="margin-bottom: 0;">
+            <label class="field-label" for="inspector-kf-end-y">Center Y</label>
+            <div class="insp-row-control">
+              <input type="range" id="inspector-kf-end-y" min="0" max="1" step="0.01" value="0.5" />
+              <span id="inspector-kf-end-y-val" class="num-readout">0.50</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="insp-row" style="margin-bottom: 0;">
+          <label class="field-label" for="inspector-kf-easing-select">Easing</label>
+          <div class="insp-row-control">
+            <select id="inspector-kf-easing-select" class="select">
+              <option value="easeInOut">Ease In-Out</option>
+              <option value="linear">Linear</option>
+              <option value="easeIn">Ease In</option>
+              <option value="easeOut">Ease Out</option>
+              <option value="whip">Editorial Whip</option>
             </select>
-
-            <!-- PiP Specific Controls -->
-            <div id="inspector-pip-controls" class="space-y-2 bg-gray-900/60 p-2.5 rounded-lg border border-gray-700 hidden">
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label for="inspector-pip-position-select" class="text-[9px] text-gray-400 font-mono block mb-1">Corner Placement</label>
-                        <select id="inspector-pip-position-select" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-[11px] text-white outline-none cursor-pointer">
-                            <option value="top_right">Top Right</option>
-                            <option value="top_left">Top Left</option>
-                            <option value="bottom_right">Bottom Right</option>
-                            <option value="bottom_left">Bottom Left</option>
-                            <option value="center_right">Center Right</option>
-                            <option value="center_left">Center Left</option>
-                            <option value="custom">🎯 Custom (Drag on Preview)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label for="inspector-pip-animation-select" class="text-[9px] text-gray-400 font-mono block mb-1">Pop Animation</label>
-                        <select id="inspector-pip-animation-select" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-[11px] text-white outline-none cursor-pointer">
-                            <option value="pop_spring">Spring Pop</option>
-                            <option value="slide_in">Slide In</option>
-                            <option value="zoom_fade">Zoom Fade</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="flex items-center justify-between pt-1">
-                    <label for="inspector-pip-scale-range" class="text-[9px] text-gray-400 font-mono">Overlay Scale</label>
-                    <div class="flex items-center gap-2">
-                        <input type="range" id="inspector-pip-scale-range" min="20" max="55" value="36" class="w-24 accent-amber-500 cursor-pointer">
-                        <span id="inspector-pip-scale-val" class="text-[10px] text-gray-300 font-mono">36%</span>
-                    </div>
-                </div>
-                <div class="pt-1 border-t border-gray-800 flex justify-end">
-                    <button type="button" id="inspector-clear-all-pip-btn" class="text-[10px] text-gray-400 hover:text-amber-400 flex items-center gap-1 transition-colors">
-                        <span>🚫 Clear all timeline PiPs</span>
-                    </button>
-                </div>
-            </div>
+          </div>
         </div>
+      </div>
+    </section>
 
-        <!-- Talking Head / A-Roll Layer Settings -->
-        <div class="space-y-2.5 bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-700/50">
-            <div class="flex items-center justify-between">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1.5">
-                    <span>👤 Talking Head / A-Roll & Split</span>
-                </h4>
-                <label class="text-[11px] text-indigo-300/90 cursor-pointer flex items-center gap-1.5 select-none" title="When checked, uploading media to this shot preserves existing visuals as Layer 1 and assigns new media as Layer 2 for Split Screen or PiP">
-                    <input type="checkbox" id="inspector-preserve-content-toggle" class="w-3.5 h-3.5 rounded bg-gray-900 border-gray-700 text-indigo-500 focus:ring-0 cursor-pointer">
-                    <span class="font-medium">Preserve on upload</span>
-                </label>
-            </div>
-            <div>
-                <label for="inspector-talking-head-mode" class="block text-xs font-medium text-gray-300 mb-1">Layout Mode</label>
-                <select id="inspector-talking-head-mode" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none cursor-pointer">
-                    <option value="none">🖼️ None (B-Roll Only)</option>
-                    <option value="full">👤 Full Screen (A-Roll Only)</option>
-                    <option value="pip-br">🎭 Picture-in-Picture (Bottom-Right)</option>
-                    <option value="pip-bl">🎭 Picture-in-Picture (Bottom-Left)</option>
-                    <option value="pip-tr">🎭 Picture-in-Picture (Top-Right)</option>
-                    <option value="pip-tl">🎭 Picture-in-Picture (Top-Left)</option>
-                    <option value="split">🌓 Split Screen (A-Roll + B-Roll Dual Media)</option>
-                </select>
-            </div>
+    <!-- 4. Layout, PiP Overlay, Dual Layer & Talking Head -->
+    <section class="prop-section">
+      <div class="prop-section-head">
+        <span>Layout, PiP & Layers</span>
+      </div>
 
-            <!-- Dual Media Layers Status / Action Panel -->
-            <div id="inspector-dual-media-panel" class="bg-gray-900/80 rounded-lg p-2.5 border border-indigo-500/20 space-y-2">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-semibold text-gray-300">Shot Media Layers</span>
-                    <button type="button" id="inspector-swap-layers-btn" class="text-[10px] text-indigo-300 hover:text-white px-2 py-0.5 rounded bg-indigo-900/60 hover:bg-indigo-800 border border-indigo-700/60 flex items-center gap-1 transition-all cursor-pointer" title="Swap Layer 1 and Layer 2 (swaps which media is Left/Top vs Right/Bottom in Split Screen)">
-                        <span>⇄ Swap Layers</span>
-                    </button>
-                </div>
-                <!-- Layer 1 -->
-                <div class="flex items-center justify-between text-xs bg-slate-950/70 px-2 py-1.5 rounded border border-gray-800">
-                    <div class="flex items-center gap-2 truncate">
-                        <span class="text-indigo-400 font-mono text-[10px] font-bold">L1</span>
-                        <span id="inspector-layer1-label" class="text-gray-300 truncate">Primary: Empty</span>
-                    </div>
-                    <span id="inspector-layer1-badge" class="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-gray-400 font-mono">None</span>
-                </div>
-                <!-- Layer 2 -->
-                <div class="flex items-center justify-between text-xs bg-slate-950/70 px-2 py-1.5 rounded border border-gray-800">
-                    <div class="flex items-center gap-2 truncate">
-                        <span class="text-purple-400 font-mono text-[10px] font-bold">L2</span>
-                        <span id="inspector-layer2-label" class="text-gray-300 truncate">A-Roll / 2nd: Empty</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span id="inspector-layer2-badge" class="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-gray-400 font-mono">None</span>
-                        <button type="button" id="inspector-clear-layer2-btn" class="text-gray-500 hover:text-red-400 text-xs px-1 cursor-pointer hidden" title="Remove 2nd Layer">✕</button>
-                    </div>
-                </div>
-                <!-- Quick upload 2nd media button -->
-                <div class="pt-0.5">
-                    <button type="button" id="inspector-upload-layer2-btn" class="w-full bg-indigo-600/80 hover:bg-indigo-600 text-white font-medium py-1.5 px-3 rounded-md text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Upload a video or image as A-Roll / 2nd layer without replacing existing media">
-                        <span>⬆️ Upload 2nd Media (Preserve Current)</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label for="inspector-talking-head-shape" class="block text-xs font-medium text-gray-300 mb-1">PiP Shape</label>
-                    <select id="inspector-talking-head-shape" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none">
-                        <option value="circle">⭕ Circle</option>
-                        <option value="rounded">🔲 Rounded</option>
-                        <option value="rect">⬛ Square/Rect</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="inspector-talking-head-size" class="block text-xs font-medium text-gray-300 mb-1">PiP Size</label>
-                    <select id="inspector-talking-head-size" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-indigo-500 outline-none">
-                        <option value="small">Small (20%)</option>
-                        <option value="medium" selected>Medium (27%)</option>
-                        <option value="large">Large (35%)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="mt-3 bg-indigo-900/20 border border-indigo-700/50 p-2 rounded-lg mb-3 hidden" id="inspector-talking-head-hint">
-                <p class="text-[10px] text-indigo-300 leading-tight">
-                    💡 <span class="font-semibold">Tip:</span> Your clip is full screen. If you've added narration or A-roll, try switching to <b>Picture-in-Picture</b> or <b>None (B-Roll)</b> so the viewer can see you talk!
-                </p>
-            </div>
-            <div class="mt-3 flex items-center gap-2">
-                <input type="checkbox" id="inspector-use-original-audio" class="w-4 h-4 rounded bg-gray-900 border-gray-700 text-indigo-500 focus:ring-indigo-500">
-                <label for="inspector-use-original-audio" class="text-xs font-medium text-gray-300">Play this clip's original audio</label>
-            </div>
-            <!-- Clip Audio Volume & Ducking Controls -->
-            <div id="inspector-clip-audio-controls" class="mt-2.5 p-2.5 bg-zinc-900/60 border border-white/5 rounded-lg space-y-2 hidden">
-                <div class="flex items-center justify-between">
-                    <label for="inspector-clip-volume-slider" class="text-[11px] font-semibold text-gray-300">Clip Volume</label>
-                    <span id="inspector-clip-volume-label" class="text-[11px] font-mono text-indigo-400">100%</span>
-                </div>
-                <input type="range" id="inspector-clip-volume-slider" min="0" max="2" step="0.05" value="1.0" class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
-                
-                <div class="grid grid-cols-2 gap-2 mt-2">
-                    <div>
-                        <label for="inspector-clip-fade-in" class="block text-[10px] text-gray-400 mb-1">Fade In (s)</label>
-                        <input type="number" id="inspector-clip-fade-in" min="0" max="5" step="0.1" class="w-full bg-zinc-950 text-white border border-gray-700 rounded p-1 text-xs outline-none">
-                    </div>
-                    <div>
-                        <label for="inspector-clip-fade-out" class="block text-[10px] text-gray-400 mb-1">Fade Out (s)</label>
-                        <input type="number" id="inspector-clip-fade-out" min="0" max="5" step="0.1" class="w-full bg-zinc-950 text-white border border-gray-700 rounded p-1 text-xs outline-none">
-                    </div>
-                </div>
-
-                <label class="flex items-center gap-2 cursor-pointer pt-1">
-                    <input type="checkbox" id="inspector-clip-ducking-checkbox" class="w-3.5 h-3.5 rounded bg-zinc-950 border-gray-700 text-indigo-500 focus:ring-0 focus:ring-offset-0" checked>
-                    <span class="text-[11px] text-gray-400">Auto-duck volume beneath narration</span>
-                </label>
-
-                <label class="flex items-center gap-2 cursor-pointer pt-1" title="Mute master narration and background tracks on this shot so this video's audio plays alone">
-                    <input type="checkbox" id="inspector-clip-solo-audio-checkbox" class="w-3.5 h-3.5 rounded bg-zinc-950 border-gray-700 text-amber-500 focus:ring-0 focus:ring-offset-0">
-                    <span class="text-[11px] text-amber-300 font-medium">Solo Audio (Mute narration on this shot)</span>
-                </label>
-
-                <div id="inspector-audio-stack-warning" class="hidden text-[11px] text-amber-300 bg-amber-950/40 border border-amber-800/50 p-2 rounded flex items-start gap-1.5 mt-1">
-                    <span>⚠️</span>
-                    <span>Clip audio and voiceover narration will play simultaneously. Adjust clip volume or ducking if needed.</span>
-                </div>
-                
-                <button id="inspector-extract-audio-btn" class="w-full mt-2 bg-zinc-800 hover:bg-zinc-700 text-gray-300 font-semibold text-[10px] py-1.5 rounded transition uppercase tracking-wider flex items-center justify-center gap-1.5 border border-white/5">
-                    <span>🎵</span> Extract Audio
-                </button>
-            </div>
-            
-            <div class="mt-3 p-2.5 bg-zinc-900/60 border border-white/5 rounded-lg space-y-2">
-                <div class="flex items-center justify-between">
-                    <label for="inspector-clip-speed-slider" class="text-[11px] font-semibold text-gray-300">Playback Speed</label>
-                    <span id="inspector-clip-speed-label" class="text-[11px] font-mono text-emerald-400">1.0x</span>
-                </div>
-                <input type="range" id="inspector-clip-speed-slider" min="0.25" max="4" step="0.05" value="1.0" class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
-            </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-display-mode-select">Display Mode</label>
+        <div class="insp-row-control">
+          <select id="inspector-display-mode-select" class="select">
+            <option value="fullscreen">Full Frame</option>
+            <option value="pip_overlay">PiP B-Roll Card</option>
+          </select>
         </div>
+      </div>
 
-        <!-- Source Device & Orientation -->
-        <div class="space-y-2.5 bg-gray-800/40 p-3.5 rounded-xl border border-gray-700/50">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
-                <span>📹 Source Device & Orientation</span>
-            </h4>
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label for="inspector-clip-device" class="block text-[10px] text-gray-400 mb-1">Device Tag</label>
-                    <select id="inspector-clip-device" class="w-full bg-gray-900 text-white border border-gray-700 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-sky-500">
-                        <option value="desktop">💻 Desktop</option>
-                        <option value="camera">📷 Camera</option>
-                        <option value="smartphone">📱 Smartphone</option>
-                        <option value="gopro">🏄 GoPro / Action</option>
-                        <option value="screen_recording">🖥️ Screen Rec</option>
-                        <option value="other">🎞️ Other</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="inspector-clip-rotation" class="block text-[10px] text-gray-400 mb-1">Rotate</label>
-                    <select id="inspector-clip-rotation" class="w-full bg-gray-900 text-white border border-gray-700 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-sky-500">
-                        <option value="0">0° (Normal)</option>
-                        <option value="90">90° CW</option>
-                        <option value="180">180° Flip</option>
-                        <option value="270">270° CCW</option>
-                    </select>
-                </div>
-            </div>
+      <!-- PiP Controls (#inspector-pip-controls) -->
+      <div id="inspector-pip-controls" class="hidden" style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 8px;">
+        <div class="insp-row">
+          <label class="field-label" for="inspector-pip-position-select">PiP Corner</label>
+          <div class="insp-row-control">
+            <select id="inspector-pip-position-select" class="select">
+              <option value="top_right">Top Right</option>
+              <option value="top_left">Top Left</option>
+              <option value="bottom_right">Bottom Right</option>
+              <option value="bottom_left">Bottom Left</option>
+              <option value="center_right">Center Right</option>
+              <option value="center_left">Center Left</option>
+              <option value="custom">Custom (Drag on Canvas)</option>
+            </select>
+          </div>
         </div>
-
-        <!-- Lighting Prompts -->
-        <div class="space-y-2.5 bg-gray-800/40 p-3.5 rounded-xl border border-gray-700/50">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <span>💡 Lighting Prompts & Mood</span>
-            </h4>
-
-            <div>
-                <label for="inspector-lighting-preset" class="block text-xs font-medium text-gray-300 mb-1">Lighting Preset</label>
-                <select id="inspector-lighting-preset" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none">
-                    <option value="custom">Custom Lighting Prompt</option>
-                    <option value="golden hour, warm amber sunlight with soft rim light">🌅 Golden Hour / Warm Sunset</option>
-                    <option value="chiaroscuro lighting, dramatic high contrast shadows">🌓 Chiaroscuro / High Contrast</option>
-                    <option value="neon-drenched cyberpunk glow with blue and magenta accents">🏙️ Neon / Cyberpunk Glow</option>
-                    <option value="soft diffused daylight through sheer curtains">☀️ Soft Diffused Daylight</option>
-                    <option value="cinematic dark moody lighting with volumetric fog and light rays">🌫️ Volumetric Fog & Light Rays</option>
-                    <option value="studio high key clean white bright illumination">💡 Studio High Key</option>
-                    <option value="warm candlelight glow with flickering shadows">🕯️ Warm Candlelight</option>
-                    <option value="dramatic moonlit night with cool blue highlights">🌙 Moonlit Blue Night</option>
-                </select>
-            </div>
-
-            <div>
-                <label for="inspector-lighting-prompt" class="block text-xs font-medium text-gray-300 mb-1">Lighting Prompt Text</label>
-                <textarea id="inspector-lighting-prompt" class="w-full h-16 bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none resize-none" placeholder="Describe specific lighting (e.g., golden hour rim light, dramatic side shadow...)"></textarea>
-            </div>
+        <div class="insp-row">
+          <label class="field-label" for="inspector-pip-animation-select">Entrance</label>
+          <div class="insp-row-control">
+            <select id="inspector-pip-animation-select" class="select">
+              <option value="pop_spring">Spring Pop</option>
+              <option value="slide_in">Slide In</option>
+              <option value="zoom_fade">Zoom Fade</option>
+              <option value="fade">Crossfade</option>
+            </select>
+          </div>
         </div>
-
-        <!-- Video Clip In-Point / Start Offset (Trimming) -->
-        <div id="inspector-video-trim-container" class="space-y-2.5 bg-purple-950/30 p-3.5 rounded-xl border border-purple-700/50 hidden">
-            <div class="flex items-center justify-between">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
-                    <span>🎬 Video In-Point (Trim)</span>
-                </h4>
-                <span id="inspector-video-duration-badge" class="text-[10px] px-2 py-0.5 rounded bg-purple-900/60 text-purple-200 border border-purple-700/40 font-mono">0.0s / 0.0s</span>
-            </div>
-            <p class="text-[11px] text-gray-400">Select where this video clip starts playing in the timeline.</p>
-
-            <div class="space-y-2">
-                <div class="flex items-center justify-between text-[11px] text-gray-300">
-                    <span>Start Offset:</span>
-                    <span id="inspector-video-offset-val-text" class="font-mono text-purple-300 font-bold">0.0s</span>
-                </div>
-                <div class="flex items-center gap-3">
-                    <input type="range" id="inspector-video-offset-slider" min="0" max="60" step="0.1" value="0.0" class="flex-grow accent-purple-500 cursor-pointer">
-                    <div class="flex items-center gap-1">
-                        <input type="number" id="inspector-video-offset-input" min="0" max="600" step="0.1" value="0.0" class="w-16 bg-gray-900 text-purple-300 font-bold text-center border border-gray-700 rounded-lg p-1 text-xs focus:ring-1 focus:ring-purple-500 outline-none">
-                        <span class="text-xs text-gray-400 font-semibold">sec</span>
-                    </div>
-                </div>
-                <div class="flex items-center gap-2 pt-1">
-                    <button type="button" id="inspector-set-offset-from-video-btn" class="flex-1 bg-purple-800/60 hover:bg-purple-700/80 text-purple-200 text-xs py-1.5 px-2 rounded-lg border border-purple-600/50 transition flex items-center justify-center gap-1" title="Use current preview video playback position as the start offset">
-                        <span>⏱️ Set from Preview</span>
-                    </button>
-                    <button type="button" id="inspector-reset-offset-btn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs py-1.5 px-2 rounded-lg border border-gray-700 transition" title="Reset start offset to 0.0s">
-                        <span>⏮️ Reset</span>
-                    </button>
-                </div>
-                <div id="inspector-video-play-range-info" class="text-[10px] text-gray-400 font-mono bg-purple-950/50 p-1.5 rounded border border-purple-900/60 text-center">
-                    Plays from 0.0s to 3.0s
-                </div>
-            </div>
+        <div class="insp-row" style="margin-bottom: 0;">
+          <label class="field-label" for="inspector-pip-scale-range">Card Size</label>
+          <div class="insp-row-control">
+            <input type="range" id="inspector-pip-scale-range" min="0.18" max="0.65" step="0.01" value="0.34" />
+            <span id="inspector-pip-scale-val" class="num-readout">34%</span>
+          </div>
         </div>
+      </div>
 
-        <!-- Duration Settings -->
-        <div class="space-y-2.5 bg-gray-800/40 p-3.5 rounded-xl border border-gray-700/50">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <span>⏱️ Shot Duration</span>
-            </h4>
-
-            <div class="flex items-center gap-3">
-                <input type="range" id="inspector-duration-slider" min="0.5" max="20" step="0.5" value="3.0" class="flex-grow accent-amber-500 cursor-pointer">
-                <div class="flex items-center gap-1">
-                    <input type="number" id="inspector-duration-input" min="0.5" max="60" step="0.5" value="3.0" class="w-16 bg-gray-900 text-amber-300 font-bold text-center border border-gray-700 rounded-lg p-1 text-xs focus:ring-1 focus:ring-amber-500 outline-none">
-                    <span class="text-xs text-gray-400 font-semibold">sec</span>
-                </div>
-            </div>
-
-            <div id="inspector-fit-duration-container" class="hidden flex items-center justify-between pt-2 border-t border-gray-700/40">
-                <span class="text-[11px] text-gray-400">Media file length: <span id="inspector-media-duration-text" class="text-amber-300 font-mono font-bold">--</span></span>
-                <button type="button" id="inspector-fit-duration-btn" class="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 text-amber-300 border border-amber-500/40 rounded text-[11px] font-semibold transition cursor-pointer flex items-center gap-1">
-                    <span>⚡ Match Shot to Media</span>
-                </button>
-            </div>
+      <!-- Dual Media Layer Stack (#inspector-dual-media-panel) -->
+      <div id="inspector-dual-media-panel" class="hidden" style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 11px;">
+          <div>
+            <span id="inspector-layer1-label" style="font-weight: 600;">Layer 1</span>
+            <span id="inspector-layer1-badge" style="color: var(--text-3); margin-left: 4px;">Base</span>
+          </div>
+          <button type="button" id="inspector-swap-layers-btn" class="btn small" style="height: 22px; font-size: 11px;">⇅ Swap</button>
         </div>
-
-        <!-- Storyboard Intelligence & Visual Director Reasoning -->
-        <div id="inspector-storyboard-intelligence-container" class="space-y-2 bg-indigo-950/30 p-3.5 rounded-xl border border-indigo-500/30">
-            <div class="flex items-center justify-between gap-2">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                    <span>🎬 Storyboard Intelligence</span>
-                </h4>
-                <div class="flex items-center gap-1">
-                    <span id="inspector-visual-type-badge" class="hidden text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-900/80 text-indigo-200 border border-indigo-700/50"></span>
-                    <span id="inspector-narrative-function-badge" class="hidden text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-900/80 text-purple-200 border border-purple-700/50"></span>
-                </div>
-            </div>
-            <div class="text-[11px] text-gray-300 space-y-1.5 font-sans pt-1">
-                <div id="inspector-concept-row" class="hidden"><span class="text-gray-400 font-medium">Visual Concept:</span> <span id="inspector-visual-concept-text" class="text-gray-100 font-medium"></span></div>
-                <div id="inspector-action-row" class="hidden"><span class="text-gray-400 font-medium">Observable Action:</span> <span id="inspector-action-text" class="text-gray-200"></span></div>
-                <div id="inspector-subjects-row" class="hidden"><span class="text-gray-400 font-medium">Visible Subjects:</span> <span id="inspector-subjects-text" class="text-gray-200"></span></div>
-                <div id="inspector-environment-row" class="hidden"><span class="text-gray-400 font-medium">Environment & Era:</span> <span id="inspector-environment-text" class="text-gray-200"></span></div>
-                <div id="inspector-composition-row" class="hidden"><span class="text-gray-400 font-medium">Shot Composition:</span> <span id="inspector-composition-text" class="text-gray-200"></span></div>
-                <div id="inspector-continuity-row" class="hidden"><span class="text-gray-400 font-medium">Continuity Notes:</span> <span id="inspector-continuity-text" class="text-indigo-300 italic"></span></div>
-            </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
+          <div>
+            <span id="inspector-layer2-label" style="font-weight: 600;">Layer 2</span>
+            <span id="inspector-layer2-badge" style="color: var(--accent-text); margin-left: 4px;">Overlay</span>
+          </div>
+          <div style="display: inline-flex; gap: 4px;">
+            <button type="button" id="inspector-upload-layer2-btn" class="btn small" style="height: 22px; font-size: 11px;">+ Upload</button>
+            <button type="button" id="inspector-clear-layer2-btn" class="btn small ghost" style="height: 22px; font-size: 11px;">Clear</button>
+          </div>
         </div>
+      </div>
 
-        <!-- Visual Prompt Details -->
-        <div class="space-y-2.5 bg-gray-800/40 p-3.5 rounded-xl border border-gray-700/50">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <span>🖼️ Image & B-Roll Prompts</span>
-            </h4>
-            
-            <div>
-                <label for="inspector-image-prompt" class="block text-xs font-medium text-gray-300 mb-1">Main Image Prompt</label>
-                <textarea id="inspector-image-prompt" class="w-full h-20 bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none resize-y" placeholder="Visual prompt for image generator..."></textarea>
-            </div>
-
-            <div>
-                <label for="inspector-broll-prompt" class="block text-xs font-medium text-gray-400 mb-1">B-Roll / Cutaway Prompt (Optional)</label>
-                <input type="text" id="inspector-broll-prompt" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2 text-xs focus:ring-1 focus:ring-amber-500 outline-none" placeholder="Secondary cutaway detail prompt...">
-            </div>
+      <!-- Talking Head A-Roll Framing -->
+      <div class="insp-row">
+        <label class="field-label" for="inspector-talking-head-mode-select">Presenter</label>
+        <div class="insp-row-control">
+          <select id="inspector-talking-head-mode-select" class="select">
+            <option value="none">Hidden (B-Roll Only)</option>
+            <option value="full">Full Screen A-Roll</option>
+            <option value="pip-br">Corner PiP (Bottom Right)</option>
+            <option value="pip-bl">Corner PiP (Bottom Left)</option>
+            <option value="pip-tr">Corner PiP (Top Right)</option>
+            <option value="pip-tl">Corner PiP (Top Left)</option>
+            <option value="split">Split Screen</option>
+          </select>
         </div>
-    </div>
-
-    <!-- Drawer Footer -->
-    <div class="p-4 border-t border-gray-800 bg-gray-900/90 flex flex-col gap-2 flex-shrink-0">
-        <div class="flex items-center gap-2">
-            <button id="inspector-apply-btn" class="flex-grow bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1 shadow">
-                <span>✓ Save Metadata</span>
-            </button>
-            <button id="inspector-generate-img-btn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1">
-                <span>🎨 Image</span>
-            </button>
-            <button id="inspector-animate-btn" class="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1">
-                <span>🎬 Animate</span>
-            </button>
-            <button id="inspector-map-btn" class="bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1" title="Create animated map story for this shot">
-                <span>🗺️ Map</span>
-            </button>
+      </div>
+      <div class="insp-row">
+        <label class="field-label" for="inspector-talking-head-shape-select">Mask Shape</label>
+        <div class="insp-row-control">
+          <select id="inspector-talking-head-shape-select" class="select">
+            <option value="circle">Circle</option>
+            <option value="rounded">Rounded Card</option>
+            <option value="square">Sharp Rectangle</option>
+          </select>
+          <select id="inspector-talking-head-size-select" class="select" style="max-width: 92px;">
+            <option value="sm">Small</option>
+            <option value="md" selected>Medium</option>
+            <option value="lg">Large</option>
+          </select>
         </div>
-    </div>
-</div>
+      </div>
+      <p id="inspector-talking-head-hint" class="hidden" style="margin: 0 0 6px; font-size: 11px; color: var(--text-3);"></p>
+
+      <div class="insp-row">
+        <label class="field-label" for="inspector-clip-device">Device Frame</label>
+        <div class="insp-row-control">
+          <select id="inspector-clip-device" class="select">
+            <option value="none">No Frame</option>
+            <option value="laptop">Laptop Mockup</option>
+            <option value="phone">Phone Mockup</option>
+            <option value="browser">Browser Window</option>
+          </select>
+          <select id="inspector-clip-rotation" class="select" style="max-width: 82px;" title="Rotation">
+            <option value="0">0°</option>
+            <option value="90">90°</option>
+            <option value="180">180°</option>
+            <option value="270">270°</option>
+          </select>
+        </div>
+      </div>
+
+      <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); cursor: pointer;">
+        <input type="checkbox" id="inspector-preserve-content-toggle" style="accent-color: var(--accent);" />
+        <span>Contain full frame (prevent edge cropping)</span>
+      </label>
+    </section>
+
+    <!-- 5. Clip Audio, Speed (WSOLA) & Fades -->
+    <section class="prop-section">
+      <div class="prop-section-head">
+        <span>Clip Audio & Speed</span>
+        <button type="button" id="inspector-extract-audio-btn" class="btn small" style="height: 22px; padding: 0 7px; font-size: 10.5px;">
+          🔊 Extract WAV
+        </button>
+      </div>
+
+      <div class="insp-row">
+        <label class="field-label" for="inspector-clip-speed-slider">Speed</label>
+        <div class="insp-row-control">
+          <input type="range" id="inspector-clip-speed-slider" min="0.25" max="3" step="0.05" value="1" />
+          <span id="inspector-clip-speed-label" class="num-readout">1.00x</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 11.5px; color: var(--text-2);">
+        <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+          <input type="checkbox" id="inspector-use-original-audio" style="accent-color: var(--accent);" />
+          <span>Use clip audio</span>
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+          <input type="checkbox" id="inspector-clip-solo-audio-checkbox" style="accent-color: var(--accent);" />
+          <span>Solo clip (mute VO)</span>
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 5px; cursor: pointer;">
+          <input type="checkbox" id="inspector-clip-ducking-checkbox" style="accent-color: var(--accent);" />
+          <span>Auto-duck BGM</span>
+        </label>
+      </div>
+
+      <div id="inspector-audio-stack-warning" class="insp-note hidden">
+        Both voiceover and clip audio are active. Enable Solo Clip if you want to mute narration during this shot.
+      </div>
+
+      <div id="inspector-clip-audio-controls">
+        <div class="insp-row">
+          <label class="field-label" for="inspector-clip-volume-slider">Clip Volume</label>
+          <div class="insp-row-control">
+            <input type="range" id="inspector-clip-volume-slider" min="0" max="2" step="0.05" value="1" />
+            <span id="inspector-clip-volume-label" class="num-readout">100%</span>
+          </div>
+        </div>
+        <div class="insp-row" style="margin-bottom: 0;">
+          <label class="field-label" for="inspector-clip-fade-in">Audio Fades</label>
+          <div class="insp-row-control">
+            <span style="font-size: 11px; color: var(--text-3);">In</span>
+            <input type="number" id="inspector-clip-fade-in" class="num-input" min="0" max="5" step="0.1" value="0" />
+            <span style="font-size: 11px; color: var(--text-3);">Out</span>
+            <input type="number" id="inspector-clip-fade-out" class="num-input" min="0" max="5" step="0.1" value="0" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. Per-Clip Color Look & Prompts -->
+    <section class="prop-section" style="margin-bottom: 0;">
+      <div class="prop-section-head">
+        <span>Color Look & Prompts</span>
+        <span id="inspector-filter-status-badge" style="font-size: 10.5px; color: var(--accent-text);">None</span>
+      </div>
+
+      <div class="insp-row">
+        <label class="field-label" for="inspector-color-filter-select">Color Grade</label>
+        <div class="insp-row-control">
+          <select id="inspector-color-filter-select" class="select">
+            <option value="none">None (Project Default)</option>
+            <option value="cinematic_teal_orange">Teal & Orange</option>
+            <option value="kodak_2383">Film Print 2383</option>
+            <option value="bleach_bypass">Bleach Bypass</option>
+            <option value="vintage_warm">Warm Vintage</option>
+            <option value="noir_bw">High-Contrast B&W</option>
+            <option value="cyberpunk">Cyberpunk Neon</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="inspector-filter-intensity-container" class="insp-row hidden">
+        <label class="field-label" for="inspector-filter-intensity-slider">Intensity</label>
+        <div class="insp-row-control">
+          <input type="range" id="inspector-filter-intensity-slider" min="0" max="100" step="1" value="100" />
+          <span id="inspector-filter-intensity-val" class="num-readout">100%</span>
+        </div>
+      </div>
+
+      <div class="insp-row" style="align-items: start;">
+        <label class="field-label" for="inspector-image-prompt-input" style="padding-top: 6px;">Image Prompt</label>
+        <div class="insp-row-control">
+          <textarea id="inspector-image-prompt-input" class="textarea" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="insp-row" style="margin-bottom: 0;">
+        <label class="field-label" for="inspector-broll-prompt-input">B-Roll Search</label>
+        <div class="insp-row-control">
+          <input type="text" id="inspector-broll-prompt-input" class="input" placeholder="Pexels keyword or motion prompt..." />
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Sticky Footer: Save / Apply Changes -->
+  <div style="padding: 8px 12px; border-top: 1px solid var(--border); background: var(--bg-panel); display: flex; justify-content: flex-end;">
+    <button type="button" id="inspector-apply-btn" class="btn primary block">
+      Apply Shot Changes
+    </button>
+  </div>
+</aside>
 
 <!-- Dedicated Video Export Settings Modal -->
 <div id="export-settings-modal" class="fixed inset-0 z-[120] hidden flex items-center justify-center bg-black/80 backdrop-blur-md p-4 transition-all duration-200">

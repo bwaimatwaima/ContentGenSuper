@@ -191,6 +191,7 @@ export function activateVsWorkspace(): boolean {
 
     // 6. Mount Player Stage Overlays & Toolbar
     mountPlayerStageOverlays();
+    initStudioCommandPalette();
 
     // 7. Return to Storyboard & Classic Fallback Buttons
     shellEl.querySelector('#vs-exit-classic-btn')?.addEventListener('click', () => {
@@ -375,67 +376,137 @@ const TALKING_HEAD_GLYPHS: PosGlyphSpec[] = [
   { value: 'pip-br', label: 'BR', glyphClass: 'pos-br', title: 'Corner PiP (Bottom Right)' },
 ];
 
-function attachGlyphStripToSelect(
+export function syncActivePositionGlyphButton(stripEl: HTMLElement, activeValue: string): void {
+  const btns = stripEl.querySelectorAll<HTMLButtonElement>('.vs-pos-btn');
+  btns.forEach((btn) => {
+    const val = btn.dataset.value || btn.dataset.posValue;
+    const isMatch = val === activeValue || val?.replace(/_/g, '-') === activeValue?.replace(/_/g, '-');
+    btn.setAttribute('aria-pressed', isMatch ? 'true' : 'false');
+    btn.setAttribute('aria-checked', isMatch ? 'true' : 'false');
+  });
+}
+
+export function syncActiveSpeedChip(stripEl: HTMLElement, activeSpeed: number): void {
+  const chips = stripEl.querySelectorAll<HTMLButtonElement>('.vs-speed-chip, .chip');
+  chips.forEach((chip) => {
+    const spd = parseFloat(chip.dataset.speed || chip.dataset.speedVal || '1');
+    chip.setAttribute('aria-pressed', Math.abs(spd - activeSpeed) < 0.05 ? 'true' : 'false');
+  });
+}
+
+export function attachGlyphStripToSelect(
   selectEl: HTMLSelectElement | null,
-  stripId: string,
-  specs: PosGlyphSpec[]
-): void {
-  if (!selectEl) return;
-  const existing = document.getElementById(stripId);
-  if (existing) {
-    (existing as any).__sync?.();
-    return;
-  }
+  optionsOrStripId: Array<{ value: string; label: string; iconClass?: string }> | string,
+  specsArg?: PosGlyphSpec[]
+): HTMLDivElement | null {
+  if (!selectEl) return null;
 
-  const strip = document.createElement('div');
-  strip.id = stripId;
-  strip.className = 'vs-pos-strip';
-  strip.setAttribute('role', 'radiogroup');
+  if (typeof optionsOrStripId === 'string') {
+    const stripId = optionsOrStripId;
+    const specs = specsArg || [];
+    const existing = document.getElementById(stripId);
+    if (existing) {
+      (existing as any).__sync?.();
+      return existing as HTMLDivElement;
+    }
 
-  // Only render glyphs whose option values exist in the underlying <select>
-  const validValues = new Set(Array.from(selectEl.options).map((o) => o.value));
-  const activeSpecs = specs.filter((s) => validValues.size === 0 || validValues.has(s.value));
+    const strip = document.createElement('div');
+    strip.id = stripId;
+    strip.className = 'vs-pos-strip';
+    strip.setAttribute('role', 'radiogroup');
 
-  for (const spec of activeSpecs) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'vs-pos-btn';
-    btn.setAttribute('role', 'radio');
-    btn.setAttribute('aria-checked', String(selectEl.value === spec.value));
-    btn.dataset.posValue = spec.value;
-    btn.title = spec.title;
-    btn.innerHTML = `<span class="pos-glyph ${spec.glyphClass}" aria-hidden="true"></span><span>${spec.label}</span>`;
+    const validValues = new Set(Array.from(selectEl.options).map((o) => o.value));
+    const activeSpecs = specs.filter((s) => validValues.size === 0 || validValues.has(s.value));
 
-    btn.addEventListener('click', () => {
-      selectEl.value = spec.value;
-      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-      syncGlyphSelection();
+    for (const spec of activeSpecs) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'vs-pos-btn';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', String(selectEl.value === spec.value));
+      btn.setAttribute('aria-pressed', String(selectEl.value === spec.value));
+      btn.dataset.posValue = spec.value;
+      btn.dataset.value = spec.value;
+      btn.title = spec.title || spec.label;
+      btn.innerHTML = `<span class="pos-glyph ${spec.glyphClass}" aria-hidden="true"></span><span>${spec.label}</span>`;
+
+      btn.addEventListener('click', () => {
+        if (selectEl.value !== spec.value) {
+          selectEl.value = spec.value;
+          selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        syncActivePositionGlyphButton(strip, selectEl.value);
+      });
+
+      strip.appendChild(btn);
+    }
+
+    function syncGlyphSelection() {
+      syncActivePositionGlyphButton(strip, selectEl!.value);
+    }
+
+    (strip as any).__sync = syncGlyphSelection;
+
+    selectEl.addEventListener('change', syncGlyphSelection);
+    const observer = new MutationObserver(syncGlyphSelection);
+    observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
+
+    const row = selectEl.closest('.insp-row') || selectEl;
+    row.insertAdjacentElement('afterend', strip);
+    return strip;
+  } else {
+    const options = optionsOrStripId;
+    let strip = selectEl.nextElementSibling as HTMLDivElement | null;
+    if (!strip || !strip.classList.contains('vs-pos-strip')) {
+      strip = document.createElement('div');
+      strip.className = 'vs-pos-strip';
+      selectEl.insertAdjacentElement('afterend', strip);
+    } else {
+      strip.innerHTML = '';
+    }
+
+    options.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'vs-pos-btn';
+      btn.dataset.value = opt.value;
+      btn.dataset.posValue = opt.value;
+      btn.title = opt.label;
+      btn.setAttribute('aria-pressed', selectEl.value === opt.value ? 'true' : 'false');
+      btn.setAttribute('aria-checked', selectEl.value === opt.value ? 'true' : 'false');
+
+      if (opt.iconClass) {
+        const icon = document.createElement('i');
+        icon.className = opt.iconClass;
+        btn.appendChild(icon);
+      }
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = opt.label;
+      btn.appendChild(labelSpan);
+
+      btn.addEventListener('click', () => {
+        if (selectEl.value !== opt.value) {
+          selectEl.value = opt.value;
+          selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        syncActivePositionGlyphButton(strip!, selectEl.value);
+      });
+
+      strip!.appendChild(btn);
     });
 
-    strip.appendChild(btn);
+    const syncFn = () => syncActivePositionGlyphButton(strip!, selectEl.value);
+    (strip as any).__sync = syncFn;
+    selectEl.addEventListener('change', syncFn);
+
+    return strip;
   }
-
-  function syncGlyphSelection() {
-    const cur = selectEl!.value;
-    strip.querySelectorAll<HTMLButtonElement>('.vs-pos-btn').forEach((btn) => {
-      btn.setAttribute('aria-checked', String(btn.dataset.posValue === cur));
-    });
-  }
-
-  (strip as any).__sync = syncGlyphSelection;
-
-  // Keep glyph strip in sync when Shot Inspector loads a different shot
-  selectEl.addEventListener('change', syncGlyphSelection);
-  const observer = new MutationObserver(syncGlyphSelection);
-  observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
-
-  // Insert glyph strip right after the .insp-row containing the <select>
-  const row = selectEl.closest('.insp-row') || selectEl;
-  row.insertAdjacentElement('afterend', strip);
 }
 
 /**
- * Mounts visual 9-grid position glyph buttons for both B-Roll PiP Corner
+ * Mounts visual position glyph buttons for both B-Roll PiP Corner
  * (#inspector-pip-position-select) and Presenter Talking Head framing
  * (#inspector-talking-head-mode-select).
  */
@@ -464,46 +535,46 @@ export function mountInspectorSpeedChips(): void {
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
   const chipRow = document.createElement('div');
   chipRow.id = 'vs-inspector-speed-chips';
-  chipRow.className = 'chip-row';
+  chipRow.className = 'vs-speed-chips-strip chip-row';
   chipRow.setAttribute('role', 'group');
   chipRow.setAttribute('aria-label', 'Speed Presets');
+
+  const currentVal = parseFloat(slider.value) || 1.0;
 
   for (const s of speeds) {
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'chip';
+    chip.className = 'vs-speed-chip chip';
+    chip.dataset.speed = String(s);
     chip.dataset.speedVal = String(s);
     chip.textContent = `${s}x`;
+    chip.setAttribute('aria-pressed', Math.abs(currentVal - s) < 0.05 ? 'true' : 'false');
 
     chip.addEventListener('click', () => {
       slider.value = String(s);
-      if (label) label.textContent = `${s.toFixed(2)}x`;
+      if (label) label.textContent = `${s}x`;
       // Fire both 'input' (live preview) and 'change' (history/state commit)
       slider.dispatchEvent(new Event('input', { bubbles: true }));
       slider.dispatchEvent(new Event('change', { bubbles: true }));
-      syncActiveSpeedChip();
+      syncActiveSpeedChip(chipRow, s);
     });
 
     chipRow.appendChild(chip);
   }
 
-  function syncActiveSpeedChip() {
-    const currentVal = parseFloat(slider!.value || '1');
-    chipRow.querySelectorAll<HTMLButtonElement>('.chip').forEach((chip) => {
-      const chipVal = parseFloat(chip.dataset.speedVal || '1');
-      const isMatch = Math.abs(currentVal - chipVal) < 0.015;
-      chip.setAttribute('aria-pressed', String(isMatch));
-    });
+  function syncActive() {
+    const val = parseFloat(slider!.value || '1');
+    syncActiveSpeedChip(chipRow, val);
   }
 
-  (chipRow as any).__sync = syncActiveSpeedChip;
+  (chipRow as any).__sync = syncActive;
 
-  slider.addEventListener('input', syncActiveSpeedChip);
-  slider.addEventListener('change', syncActiveSpeedChip);
-  syncActiveSpeedChip();
+  slider.addEventListener('input', syncActive);
+  slider.addEventListener('change', syncActive);
+  syncActive();
 
-  const row = slider.closest('.insp-row') || slider.parentElement;
-  row?.insertAdjacentElement('afterend', chipRow);
+  const container = slider.closest('.vs-field, .form-group, .insp-row, div') || slider.parentElement;
+  container?.insertAdjacentElement('afterend', chipRow);
 }
 
 const STAGE_GUIDES_STORAGE_KEY = 'cg_vs_stage_guides_v1';
@@ -649,6 +720,271 @@ export function mountPlayerStageOverlays(): void {
     host.insertAdjacentElement('afterend', toolbar);
   }
 }
+
+/**
+ * Enhances the Export Modal with video-studio's 2-Column Export Studio Card layout,
+ * live frame preview stage, and estimated file size calculator readout.
+ */
+export function mountExportStudioCard(): void {
+  const container = document.getElementById('export-modal-body') || document.querySelector('.export-dialog-content') || document.getElementById('export-modal');
+  if (!container || document.getElementById('vs-export-studio-card')) return;
+
+  const card = document.createElement('div');
+  card.id = 'vs-export-studio-card';
+  card.className = 'vs-export-studio-card';
+
+  card.innerHTML = `
+    <div class="vs-export-preview-col">
+      <div class="vs-export-stage">
+        <canvas id="vs-export-preview-canvas" width="320" height="180"></canvas>
+        <div class="vs-export-stage-badge">LIVE PREVIEW</div>
+      </div>
+      <div class="vs-export-specs">
+        <div class="vs-export-spec-pill">
+          <span class="vs-export-spec-label">EST. FILE SIZE</span>
+          <span class="vs-export-spec-value" id="vs-export-est-size">~12.4 MB</span>
+        </div>
+        <div class="vs-export-spec-pill">
+          <span class="vs-export-spec-label">EST. DURATION</span>
+          <span class="vs-export-spec-value" id="vs-export-est-duration">0:15.0</span>
+        </div>
+      </div>
+    </div>
+    <div class="vs-export-settings-col">
+      <div class="vs-export-field">
+        <label class="vs-export-field-label">EXPORT PRESET</label>
+        <div class="vs-export-radio-group" role="radiogroup">
+          <button type="button" class="vs-export-radio-btn" aria-checked="true" data-preset="mp4">MP4 (H.264)</button>
+          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="webm">WebM (VP9)</button>
+          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="gif">Animated GIF</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  container.prepend(card);
+}
+
+interface StudioCommand {
+  id: string;
+  title: string;
+  category: 'Studios' | 'Editing' | 'AI & Media' | 'Export & View';
+  shortcut?: string;
+  action: () => void;
+}
+
+/**
+ * Global Ctrl+K / Cmd+K Command Palette (video-studio find-replace.css & commands.js port)
+ */
+export function initStudioCommandPalette(): void {
+  if (document.getElementById('vs-command-palette-modal')) return;
+
+  const commands: StudioCommand[] = [
+    {
+      id: 'studio-image',
+      title: 'Open Image Studio',
+      category: 'Studios',
+      action: () => document.getElementById('open-image-studio-btn')?.click(),
+    },
+    {
+      id: 'studio-voice',
+      title: 'Open Voice Studio',
+      category: 'Studios',
+      action: () => document.getElementById('open-voice-studio-btn')?.click(),
+    },
+    {
+      id: 'studio-map',
+      title: 'Open Map Studio',
+      category: 'Studios',
+      action: () => document.getElementById('open-map-studio-btn')?.click(),
+    },
+    {
+      id: 'studio-film',
+      title: 'Open Film Studio (Phase 1)',
+      category: 'Studios',
+      action: () => document.getElementById('open-film-studio-btn')?.click(),
+    },
+    {
+      id: 'studio-academy',
+      title: 'Open Academy Hub',
+      category: 'Studios',
+      action: () => document.getElementById('open-academy-btn')?.click(),
+    },
+    {
+      id: 'edit-split',
+      title: 'Split Clip at Playhead',
+      category: 'Editing',
+      shortcut: 'Ctrl+B',
+      action: () => document.getElementById('split-clip-btn')?.click(),
+    },
+    {
+      id: 'edit-reframe',
+      title: 'Auto-Reframe Subject (AI)',
+      category: 'AI & Media',
+      action: () => document.getElementById('auto-reframe-btn')?.click(),
+    },
+    {
+      id: 'edit-subtitles',
+      title: 'Configure Subtitle Styles',
+      category: 'AI & Media',
+      action: () => {
+        const tab = document.querySelector<HTMLElement>('[data-vs-left-tab="graphics"]');
+        tab?.click();
+      },
+    },
+    {
+      id: 'export-open',
+      title: 'Open Export Studio & Cloud Render',
+      category: 'Export & View',
+      action: () => document.getElementById('open-export-modal-btn')?.click(),
+    },
+    {
+      id: 'view-toggle-ws',
+      title: 'Toggle video-studio / Classic Workspace',
+      category: 'Export & View',
+      shortcut: 'Ctrl+Shift+W',
+      action: () => {
+        const fn = (window as any).toggleStudioWorkspace;
+        if (typeof fn === 'function') fn();
+      },
+    },
+  ];
+
+  // Create Modal Shell
+  const modal = document.createElement('div');
+  modal.id = 'vs-command-palette-modal';
+  modal.className = 'vs-director hidden';
+  modal.style.cssText = `
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(0, 0, 0, 0.68); backdrop-filter: blur(4px);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 12vh;
+  `;
+
+  modal.innerHTML = `
+    <div style="width: min(560px, calc(100vw - 32px)); background: var(--bg-panel, #222224); border: 1px solid var(--border-strong, #44444a); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.7); overflow: hidden; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border, #323236); gap: 10px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-3); flex: none;">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="vs-cmd-input" placeholder="Type a command or search studios (e.g. voice, split, export)..." autocomplete="off" style="width: 100%; background: transparent; border: 0; color: var(--text, #ececee); font-size: 13.5px; outline: none;" />
+        <span style="font-size: 10px; font-family: var(--font-mono); padding: 2px 5px; border-radius: 4px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-3);">ESC</span>
+      </div>
+      <div id="vs-cmd-results" style="max-height: 320px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const inputEl = modal.querySelector<HTMLInputElement>('#vs-cmd-input')!;
+  const resultsEl = modal.querySelector<HTMLElement>('#vs-cmd-results')!;
+
+  let selectedIndex = 0;
+
+  function renderResults(filterText = '') {
+    const q = filterText.toLowerCase().trim();
+    const filtered = commands.filter(
+      (c) => c.title.toLowerCase().includes(q) || c.category.toLowerCase().includes(q)
+    );
+
+    resultsEl.innerHTML = '';
+    if (filtered.length === 0) {
+      resultsEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-3);">No matching commands found.</div>`;
+      return;
+    }
+
+    filtered.forEach((cmd, idx) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = `vs-cmd-item ${idx === selectedIndex ? 'active' : ''}`;
+      item.style.cssText = `
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; padding: 8px 10px; border-radius: 6px; border: 0;
+        background: ${idx === selectedIndex ? 'var(--bg-active, rgba(255,255,255,0.12))' : 'transparent'};
+        color: var(--text, #ececee); font-size: 12.5px; text-align: left; cursor: pointer;
+      `;
+      item.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--bg-input); border: 1px solid var(--border); color: var(--accent-text);">${cmd.category}</span>
+          <span>${cmd.title}</span>
+        </div>
+        ${cmd.shortcut ? `<span style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3);">${cmd.shortcut}</span>` : ''}
+      `;
+
+      item.addEventListener('mouseenter', () => {
+        selectedIndex = idx;
+        renderResults(inputEl.value);
+      });
+
+      item.addEventListener('click', () => {
+        closePalette();
+        try {
+          cmd.action();
+        } catch (err) {
+          console.error('[Command Palette] Action failed:', err);
+        }
+      });
+
+      resultsEl.appendChild(item);
+    });
+  }
+
+  function openPalette() {
+    modal.classList.remove('hidden');
+    inputEl.value = '';
+    selectedIndex = 0;
+    renderResults();
+    setTimeout(() => inputEl.focus(), 20);
+  }
+
+  function closePalette() {
+    modal.classList.add('hidden');
+  }
+
+  // Global Ctrl+K / Cmd+K shortcut listener
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      const activeEl = document.activeElement as HTMLElement | null;
+      const activeTag = activeEl?.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea' || activeEl?.isContentEditable) {
+        // Allow if modal isn't open and it's not a text field they want to type in
+      }
+      e.preventDefault();
+      if (modal.classList.contains('hidden')) openPalette();
+      else closePalette();
+    } else if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+      closePalette();
+    }
+  });
+
+  inputEl.addEventListener('input', () => {
+    selectedIndex = 0;
+    renderResults(inputEl.value);
+  });
+
+  inputEl.addEventListener('keydown', (e) => {
+    const items = resultsEl.querySelectorAll<HTMLButtonElement>('.vs-cmd-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedIndex = (selectedIndex + 1) % Math.max(1, items.length);
+      renderResults(inputEl.value);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedIndex = (selectedIndex - 1 + items.length) % Math.max(1, items.length);
+      renderResults(inputEl.value);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      items[selectedIndex]?.click();
+    }
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closePalette();
+  });
+}
+
+
 
 
 

@@ -1,7 +1,8 @@
 /**
  * Feature-flagged Video Studio Workspace for ContentGen Video Director (Phases 3–5).
- * Re-houses existing DOM elements via reparenting so all src/dom.ts references,
- * event listeners, and clipboard checks remain 100% intact.
+ * Re-houses existing DOM elements via tracked reparenting so all src/dom.ts references,
+ * event listeners, and clipboard checks remain 100% intact, and restores them cleanly
+ * when returning to the Classic UI.
  */
 import * as dom from './dom';
 import { drawVideoFrame } from './videoRenderer';
@@ -23,57 +24,310 @@ export function isVsWorkspaceEnabled(): boolean {
 }
 
 export function setVsWorkspaceEnabled(enabled: boolean): void {
+  if (typeof window !== 'undefined') {
+    (window as any).__CG_VS_WORKSPACE = enabled;
+  }
   try {
     localStorage.setItem(WORKSPACE_FLAG_KEY, enabled ? '1' : '0');
   } catch {}
-  if (enabled) activateVsWorkspace();
-  else deactivateVsWorkspace();
+  if (enabled) {
+    activateVsWorkspace();
+  } else {
+    deactivateVsWorkspace();
+  }
+  syncWorkspaceToggleButtons();
+}
+
+export function toggleVsWorkspace(): void {
+  setVsWorkspaceEnabled(!isVsWorkspaceEnabled());
 }
 
 interface ReparentRecord {
   el: HTMLElement;
   originalParent: HTMLElement;
   nextSibling: ChildNode | null;
+  wasHidden: boolean;
+  hadTranslateXFull: boolean;
+  addedClasses: string[];
 }
 
-const movedNodes: ReparentRecord[] = [];
+const movedNodes = new Map<HTMLElement, ReparentRecord>();
+const cleanupFns: Array<() => void> = [];
 let shellEl: HTMLDivElement | null = null;
+let timelineEnhanceRaf: number | null = null;
 
-function moveNode(el: HTMLElement | null | undefined, targetSlot: HTMLElement | null): void {
+function registerCleanup(fn: () => void): void {
+  cleanupFns.push(fn);
+}
+
+function runAllCleanups(): void {
+  while (cleanupFns.length > 0) {
+    const fn = cleanupFns.pop();
+    try {
+      fn?.();
+    } catch (err) {
+      console.warn('[VS Workspace] Cleanup warning:', err);
+    }
+  }
+}
+
+/**
+ * Safely reparents an element while recording its original parent, sibling,
+ * and visibility classes the first time it is moved during a workspace session.
+ */
+function moveNode(
+  el: HTMLElement | null | undefined,
+  targetSlot: HTMLElement | null | undefined,
+  options?: { unhide?: boolean; removeTranslateX?: boolean; addClasses?: string[] }
+): void {
   if (!el || !targetSlot || el.parentElement === targetSlot) return;
-  if (el.parentElement) {
-    movedNodes.push({
+
+  if (!movedNodes.has(el) && el.parentElement) {
+    movedNodes.set(el, {
       el,
       originalParent: el.parentElement,
       nextSibling: el.nextSibling,
+      wasHidden: el.classList.contains('hidden'),
+      hadTranslateXFull: el.classList.contains('translate-x-full'),
+      addedClasses: options?.addClasses || [],
     });
+  } else if (movedNodes.has(el) && options?.addClasses?.length) {
+    const rec = movedNodes.get(el)!;
+    for (const c of options.addClasses) {
+      if (!rec.addedClasses.includes(c)) rec.addedClasses.push(c);
+    }
   }
+
+  if (options?.unhide) {
+    el.classList.remove('hidden');
+  }
+  if (options?.removeTranslateX) {
+    el.classList.remove('translate-x-full');
+  }
+  if (options?.addClasses) {
+    el.classList.add(...options.addClasses);
+  }
+
   targetSlot.appendChild(el);
 }
 
-function restoreAllMovedNodes(): void {
-  while (movedNodes.length > 0) {
-    const rec = movedNodes.pop()!;
-    try {
-      if (rec.nextSibling && rec.nextSibling.parentNode === rec.originalParent) {
-        rec.originalParent.insertBefore(rec.el, rec.nextSibling);
-      } else {
-        rec.originalParent.appendChild(rec.el);
-      }
-    } catch (err) {
-      console.warn('[VS Workspace] Failed to restore node:', err);
+function restoreNode(el: HTMLElement | null | undefined): void {
+  if (!el) return;
+  const rec = movedNodes.get(el);
+  if (!rec) return;
+
+  try {
+    if (rec.addedClasses.length > 0) {
+      el.classList.remove(...rec.addedClasses);
     }
+    if (rec.wasHidden) {
+      el.classList.add('hidden');
+    }
+    if (rec.hadTranslateXFull) {
+      el.classList.add('translate-x-full');
+    }
+    if (rec.nextSibling && rec.nextSibling.parentNode === rec.originalParent) {
+      rec.originalParent.insertBefore(el, rec.nextSibling);
+    } else {
+      rec.originalParent.appendChild(el);
+    }
+  } catch (err) {
+    console.warn('[VS Workspace] Failed to restore node:', err);
+  } finally {
+    movedNodes.delete(el);
   }
+}
+
+function restoreAllMovedNodes(): void {
+  // Restore in reverse order of insertion so nested or sibling relationships stay intact
+  const records = Array.from(movedNodes.values()).reverse();
+  for (const rec of records) {
+    restoreNode(rec.el);
+  }
+  movedNodes.clear();
+}
+
+/**
+ * Ensures the Graphics panel has the .vs-mg-body / .vs-mg-sidebar / .vs-mg-main / .vs-mg-toolbar
+ * structure and .asset-cat classes expected by vs-director.css without breaking .mg-filter-btn listeners.
+ */
+export function ensureGraphicsGalleryStructure(mgRoot?: HTMLElement | null): void {
+  const panel =
+    mgRoot ||
+    document.getElementById('motion-graphics-panel') ||
+    document.getElementById('mg-presets-grid')?.closest<HTMLElement>('.glass-panel, section, div');
+  if (!panel) return;
+
+  const filterBtns = Array.from(panel.querySelectorAll<HTMLButtonElement>('.mg-filter-btn'));
+  filterBtns.forEach((btn) => {
+    btn.classList.add('asset-cat');
+  });
+
+  if (panel.querySelector('.vs-mg-body')) return;
+
+  const presetsGrid = panel.querySelector<HTMLElement>('#mg-presets-grid');
+  if (!presetsGrid) return;
+
+  const filterContainer = filterBtns[0]?.parentElement;
+  if (!filterContainer || filterContainer === panel) return;
+
+  const bodyWrap = document.createElement('div');
+  bodyWrap.className = 'vs-mg-body';
+
+  const sidebarWrap = document.createElement('aside');
+  sidebarWrap.className = 'vs-mg-sidebar';
+
+  const mainWrap = document.createElement('div');
+  mainWrap.className = 'vs-mg-main';
+
+  const toolbarWrap = document.createElement('div');
+  toolbarWrap.className = 'vs-mg-toolbar';
+
+  // Insert bodyWrap where filterContainer was
+  const insertionParent = filterContainer.parentElement || panel;
+  insertionParent.insertBefore(bodyWrap, filterContainer);
+
+  moveNode(filterContainer, sidebarWrap);
+
+  // Move any search/filter toolbar controls above #mg-presets-grid into .vs-mg-toolbar
+  const searchInput =
+    panel.querySelector<HTMLElement>('#mg-search-input, [data-mg-search]')?.parentElement ||
+    panel.querySelector<HTMLElement>('#mg-toolbar');
+  if (searchInput && searchInput !== filterContainer && searchInput !== presetsGrid) {
+    moveNode(searchInput, toolbarWrap);
+  }
+
+  mainWrap.appendChild(toolbarWrap);
+  moveNode(presetsGrid, mainWrap);
+
+  bodyWrap.appendChild(sidebarWrap);
+  bodyWrap.appendChild(mainWrap);
+
+  registerCleanup(() => {
+    restoreNode(presetsGrid);
+    if (searchInput) restoreNode(searchInput);
+    restoreNode(filterContainer);
+    bodyWrap.remove();
+  });
+}
+
+/**
+ * Docks #graphic-editor-modal into the right inspector when a graphic is being edited,
+ * while tracking its original DOM location so it is never lost on workspace teardown.
+ */
+export function syncGraphicEditorToInspector(): void {
+  if (!shellEl) return;
+  const modal = document.getElementById('graphic-editor-modal');
+  const inspectorSlot = shellEl.querySelector<HTMLElement>('#vs-insp-tab-graphics');
+  if (!modal || !inspectorSlot) return;
+
+  // Record and reparent into the inspector tab
+  moveNode(modal, inspectorSlot, {
+    addClasses: ['vs-docked-modal'],
+  });
+
+  // Observe visibility changes on #graphic-editor-modal to auto-switch to the Graphic Inspector tab
+  const observer = new MutationObserver(() => {
+    if (!shellEl) return;
+    const isVisible = !modal.classList.contains('hidden');
+    if (isVisible) {
+      activateRightInspectorTab('graphics');
+    }
+  });
+  observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+  registerCleanup(() => observer.disconnect());
+}
+
+function activateLeftTab(tabId: string): void {
+  if (!shellEl) return;
+  shellEl.querySelectorAll<HTMLElement>('[data-vs-left-tab]').forEach((btn) => {
+    const active = btn.dataset.vsLeftTab === tabId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+  shellEl.querySelectorAll<HTMLElement>('[data-vs-left-pane]').forEach((pane) => {
+    const active = pane.dataset.vsLeftPane === tabId;
+    pane.classList.toggle('hidden', !active);
+  });
+}
+
+function activateRightInspectorTab(tabId: string): void {
+  if (!shellEl) return;
+  shellEl.querySelectorAll<HTMLElement>('[data-vs-insp-tab]').forEach((btn) => {
+    const active = btn.dataset.vsInspTab === tabId;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', String(active));
+  });
+  shellEl.querySelectorAll<HTMLElement>('[data-vs-insp-pane]').forEach((pane) => {
+    const active = pane.dataset.vsInspPane === tabId;
+    pane.classList.toggle('hidden', !active);
+  });
+}
+
+function resolveDirectorElements() {
+  const directorRoot =
+    document.getElementById('video-director-modal') ||
+    document.getElementById('video-director-section') ||
+    document.getElementById('timeline-editor-container')?.parentElement ||
+    document.getElementById('timeline-editor-container');
+
+  // Preview / Player container
+  const canvas = document.getElementById('video-preview-canvas');
+  const playerContainer =
+    document.getElementById('video-preview-container') ||
+    document.getElementById('video-player-wrapper') ||
+    (canvas?.closest('.glass-panel, #video-preview-wrapper') as HTMLElement | null) ||
+    (canvas?.parentElement?.parentElement as HTMLElement | null);
+
+  // Left-panel candidates
+  const graphicsPanel =
+    document.getElementById('motion-graphics-panel') ||
+    (document.getElementById('mg-presets-grid')?.closest('.glass-panel, section') as HTMLElement | null);
+
+  const audioPanel =
+    document.getElementById('bg-audio-panel') ||
+    (document.getElementById('bg-audio-prompt')?.closest('.glass-panel, section, div.p-4') as HTMLElement | null);
+
+  const fxPanel =
+    document.getElementById('visual-effects-panel') ||
+    document.getElementById('film-fx-panel') ||
+    (document.getElementById('video-filter-select')?.closest('.glass-panel, section, div.p-4') as HTMLElement | null);
+
+  // Right-inspector candidates (Note: camera-keyframes-ui.ts uses ID 'ckf-panel')
+  const ckfPanel =
+    document.getElementById('ckf-panel') ||
+    document.getElementById('camera-keyframes-panel');
+
+  // Timeline container
+  const timelineContainer =
+    document.getElementById('timeline-editor-container') ||
+    document.getElementById('timeline-tracks-container')?.parentElement ||
+    null;
+
+  return {
+    directorRoot,
+    playerContainer,
+    graphicsPanel,
+    audioPanel,
+    fxPanel,
+    ckfPanel,
+    timelineContainer,
+  };
 }
 
 export function activateVsWorkspace(): boolean {
   if (shellEl) return true;
 
   try {
-    const directorRoot =
-      document.getElementById('video-director-modal') ||
-      document.getElementById('video-director-section') ||
-      document.getElementById('timeline-editor-container');
+    const {
+      directorRoot,
+      playerContainer,
+      graphicsPanel,
+      audioPanel,
+      fxPanel,
+      ckfPanel,
+      timelineContainer,
+    } = resolveDirectorElements();
 
     if (!directorRoot) {
       console.warn('[VS Workspace] Director container not found; keeping default layout.');
@@ -84,909 +338,360 @@ export function activateVsWorkspace(): boolean {
     shellEl.id = 'vs-director-shell';
     shellEl.className = 'vs-director';
     shellEl.innerHTML = `
-      <header class="topbar">
-        <div class="topbar-left">
-          <button type="button" id="vs-back-to-storyboard-btn" class="btn small">
+      <header class="vs-topbar">
+        <div class="vs-topbar-left">
+          <button type="button" id="vs-back-storyboard-btn" class="vs-btn vs-btn-ghost">
             ← Back to Storyboard
           </button>
-          <span class="panel-title">Video Director Studio</span>
+          <span class="vs-topbar-title">Video Director Studio</span>
         </div>
-        <div class="topbar-center" id="vs-topbar-center-slot"></div>
-        <div class="topbar-right" id="vs-topbar-right-slot">
-          <button type="button" id="vs-exit-classic-btn" class="btn small ghost" title="Switch to Classic View">
+        <div class="vs-topbar-right">
+          <button type="button" id="vs-classic-ui-btn" class="vs-btn vs-btn-secondary" title="Return to Classic Video Director Layout">
             Classic UI
           </button>
         </div>
       </header>
-      <div class="workspace" id="vs-workspace-grid">
-        <div class="upper" id="vs-upper-grid">
-          <!-- Left Asset Browser (Media, Graphics, Subtitles, Audio) -->
-          <section class="panel" id="vs-left-assets-panel" aria-label="Assets">
-            <div class="asset-tabs-wrap">
-              <div class="tablist asset-tabs" role="tablist">
-                <button type="button" class="tab" role="tab" aria-selected="true" data-vs-left-tab="graphics">Graphics</button>
-                <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="audio">Audio & BGM</button>
-                <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="effects">Film FX</button>
-              </div>
-            </div>
-            <div class="assets-body" id="vs-left-tab-graphics"></div>
-            <div class="assets-body hidden" id="vs-left-tab-audio"></div>
-            <div class="assets-body hidden" id="vs-left-tab-effects"></div>
-          </section>
 
-          <div class="resizer v" id="vs-resizer-left" role="separator" aria-orientation="vertical"></div>
+      <div class="vs-workbench">
+        <aside class="vs-left-panel">
+          <nav class="vs-panel-tabs" role="tablist" aria-label="Studio Assets">
+            <button type="button" role="tab" data-vs-left-tab="graphics" class="vs-tab active" aria-selected="true">Graphics</button>
+            <button type="button" role="tab" data-vs-left-tab="audio" class="vs-tab" aria-selected="false">Audio &amp; BGM</button>
+            <button type="button" role="tab" data-vs-left-tab="fx" class="vs-tab" aria-selected="false">Film FX</button>
+          </nav>
+          <div class="vs-panel-body">
+            <div id="vs-left-tab-graphics" data-vs-left-pane="graphics" class="vs-pane"></div>
+            <div id="vs-left-tab-audio" data-vs-left-pane="audio" class="vs-pane hidden"></div>
+            <div id="vs-left-tab-fx" data-vs-left-pane="fx" class="vs-pane hidden"></div>
+          </div>
+        </aside>
 
-          <!-- Center Video Preview Stage -->
-          <section class="panel" id="vs-center-player-panel" aria-label="Video Preview"></section>
+        <main class="vs-center-stage">
+          <div id="vs-player-slot" class="vs-player-slot"></div>
+        </main>
 
-          <div class="resizer v" id="vs-resizer-right" role="separator" aria-orientation="vertical"></div>
-
-          <!-- Right Contextual Inspector (Shot Inspector + Cinematography + Keyframes) -->
-          <aside class="panel inspector" id="vs-right-inspector-panel" aria-label="Inspector">
-            <div class="panel-head">
-              <div class="insp-tabs top-tabs" role="tablist">
-                <button type="button" class="insp-tab" role="tab" aria-selected="true" data-vs-insp-tab="shot">Shot Details</button>
-                <button type="button" class="insp-tab" role="tab" aria-selected="false" data-vs-insp-tab="cinema">Cinematography</button>
-              </div>
-            </div>
-            <div class="inspector-body" id="vs-insp-tab-shot" style="flex:1;overflow-y:auto;"></div>
-            <div class="inspector-body hidden" id="vs-insp-tab-cinema" style="flex:1;overflow-y:auto;"></div>
-          </aside>
-        </div>
-
-        <div class="resizer h" id="vs-resizer-timeline" role="separator" aria-orientation="horizontal"></div>
-
-        <!-- Bottom Multitrack Timeline -->
-        <section class="panel timeline-panel" id="vs-bottom-timeline-slot" aria-label="Timeline"></section>
+        <aside class="vs-right-inspector">
+          <nav class="vs-panel-tabs" role="tablist" aria-label="Inspector">
+            <button type="button" role="tab" data-vs-insp-tab="shot" class="vs-tab active" aria-selected="true">Shot Details</button>
+            <button type="button" role="tab" data-vs-insp-tab="cinema" class="vs-tab" aria-selected="false">Cinematography</button>
+            <button type="button" role="tab" data-vs-insp-tab="graphics" class="vs-tab" aria-selected="false">Graphic Overlay</button>
+          </nav>
+          <div class="vs-panel-body">
+            <div id="vs-insp-tab-shot" data-vs-insp-pane="shot" class="vs-pane"></div>
+            <div id="vs-insp-tab-cinema" data-vs-insp-pane="cinema" class="vs-pane hidden"></div>
+            <div id="vs-insp-tab-graphics" data-vs-insp-pane="graphics" class="vs-pane hidden"></div>
+          </div>
+        </aside>
       </div>
+
+      <section id="vs-timeline-slot" class="vs-timeline-slot"></section>
     `;
 
     directorRoot.prepend(shellEl);
 
-    // 1. Dock Shot Inspector into Right Panel (keeps dom.shotInspectorDrawer & clipboard check valid)
+    // 1. Move Left Panel sections (Graphics, Audio & BGM, Film FX)
+    if (graphicsPanel) {
+      ensureGraphicsGalleryStructure(graphicsPanel);
+      moveNode(graphicsPanel, shellEl.querySelector<HTMLElement>('#vs-left-tab-graphics'), {
+        unhide: true,
+      });
+    }
+    if (audioPanel) {
+      moveNode(audioPanel, shellEl.querySelector<HTMLElement>('#vs-left-tab-audio'), {
+        unhide: true,
+      });
+    }
+    if (fxPanel) {
+      moveNode(fxPanel, shellEl.querySelector<HTMLElement>('#vs-left-tab-fx'), {
+        unhide: true,
+      });
+    }
+
+    // 2. Move Central Video Player Preview
+    if (playerContainer && playerContainer !== directorRoot) {
+      moveNode(playerContainer, shellEl.querySelector<HTMLElement>('#vs-player-slot'), {
+        unhide: true,
+      });
+      mountPlayerStageOverlays();
+    }
+
+    // 3. Dock Shot Inspector into Right Panel -> Shot Details tab
     if (dom.shotInspectorDrawer) {
-      dom.shotInspectorDrawer.classList.remove('hidden', 'translate-x-full');
-      moveNode(dom.shotInspectorDrawer, shellEl.querySelector('#vs-insp-tab-shot'));
+      moveNode(dom.shotInspectorDrawer, shellEl.querySelector<HTMLElement>('#vs-insp-tab-shot'), {
+        unhide: true,
+        removeTranslateX: true,
+        addClasses: ['vs-docked-inspector'],
+      });
       mountInspectorPositionGlyphs();
       mountInspectorSpeedChips();
     }
 
-    // 2. Dock Camera Keyframes & Cinematography into Right Inspector -> Cinematography tab
-    const ckfPanel = document.getElementById('camera-keyframes-panel');
+    // 4. Dock Camera Keyframes (#ckf-panel) into Right Inspector -> Cinematography tab
     if (ckfPanel) {
-      ckfPanel.classList.remove('hidden');
-      moveNode(ckfPanel, shellEl.querySelector('#vs-insp-tab-cinema'));
+      moveNode(ckfPanel, shellEl.querySelector<HTMLElement>('#vs-insp-tab-cinema'), {
+        unhide: true,
+        addClasses: ['vs-docked-ckf'],
+      });
     }
 
-    // 3. Wire Left Panel & Right Inspector Tab Switching
-    shellEl.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const target = btn.dataset.vsLeftTab;
-        shellEl!.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((b) => {
-          b.setAttribute('aria-selected', String(b === btn));
-        });
-        ['graphics', 'audio', 'effects'].forEach((k) => {
-          shellEl!.querySelector(`#vs-left-tab-${k}`)?.classList.toggle('hidden', k !== target);
-        });
+    // 5. Dock Graphic Editor Modal into Right Inspector -> Graphic Overlay tab
+    syncGraphicEditorToInspector();
+
+    // 6. Move Timeline into bottom slot (if timelineContainer is separate from directorRoot)
+    if (timelineContainer && timelineContainer !== directorRoot && !timelineContainer.contains(shellEl)) {
+      moveNode(timelineContainer, shellEl.querySelector<HTMLElement>('#vs-timeline-slot'), {
+        unhide: true,
       });
+    }
+
+    // 7. Wire Left & Right Tab Buttons
+    shellEl.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((btn) => {
+      const onClick = () => activateLeftTab(btn.dataset.vsLeftTab || 'graphics');
+      btn.addEventListener('click', onClick);
+      registerCleanup(() => btn.removeEventListener('click', onClick));
     });
 
     shellEl.querySelectorAll<HTMLButtonElement>('[data-vs-insp-tab]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const target = btn.dataset.vsInspTab;
-        shellEl!.querySelectorAll<HTMLButtonElement>('[data-vs-insp-tab]').forEach((b) => {
-          b.setAttribute('aria-selected', String(b === btn));
-        });
-        ['shot', 'cinema'].forEach((k) => {
-          shellEl!.querySelector(`#vs-insp-tab-${k}`)?.classList.toggle('hidden', k !== target);
-        });
-      });
+      const onClick = () => activateRightInspectorTab(btn.dataset.vsInspTab || 'shot');
+      btn.addEventListener('click', onClick);
+      registerCleanup(() => btn.removeEventListener('click', onClick));
     });
 
-    // 4. Wire Resizable Splitters (video-studio style CSS custom properties)
-    bindResizers(shellEl);
+    // 8. Wire "Classic UI" & "Back to Storyboard" buttons
+    const classicBtn = shellEl.querySelector<HTMLButtonElement>('#vs-classic-ui-btn');
+    if (classicBtn) {
+      const onClassic = () => setVsWorkspaceEnabled(false);
+      classicBtn.addEventListener('click', onClassic);
+      registerCleanup(() => classicBtn.removeEventListener('click', onClassic));
+    }
 
-    // 5. Dock Graphic Editor into Right Inspector if active
-    syncGraphicEditorToInspector();
+    const backBtn = shellEl.querySelector<HTMLButtonElement>('#vs-back-storyboard-btn');
+    if (backBtn) {
+      const onBack = () => {
+        const closeDirectorBtn =
+          document.getElementById('close-video-director-btn') ||
+          document.getElementById('back-to-storyboard-btn');
+        if (closeDirectorBtn) {
+          closeDirectorBtn.click();
+        } else {
+          document.getElementById('storyboard-container')?.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
+      backBtn.addEventListener('click', onBack);
+      registerCleanup(() => backBtn.removeEventListener('click', onBack));
+    }
 
-    // 6. Mount Player Stage Overlays & Toolbar
-    mountPlayerStageOverlays();
-    initStudioCommandPalette();
-
-    // 7. Return to Storyboard & Classic Fallback Buttons
-    shellEl.querySelector('#vs-exit-classic-btn')?.addEventListener('click', () => {
-      setVsWorkspaceEnabled(false);
+    // 9. Enhance timeline once on activation and redraw canvas for new dimensions
+    enhanceTimelineDom();
+    requestAnimationFrame(() => {
+      if (!state.isVideoPlaying) {
+        drawVideoFrame(state.lastRenderedTime || 0);
+      }
     });
 
+    syncWorkspaceToggleButtons();
     return true;
   } catch (err) {
-    console.error('[VS Workspace] Failed to initialize, falling back to classic layout:', err);
+    console.error('[VS Workspace] Failed to activate workspace:', err);
     deactivateVsWorkspace();
     return false;
   }
 }
 
 export function deactivateVsWorkspace(): void {
+  if (timelineEnhanceRaf !== null) {
+    cancelAnimationFrame(timelineEnhanceRaf);
+    timelineEnhanceRaf = null;
+  }
+
+  // Run all observer/listener cleanups first
+  runAllCleanups();
+
+  // Restore all moved DOM nodes to their original parents and restore original visibility classes
   restoreAllMovedNodes();
+
+  // Remove workspace-specific classes added to timeline elements
+  document.querySelectorAll('.vs-track-enhanced, .vs-clip-enhanced').forEach((el) => {
+    el.classList.remove('vs-track-enhanced', 'vs-clip-enhanced');
+    if (el instanceof HTMLElement) {
+      delete el.dataset.vsEnhanced;
+    }
+  });
+
   if (shellEl) {
     shellEl.remove();
     shellEl = null;
   }
-}
 
-function bindResizers(root: HTMLElement): void {
-  const upper = root.querySelector<HTMLElement>('#vs-upper-grid');
-  const workspace = root.querySelector<HTMLElement>('#vs-workspace-grid');
-  const leftResizer = root.querySelector<HTMLElement>('#vs-resizer-left');
-  const rightResizer = root.querySelector<HTMLElement>('#vs-resizer-right');
-  const tlResizer = root.querySelector<HTMLElement>('#vs-resizer-timeline');
-
-  const attachDrag = (el: HTMLElement | null, onMove: (e: PointerEvent) => void) => {
-    if (!el) return;
-    el.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-      el.classList.add('dragging');
-      const move = (ev: PointerEvent) => onMove(ev);
-      const up = () => {
-        el.classList.remove('dragging');
-        el.removeEventListener('pointermove', move);
-        el.removeEventListener('pointerup', up);
-        // Redraw current frame without changing internal canvas resolution
-        drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
-      };
-      el.addEventListener('pointermove', move);
-      el.addEventListener('pointerup', up);
-    });
-  };
-
-  attachDrag(leftResizer, (e) => {
-    if (!upper) return;
-    const rect = upper.getBoundingClientRect();
-    const w = Math.max(260, Math.min(520, e.clientX - rect.left));
-    upper.style.setProperty('--left-w', `${Math.round(w)}px`);
+  requestAnimationFrame(() => {
+    if (!state.isVideoPlaying) {
+      drawVideoFrame(state.lastRenderedTime || 0);
+    }
   });
 
-  attachDrag(rightResizer, (e) => {
-    if (!upper) return;
-    const rect = upper.getBoundingClientRect();
-    const w = Math.max(280, Math.min(520, rect.right - e.clientX));
-    upper.style.setProperty('--right-w', `${Math.round(w)}px`);
-  });
-
-  attachDrag(tlResizer, (e) => {
-    if (!workspace) return;
-    const rect = workspace.getBoundingClientRect();
-    const ratio = Math.max(0.35, Math.min(0.75, (e.clientY - rect.top) / rect.height));
-    workspace.style.setProperty('--upper', ratio.toFixed(3));
-  });
-}
-
-
-/**
- * Docks #graphic-editor-modal inside the Right Inspector when the video-studio
- * workspace is active, or leaves it as a modal dialog in classic mode.
- */
-export function syncGraphicEditorToInspector(): void {
-  const modal = document.getElementById('graphic-editor-modal');
-  const rightInspector = document.getElementById('vs-right-inspector-panel');
-  if (!modal) return;
-
-  modal.classList.add('vs-inspector-scope');
-
-  if (!isVsWorkspaceEnabled() || !rightInspector) {
-    modal.classList.remove('is-docked');
-    return;
-  }
-
-  // Create the Graphic Inspector tab slot once if not present
-  let graphicSlot = document.getElementById('vs-insp-tab-graphic');
-  const tabBar = rightInspector.querySelector('.insp-tabs.top-tabs');
-
-  if (!graphicSlot && tabBar) {
-    const tabBtn = document.createElement('button');
-    tabBtn.type = 'button';
-    tabBtn.className = 'insp-tab';
-    tabBtn.setAttribute('role', 'tab');
-    tabBtn.setAttribute('aria-selected', 'false');
-    tabBtn.dataset.vsInspTab = 'graphic';
-    tabBtn.textContent = 'Graphic';
-    tabBar.appendChild(tabBtn);
-
-    graphicSlot = document.createElement('div');
-    graphicSlot.id = 'vs-insp-tab-graphic';
-    graphicSlot.className = 'inspector-body hidden';
-    graphicSlot.style.cssText = 'flex:1;overflow-y:auto;';
-    rightInspector.appendChild(graphicSlot);
-
-    tabBtn.addEventListener('click', () => {
-      rightInspector.querySelectorAll<HTMLButtonElement>('[data-vs-insp-tab]').forEach((b) => {
-        b.setAttribute('aria-selected', String(b === tabBtn));
-      });
-      ['shot', 'cinema', 'graphic'].forEach((k) => {
-        rightInspector.querySelector(`#vs-insp-tab-${k}`)?.classList.toggle('hidden', k !== 'graphic');
-      });
-    });
-  }
-
-  if (graphicSlot && modal.parentElement !== graphicSlot) {
-    modal.classList.add('is-docked');
-    graphicSlot.appendChild(modal);
-  }
+  syncWorkspaceToggleButtons();
 }
 
 /**
- * Automatically injects video-studio timeline and track CSS classes onto
- * ContentGen's rendered timeline elements without altering internal DOM IDs or state.
+ * Enhances timeline tracks and clips with Video Studio styling classes ONLY when
+ * the Video Director workspace is active. Coalesced via requestAnimationFrame to
+ * keep timeline drag/trim/playback interactions fast and stable.
  */
 export function enhanceTimelineDom(): void {
-  const container = document.getElementById('timeline-editor-container');
-  if (!container) return;
+  if (!isVsWorkspaceEnabled() || !shellEl) return;
+  if (timelineEnhanceRaf !== null) return;
 
-  // Mark container with video-studio styling scope
-  container.classList.add('vs-timeline-shell');
+  timelineEnhanceRaf = requestAnimationFrame(() => {
+    timelineEnhanceRaf = null;
+    if (!isVsWorkspaceEnabled() || !shellEl) return;
 
-  // Assign track row classes based on order or data attributes
-  container.querySelectorAll<HTMLElement>('.tl-lane, tr, [data-track-lane]').forEach((lane, idx) => {
-    if (idx === 0) lane.classList.add('main', 'is-main');
-    else if (lane.textContent?.toLowerCase().includes('audio') || lane.textContent?.toLowerCase().includes('voice')) {
-      lane.classList.add('audio', 'is-audio');
-    } else {
-      lane.classList.add('overlay', 'is-overlay');
-    }
-  });
+    const root =
+      shellEl.querySelector('#vs-timeline-slot') ||
+      document.getElementById('timeline-editor-container');
+    if (!root) return;
 
-  // Assign clip classes
-  container.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach((clip) => {
-    if (!clip.classList.contains('tl-clip')) clip.classList.add('tl-clip');
-    if (clip.dataset.type === 'image' || clip.dataset.type === 'video') {
-      clip.classList.add('kind-video');
-    } else if (clip.dataset.type === 'audio') {
-      clip.classList.add('kind-audio');
-    } else if (clip.dataset.type === 'text') {
-      clip.classList.add('kind-text');
-    }
-  });
-}
-
-interface PosGlyphSpec {
-  value: string;
-  label: string;
-  glyphClass: string;
-  title: string;
-}
-
-const PIP_CORNER_GLYPHS: PosGlyphSpec[] = [
-  { value: 'top_left', label: 'TL', glyphClass: 'pos-tl', title: 'Top Left' },
-  { value: 'top_right', label: 'TR', glyphClass: 'pos-tr', title: 'Top Right' },
-  { value: 'center_left', label: 'CL', glyphClass: 'pos-cl', title: 'Center Left' },
-  { value: 'center_right', label: 'CR', glyphClass: 'pos-cr', title: 'Center Right' },
-  { value: 'bottom_left', label: 'BL', glyphClass: 'pos-bl', title: 'Bottom Left' },
-  { value: 'bottom_right', label: 'BR', glyphClass: 'pos-br', title: 'Bottom Right' },
-  { value: 'custom', label: 'Drag', glyphClass: 'pos-custom', title: 'Custom (Drag on Canvas)' },
-];
-
-const TALKING_HEAD_GLYPHS: PosGlyphSpec[] = [
-  { value: 'none', label: 'Off', glyphClass: 'pos-none', title: 'Hidden (B-Roll Only)' },
-  { value: 'full', label: 'Full', glyphClass: 'pos-full', title: 'Full Screen A-Roll' },
-  { value: 'split', label: 'Split', glyphClass: 'pos-split', title: 'Split Screen' },
-  { value: 'pip-tl', label: 'TL', glyphClass: 'pos-tl', title: 'Corner PiP (Top Left)' },
-  { value: 'pip-tr', label: 'TR', glyphClass: 'pos-tr', title: 'Corner PiP (Top Right)' },
-  { value: 'pip-bl', label: 'BL', glyphClass: 'pos-bl', title: 'Corner PiP (Bottom Left)' },
-  { value: 'pip-br', label: 'BR', glyphClass: 'pos-br', title: 'Corner PiP (Bottom Right)' },
-];
-
-export function syncActivePositionGlyphButton(stripEl: HTMLElement, activeValue: string): void {
-  const btns = stripEl.querySelectorAll<HTMLButtonElement>('.vs-pos-btn');
-  btns.forEach((btn) => {
-    const val = btn.dataset.value || btn.dataset.posValue;
-    const isMatch = val === activeValue || val?.replace(/_/g, '-') === activeValue?.replace(/_/g, '-');
-    btn.setAttribute('aria-pressed', isMatch ? 'true' : 'false');
-    btn.setAttribute('aria-checked', isMatch ? 'true' : 'false');
-  });
-}
-
-export function syncActiveSpeedChip(stripEl: HTMLElement, activeSpeed: number): void {
-  const chips = stripEl.querySelectorAll<HTMLButtonElement>('.vs-speed-chip, .chip');
-  chips.forEach((chip) => {
-    const spd = parseFloat(chip.dataset.speed || chip.dataset.speedVal || '1');
-    chip.setAttribute('aria-pressed', Math.abs(spd - activeSpeed) < 0.05 ? 'true' : 'false');
-  });
-}
-
-export function attachGlyphStripToSelect(
-  selectEl: HTMLSelectElement | null,
-  optionsOrStripId: Array<{ value: string; label: string; iconClass?: string }> | string,
-  specsArg?: PosGlyphSpec[]
-): HTMLDivElement | null {
-  if (!selectEl) return null;
-
-  if (typeof optionsOrStripId === 'string') {
-    const stripId = optionsOrStripId;
-    const specs = specsArg || [];
-    const existing = document.getElementById(stripId);
-    if (existing) {
-      (existing as any).__sync?.();
-      return existing as HTMLDivElement;
-    }
-
-    const strip = document.createElement('div');
-    strip.id = stripId;
-    strip.className = 'vs-pos-strip';
-    strip.setAttribute('role', 'radiogroup');
-
-    const validValues = new Set(Array.from(selectEl.options).map((o) => o.value));
-    const activeSpecs = specs.filter((s) => validValues.size === 0 || validValues.has(s.value));
-
-    for (const spec of activeSpecs) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'vs-pos-btn';
-      btn.setAttribute('role', 'radio');
-      btn.setAttribute('aria-checked', String(selectEl.value === spec.value));
-      btn.setAttribute('aria-pressed', String(selectEl.value === spec.value));
-      btn.dataset.posValue = spec.value;
-      btn.dataset.value = spec.value;
-      btn.title = spec.title || spec.label;
-      btn.innerHTML = `<span class="pos-glyph ${spec.glyphClass}" aria-hidden="true"></span><span>${spec.label}</span>`;
-
-      btn.addEventListener('click', () => {
-        if (selectEl.value !== spec.value) {
-          selectEl.value = spec.value;
-          selectEl.dispatchEvent(new Event('input', { bubbles: true }));
-          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        syncActivePositionGlyphButton(strip, selectEl.value);
-      });
-
-      strip.appendChild(btn);
-    }
-
-    function syncGlyphSelection() {
-      syncActivePositionGlyphButton(strip, selectEl!.value);
-    }
-
-    (strip as any).__sync = syncGlyphSelection;
-
-    selectEl.addEventListener('change', syncGlyphSelection);
-    const observer = new MutationObserver(syncGlyphSelection);
-    observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
-
-    const row = selectEl.closest('.insp-row') || selectEl;
-    row.insertAdjacentElement('afterend', strip);
-    return strip;
-  } else {
-    const options = optionsOrStripId;
-    let strip = selectEl.nextElementSibling as HTMLDivElement | null;
-    if (!strip || !strip.classList.contains('vs-pos-strip')) {
-      strip = document.createElement('div');
-      strip.className = 'vs-pos-strip';
-      selectEl.insertAdjacentElement('afterend', strip);
-    } else {
-      strip.innerHTML = '';
-    }
-
-    options.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'vs-pos-btn';
-      btn.dataset.value = opt.value;
-      btn.dataset.posValue = opt.value;
-      btn.title = opt.label;
-      btn.setAttribute('aria-pressed', selectEl.value === opt.value ? 'true' : 'false');
-      btn.setAttribute('aria-checked', selectEl.value === opt.value ? 'true' : 'false');
-
-      if (opt.iconClass) {
-        const icon = document.createElement('i');
-        icon.className = opt.iconClass;
-        btn.appendChild(icon);
+    root.querySelectorAll<HTMLElement>('.timeline-track, [data-track-type]').forEach((track) => {
+      if (track.dataset.vsEnhanced !== '1') {
+        track.classList.add('vs-track-enhanced');
+        track.dataset.vsEnhanced = '1';
       }
-      const labelSpan = document.createElement('span');
-      labelSpan.textContent = opt.label;
-      btn.appendChild(labelSpan);
-
-      btn.addEventListener('click', () => {
-        if (selectEl.value !== opt.value) {
-          selectEl.value = opt.value;
-          selectEl.dispatchEvent(new Event('input', { bubbles: true }));
-          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        syncActivePositionGlyphButton(strip!, selectEl.value);
-      });
-
-      strip!.appendChild(btn);
     });
 
-    const syncFn = () => syncActivePositionGlyphButton(strip!, selectEl.value);
-    (strip as any).__sync = syncFn;
-    selectEl.addEventListener('change', syncFn);
+    root.querySelectorAll<HTMLElement>('.timeline-clip, [data-clip-id]').forEach((clip) => {
+      if (clip.dataset.vsEnhanced !== '1') {
+        clip.classList.add('vs-clip-enhanced');
+        clip.dataset.vsEnhanced = '1';
+      }
+    });
+  });
+}
 
-    return strip;
+function syncWorkspaceToggleButtons(): void {
+  const enabled = isVsWorkspaceEnabled() && Boolean(shellEl);
+  const toggleBtn = document.getElementById('toggle-vs-workspace-btn');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('aria-pressed', String(enabled));
+    toggleBtn.textContent = enabled ? '✨ Classic Director UI' : '🎬 Studio Workspace UI';
   }
 }
 
 /**
- * Mounts visual position glyph buttons for both B-Roll PiP Corner
- * (#inspector-pip-position-select) and Presenter Talking Head framing
- * (#inspector-talking-head-mode-select).
+ * Injects a "Studio Workspace UI" toggle button into the Video Director toolbar
+ * and registers the Ctrl/Cmd+K command palette workspace toggle handler.
  */
+export function initDirectorWorkspaceControls(): void {
+  if (typeof window !== 'undefined') {
+    (window as any).setVsWorkspaceEnabled = setVsWorkspaceEnabled;
+    (window as any).toggleVsWorkspace = toggleVsWorkspace;
+  }
+
+  const existingBtn = document.getElementById('toggle-vs-workspace-btn');
+  if (!existingBtn) {
+    const targetToolbar =
+      document.getElementById('video-director-toolbar') ||
+      document.getElementById('timeline-toolbar') ||
+      document.getElementById('video-preview-canvas')?.parentElement?.parentElement;
+
+    if (targetToolbar) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'toggle-vs-workspace-btn';
+      btn.className =
+        'px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/30 transition';
+      btn.addEventListener('click', () => toggleVsWorkspace());
+      targetToolbar.prepend(btn);
+    }
+  }
+
+  // Listen for custom command-palette toggle events
+  window.addEventListener('vs:toggle-workspace', () => {
+    toggleVsWorkspace();
+  });
+
+  syncWorkspaceToggleButtons();
+}
+
 export function mountInspectorPositionGlyphs(): void {
-  const pipSelect = document.getElementById('inspector-pip-position-select') as HTMLSelectElement | null;
-  const thSelect = document.getElementById('inspector-talking-head-mode-select') as HTMLSelectElement | null;
+  const posSelect = dom.inspectorPipPositionSelect;
+  if (!posSelect || posSelect.parentElement?.querySelector('.vs-pos-glyph-group')) return;
 
-  attachGlyphStripToSelect(pipSelect, 'vs-pip-pos-glyph-strip', PIP_CORNER_GLYPHS);
-  attachGlyphStripToSelect(thSelect, 'vs-th-pos-glyph-strip', TALKING_HEAD_GLYPHS);
+  const presets = [
+    { id: 'top_left', label: 'Top Left' },
+    { id: 'top_right', label: 'Top Right' },
+    { id: 'bottom_left', label: 'Bottom Left' },
+    { id: 'bottom_right', label: 'Bottom Right' },
+  ];
+
+  const group = document.createElement('div');
+  group.className = 'vs-pos-glyph-group flex gap-1.5 mt-1.5';
+  presets.forEach((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vs-pos-chip px-2 py-1 text-[11px] rounded border border-slate-700 hover:border-indigo-400';
+    b.textContent = p.label;
+    b.addEventListener('click', () => {
+      posSelect.value = p.id;
+      posSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    group.appendChild(b);
+  });
+
+  posSelect.parentElement?.appendChild(group);
+  registerCleanup(() => group.remove());
 }
 
-/**
- * Mounts video-studio's one-click speed preset chips (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x)
- * directly beneath #inspector-clip-speed-slider.
- */
 export function mountInspectorSpeedChips(): void {
-  const slider = document.getElementById('inspector-clip-speed-slider') as HTMLInputElement | null;
-  const label = document.getElementById('inspector-clip-speed-label');
-  if (!slider) return;
-  const existingChips = document.getElementById('vs-inspector-speed-chips');
-  if (existingChips) {
-    (existingChips as any).__sync?.();
-    return;
-  }
+  const speedSlider = dom.inspectorClipSpeedSlider;
+  if (!speedSlider || speedSlider.parentElement?.querySelector('.vs-speed-chip-group')) return;
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
-  const chipRow = document.createElement('div');
-  chipRow.id = 'vs-inspector-speed-chips';
-  chipRow.className = 'vs-speed-chips-strip chip-row';
-  chipRow.setAttribute('role', 'group');
-  chipRow.setAttribute('aria-label', 'Speed Presets');
+  const group = document.createElement('div');
+  group.className = 'vs-speed-chip-group flex flex-wrap gap-1 mt-1.5';
 
-  const currentVal = parseFloat(slider.value) || 1.0;
-
-  for (const s of speeds) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'vs-speed-chip chip';
-    chip.dataset.speed = String(s);
-    chip.dataset.speedVal = String(s);
-    chip.textContent = `${s}x`;
-    chip.setAttribute('aria-pressed', Math.abs(currentVal - s) < 0.05 ? 'true' : 'false');
-
-    chip.addEventListener('click', () => {
-      slider.value = String(s);
-      if (label) label.textContent = `${s}x`;
-      // Fire both 'input' (live preview) and 'change' (history/state commit)
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
-      slider.dispatchEvent(new Event('change', { bubbles: true }));
-      syncActiveSpeedChip(chipRow, s);
+  speeds.forEach((s) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'vs-speed-chip px-2 py-0.5 text-[11px] rounded border border-slate-700 hover:border-indigo-400';
+    b.textContent = `${s}x`;
+    b.addEventListener('click', () => {
+      speedSlider.value = String(s);
+      speedSlider.dispatchEvent(new Event('input', { bubbles: true }));
+      speedSlider.dispatchEvent(new Event('change', { bubbles: true }));
     });
+    group.appendChild(b);
+  });
 
-    chipRow.appendChild(chip);
-  }
-
-  function syncActive() {
-    const val = parseFloat(slider!.value || '1');
-    syncActiveSpeedChip(chipRow, val);
-  }
-
-  (chipRow as any).__sync = syncActive;
-
-  slider.addEventListener('input', syncActive);
-  slider.addEventListener('change', syncActive);
-  syncActive();
-
-  const container = slider.closest('.vs-field, .form-group, .insp-row, div') || slider.parentElement;
-  container?.insertAdjacentElement('afterend', chipRow);
+  speedSlider.parentElement?.appendChild(group);
+  registerCleanup(() => group.remove());
 }
 
-const STAGE_GUIDES_STORAGE_KEY = 'cg_vs_stage_guides_v1';
-
-interface StageGuidesState {
-  grid: boolean;
-  center: boolean;
-  safe: boolean;
-}
-
-function loadGuidesState(): StageGuidesState {
-  try {
-    const raw = localStorage.getItem(STAGE_GUIDES_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return { grid: false, center: false, safe: false };
-}
-
-function saveGuidesState(st: StageGuidesState): void {
-  try {
-    localStorage.setItem(STAGE_GUIDES_STORAGE_KEY, JSON.stringify(st));
-  } catch {}
-}
-
-/**
- * Mounts Rule-of-Thirds, Center Crosshair, and 9:16 TikTok/Reels + 16:9 Title/Action
- * Safe-Zone overlays directly over the Video Director preview canvas container,
- * plus a compact toggle bar in the player toolbar.
- */
 export function mountPlayerStageOverlays(): void {
-  // Locate the Video Director preview canvas (never touch #export-render-canvas)
-  const previewCanvas =
-    (document.getElementById('video-canvas') as HTMLCanvasElement | null) ||
-    (document.getElementById('video-director-canvas') as HTMLCanvasElement | null) ||
-    (document.getElementById('director-preview-canvas') as HTMLCanvasElement | null) ||
-    (document.getElementById('video-preview-canvas') as HTMLCanvasElement | null) ||
-    document.querySelector<HTMLCanvasElement>('canvas:not(#export-render-canvas):not(#vfx-preview-canvas):not(.tile-canvas)');
+  const slot = shellEl?.querySelector<HTMLElement>('#vs-player-slot');
+  if (!slot || slot.querySelector('.vs-aspect-badge')) return;
 
-  if (!previewCanvas || !previewCanvas.parentElement) return;
-  if (document.getElementById('vs-player-guides-overlay')) return;
-
-  const host = previewCanvas.parentElement;
-  host.classList.add('vs-stage-overlay-host');
-
-  const st = loadGuidesState();
-
-  // 1. Create the pointer-events:none overlay layer
-  const guidesEl = document.createElement('div');
-  guidesEl.id = 'vs-player-guides-overlay';
-  guidesEl.className = 'vs-player-guides';
-  guidesEl.setAttribute('aria-hidden', 'true');
-  guidesEl.dataset.grid = st.grid ? 'on' : 'off';
-  guidesEl.dataset.center = st.center ? 'on' : 'off';
-  guidesEl.dataset.safe = st.safe ? 'on' : 'off';
-  guidesEl.dataset.aspect = getActiveAspectRatio();
-
-  guidesEl.innerHTML = `
-    <div class="vs-guide-thirds"></div>
-    <div class="vs-guide-center"></div>
-    <div class="vs-guide-safe">
-      <!-- 16:9 / 1:1 / 4:3 Broadcast Action (90%) & Title (80%) Safe Boxes -->
-      <div class="vs-safe-action-box"></div>
-      <div class="vs-safe-title-box"></div>
-
-      <!-- 9:16 TikTok / Reels / Shorts UI Hazard Overlay -->
-      <div class="vs-safe-social-ui">
-        <div class="vs-social-top-mask">TOP UI / SEARCH BAR</div>
-        <div class="vs-social-right-mask">ACTIONS</div>
-        <div class="vs-social-bottom-mask">@handle · caption & audio marquee (avoid placing subtitles here)</div>
-        <div class="vs-social-safe-frame"></div>
-      </div>
-    </div>
-  `;
-
-  host.appendChild(guidesEl);
-
-  // 2. Keep overlay bounds locked to the rendered canvas box inside the stage
-  const syncOverlayBoundsToCanvas = () => {
-    const hostRect = host.getBoundingClientRect();
-    const canvasRect = previewCanvas.getBoundingClientRect();
-    if (hostRect.width === 0 || canvasRect.width === 0) return;
-
-    guidesEl.style.left = `${Math.round(canvasRect.left - hostRect.left)}px`;
-    guidesEl.style.top = `${Math.round(canvasRect.top - hostRect.top)}px`;
-    guidesEl.style.width = `${Math.round(canvasRect.width)}px`;
-    guidesEl.style.height = `${Math.round(canvasRect.height)}px`;
-    guidesEl.dataset.aspect = getActiveAspectRatio();
-  };
-
-  const ro = new ResizeObserver(syncOverlayBoundsToCanvas);
-  ro.observe(host);
-  ro.observe(previewCanvas);
-  window.addEventListener('resize', syncOverlayBoundsToCanvas);
-  requestAnimationFrame(syncOverlayBoundsToCanvas);
-
-  // Listen for aspect-ratio dropdown changes so 9:16 vs 16:9 safe zones switch automatically
-  const aspectSelectors = [
-    document.getElementById('video-director-aspect-select'),
-    document.getElementById('image-resolution'),
-    document.getElementById('aspect-ratio-select'),
-  ];
-  aspectSelectors.forEach((sel) => {
-    sel?.addEventListener('change', () => {
-      setTimeout(syncOverlayBoundsToCanvas, 30);
-    });
-  });
-
-  // 3. Create the toggle button pill (Rule of Thirds / Crosshair / Safe Zone)
-  const toolbar = document.createElement('div');
-  toolbar.id = 'vs-stage-guides-toolbar';
-  toolbar.className = 'vs-stage-tools-bar';
-  toolbar.setAttribute('role', 'group');
-  toolbar.setAttribute('aria-label', 'Canvas Composition Guides');
-
-  toolbar.innerHTML = `
-    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="grid" aria-pressed="${st.grid}" title="Toggle Rule-of-Thirds Grid (G)">
-      <span>⊞</span><span>Grid</span>
-    </button>
-    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="center" aria-pressed="${st.center}" title="Toggle Center Crosshair">
-      <span>⌖</span><span>Center</span>
-    </button>
-    <button type="button" class="vs-stage-tool-btn" data-guide-toggle="safe" aria-pressed="${st.safe}" title="Toggle 9:16 Social / 16:9 Broadcast Safe Zones">
-      <span>⊡</span><span>Safe Zone</span>
-    </button>
-  `;
-
-  toolbar.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-guide-toggle]');
-    if (!btn) return;
-    const key = btn.dataset.guideToggle as keyof StageGuidesState;
-    st[key] = !st[key];
-    btn.setAttribute('aria-pressed', String(st[key]));
-    guidesEl.dataset[key] = st[key] ? 'on' : 'off';
-    syncOverlayBoundsToCanvas();
-    saveGuidesState(st);
-  });
-
-  // Mount the toggle pill in the Video Studio topbar center slot or right beneath the player stage
-  const topbarSlot = document.getElementById('vs-topbar-center-slot');
-  if (topbarSlot) {
-    topbarSlot.appendChild(toolbar);
-  } else {
-    host.insertAdjacentElement('afterend', toolbar);
-  }
+  const badge = document.createElement('div');
+  badge.className = 'vs-aspect-badge text-[11px] font-mono px-2 py-0.5 rounded bg-black/60 text-slate-300';
+  badge.textContent = getActiveAspectRatio?.() || state.aspectRatio || '16:9';
+  slot.appendChild(badge);
+  registerCleanup(() => badge.remove());
 }
 
-/**
- * Enhances the Export Modal with video-studio's 2-Column Export Studio Card layout,
- * live frame preview stage, and estimated file size calculator readout.
- */
-export function mountExportStudioCard(): void {
-  const container = document.getElementById('export-modal-body') || document.querySelector('.export-dialog-content') || document.getElementById('export-modal');
-  if (!container || document.getElementById('vs-export-studio-card')) return;
-
-  const card = document.createElement('div');
-  card.id = 'vs-export-studio-card';
-  card.className = 'vs-export-studio-card';
-
-  card.innerHTML = `
-    <div class="vs-export-preview-col">
-      <div class="vs-export-stage">
-        <canvas id="vs-export-preview-canvas" width="320" height="180"></canvas>
-        <div class="vs-export-stage-badge">LIVE PREVIEW</div>
-      </div>
-      <div class="vs-export-specs">
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">EST. FILE SIZE</span>
-          <span class="vs-export-spec-value" id="vs-export-est-size">~12.4 MB</span>
-        </div>
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">EST. DURATION</span>
-          <span class="vs-export-spec-value" id="vs-export-est-duration">0:15.0</span>
-        </div>
-      </div>
-    </div>
-    <div class="vs-export-settings-col">
-      <div class="vs-export-field">
-        <label class="vs-export-field-label">EXPORT PRESET</label>
-        <div class="vs-export-radio-group" role="radiogroup">
-          <button type="button" class="vs-export-radio-btn" aria-checked="true" data-preset="mp4">MP4 (H.264)</button>
-          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="webm">WebM (VP9)</button>
-          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="gif">Animated GIF</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  container.prepend(card);
-}
-
-interface StudioCommand {
-  id: string;
-  title: string;
-  category: 'Studios' | 'Editing' | 'AI & Media' | 'Export & View';
-  shortcut?: string;
-  action: () => void;
-}
-
-/**
- * Global Ctrl+K / Cmd+K Command Palette (video-studio find-replace.css & commands.js port)
- */
 export function initStudioCommandPalette(): void {
-  if (document.getElementById('vs-command-palette-modal')) return;
-
-  const commands: StudioCommand[] = [
-    {
-      id: 'studio-image',
-      title: 'Open Image Studio',
-      category: 'Studios',
-      action: () => document.getElementById('open-image-studio-btn')?.click(),
-    },
-    {
-      id: 'studio-voice',
-      title: 'Open Voice Studio',
-      category: 'Studios',
-      action: () => document.getElementById('open-voice-studio-btn')?.click(),
-    },
-    {
-      id: 'studio-map',
-      title: 'Open Map Studio',
-      category: 'Studios',
-      action: () => document.getElementById('open-map-studio-btn')?.click(),
-    },
-    {
-      id: 'studio-film',
-      title: 'Open Film Studio (Phase 1)',
-      category: 'Studios',
-      action: () => document.getElementById('open-film-studio-btn')?.click(),
-    },
-    {
-      id: 'studio-academy',
-      title: 'Open Academy Hub',
-      category: 'Studios',
-      action: () => document.getElementById('open-academy-btn')?.click(),
-    },
-    {
-      id: 'edit-split',
-      title: 'Split Clip at Playhead',
-      category: 'Editing',
-      shortcut: 'Ctrl+B',
-      action: () => document.getElementById('split-clip-btn')?.click(),
-    },
-    {
-      id: 'edit-reframe',
-      title: 'Auto-Reframe Subject (AI)',
-      category: 'AI & Media',
-      action: () => document.getElementById('auto-reframe-btn')?.click(),
-    },
-    {
-      id: 'edit-subtitles',
-      title: 'Configure Subtitle Styles',
-      category: 'AI & Media',
-      action: () => {
-        const tab = document.querySelector<HTMLElement>('[data-vs-left-tab="graphics"]');
-        tab?.click();
-      },
-    },
-    {
-      id: 'export-open',
-      title: 'Open Export Studio & Cloud Render',
-      category: 'Export & View',
-      action: () => document.getElementById('open-export-modal-btn')?.click(),
-    },
-    {
-      id: 'view-toggle-ws',
-      title: 'Toggle video-studio / Classic Workspace',
-      category: 'Export & View',
-      shortcut: 'Ctrl+Shift+W',
-      action: () => {
-        const fn = (window as any).toggleStudioWorkspace;
-        if (typeof fn === 'function') fn();
-      },
-    },
-  ];
-
-  // Create Modal Shell
-  const modal = document.createElement('div');
-  modal.id = 'vs-command-palette-modal';
-  modal.className = 'vs-director hidden';
-  modal.style.cssText = `
-    position: fixed; inset: 0; z-index: 99999;
-    background: rgba(0, 0, 0, 0.68); backdrop-filter: blur(4px);
-    display: none; align-items: flex-start; justify-content: center;
-    padding-top: 12vh;
-  `;
-
-  modal.innerHTML = `
-    <div style="width: min(560px, calc(100vw - 32px)); background: var(--bg-panel, #222224); border: 1px solid var(--border-strong, #44444a); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.7); overflow: hidden; display: flex; flex-direction: column;">
-      <div style="display: flex; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border, #323236); gap: 10px;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-3); flex: none;">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-        <input type="text" id="vs-cmd-input" placeholder="Type a command or search studios (e.g. voice, split, export)..." autocomplete="off" style="width: 100%; background: transparent; border: 0; color: var(--text, #ececee); font-size: 13.5px; outline: none;" />
-        <span style="font-size: 10px; font-family: var(--font-mono); padding: 2px 5px; border-radius: 4px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-3);">ESC</span>
-      </div>
-      <div id="vs-cmd-results" style="max-height: 320px; overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px;"></div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  const inputEl = modal.querySelector<HTMLInputElement>('#vs-cmd-input')!;
-  const resultsEl = modal.querySelector<HTMLElement>('#vs-cmd-results')!;
-
-  let selectedIndex = 0;
-
-  function renderResults(filterText = '') {
-    const q = filterText.toLowerCase().trim();
-    const filtered = commands.filter(
-      (c) => c.title.toLowerCase().includes(q) || c.category.toLowerCase().includes(q)
-    );
-
-    resultsEl.innerHTML = '';
-    if (filtered.length === 0) {
-      resultsEl.innerHTML = `<div style="padding: 24px; text-align: center; font-size: 12px; color: var(--text-3);">No matching commands found.</div>`;
-      return;
-    }
-
-    filtered.forEach((cmd, idx) => {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = `vs-cmd-item ${idx === selectedIndex ? 'active' : ''}`;
-      item.style.cssText = `
-        display: flex; align-items: center; justify-content: space-between;
-        width: 100%; padding: 8px 10px; border-radius: 6px; border: 0;
-        background: ${idx === selectedIndex ? 'var(--bg-active, rgba(255,255,255,0.12))' : 'transparent'};
-        color: var(--text, #ececee); font-size: 12.5px; text-align: left; cursor: pointer;
-      `;
-      item.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--bg-input); border: 1px solid var(--border); color: var(--accent-text);">${cmd.category}</span>
-          <span>${cmd.title}</span>
-        </div>
-        ${cmd.shortcut ? `<span style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3);">${cmd.shortcut}</span>` : ''}
-      `;
-
-      item.addEventListener('mouseenter', () => {
-        selectedIndex = idx;
-        renderResults(inputEl.value);
-      });
-
-      item.addEventListener('click', () => {
-        closePalette();
-        try {
-          cmd.action();
-        } catch (err) {
-          console.error('[Command Palette] Action failed:', err);
-        }
-      });
-
-      resultsEl.appendChild(item);
-    });
-  }
-
-  function openPalette() {
-    modal.style.display = 'flex';
-    modal.classList.remove('hidden');
-    inputEl.value = '';
-    selectedIndex = 0;
-    renderResults();
-    setTimeout(() => inputEl.focus(), 20);
-  }
-
-  function closePalette() {
-    modal.style.display = 'none';
-    modal.classList.add('hidden');
-  }
-
-  // Global Ctrl+K / Cmd+K shortcut listener
-  window.addEventListener('keydown', (e) => {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      const activeEl = document.activeElement as HTMLElement | null;
-      const activeTag = activeEl?.tagName.toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea' || activeEl?.isContentEditable) {
-        // Allow if modal isn't open and it's not a text field they want to type in
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
       }
       e.preventDefault();
-      if (modal.style.display === 'none' || modal.classList.contains('hidden')) openPalette();
-      else closePalette();
-    } else if (e.key === 'Escape' && modal.style.display !== 'none' && !modal.classList.contains('hidden')) {
-      closePalette();
+      toggleVsWorkspace();
     }
-  });
-
-  inputEl.addEventListener('input', () => {
-    selectedIndex = 0;
-    renderResults(inputEl.value);
-  });
-
-  inputEl.addEventListener('keydown', (e) => {
-    const items = resultsEl.querySelectorAll<HTMLButtonElement>('.vs-cmd-item');
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectedIndex = (selectedIndex + 1) % Math.max(1, items.length);
-      renderResults(inputEl.value);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectedIndex = (selectedIndex - 1 + items.length) % Math.max(1, items.length);
-      renderResults(inputEl.value);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      items[selectedIndex]?.click();
-    }
-  });
-
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closePalette();
   });
 }
-
-
-
-
 

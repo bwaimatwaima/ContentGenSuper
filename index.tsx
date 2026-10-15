@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import * as dom from './src/dom';
+import './src/styles/vs-director.css';
 import './src/perfMonitor';
 import * as audioFirstDirector from './src/audio-first-director';
 import * as audioUploadDirector from './src/audio-upload-director';
@@ -55,6 +56,7 @@ import {
   isVsWorkspaceEnabled,
   activateVsWorkspace,
   setVsWorkspaceEnabled,
+  initDirectorWorkspaceControls,
   mountInspectorPositionGlyphs,
   mountInspectorSpeedChips,
   mountPlayerStageOverlays,
@@ -1649,6 +1651,12 @@ function registerEventListeners() {
 
     // Player Stage Composition Overlays (Rule of Thirds, Crosshair, Safe Zones)
     mountPlayerStageOverlays();
+
+    // Video Director Workspace Controls & Startup Activation
+    initDirectorWorkspaceControls();
+    if (isVsWorkspaceEnabled()) {
+        activateVsWorkspace();
+    }
 
     // Flush pending changes before unload to prevent data loss
     const flushPendingAutosaves = () => {

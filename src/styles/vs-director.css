@@ -1588,6 +1588,59 @@
   color: var(--accent-text, #8fb6fb);
 }
 
+/* Match both .asset-cat and existing .mg-filter-btn buttons */
+.vs-director .vs-mg-sidebar :is(.asset-cat, .mg-filter-btn) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--vs-radius-sm, 6px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--vs-text-2, #a9a9b1);
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.vs-director .vs-mg-sidebar :is(.asset-cat, .mg-filter-btn):hover {
+  background: var(--vs-bg-hover, rgba(255, 255, 255, 0.07));
+  color: var(--vs-text, #ececee);
+}
+
+.vs-director .vs-mg-sidebar :is(.asset-cat, .mg-filter-btn).active,
+.vs-director .vs-mg-sidebar :is(.asset-cat, .mg-filter-btn)[aria-pressed="true"] {
+  background: var(--vs-accent-soft, rgba(79, 143, 247, 0.18));
+  border-color: var(--vs-accent, #4f8ff7);
+  color: var(--vs-accent-text, #8fb6fb);
+}
+
+/* Ensure docked modals and drawers still respect .hidden */
+.vs-director #shot-inspector-drawer.hidden,
+.vs-director #graphic-editor-modal.hidden,
+.vs-director #ckf-panel.hidden,
+#shot-inspector-drawer.hidden,
+#graphic-editor-modal.hidden {
+  display: none !important;
+}
+
+.vs-director #shot-inspector-drawer:not(.hidden),
+.vs-director #graphic-editor-modal.vs-docked-modal:not(.hidden) {
+  position: static !important;
+  inset: auto !important;
+  transform: none !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  z-index: auto !important;
+}
+
+
 
 
 

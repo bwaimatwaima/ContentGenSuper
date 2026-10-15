@@ -13,6 +13,7 @@
  *   - resolveSubtitleFont() -> same-named export in the engine
  * The engine itself is NOT imported because it pulls in browser-app state (state-timeline).
  */
+import { pickKeywords } from '../../src/media/smart-director-tools';
 import {
   KaraokeRenderer,
   CinematicRenderer,
@@ -135,6 +136,24 @@ export function detectWordEmphasis(rawWord: string): boolean {
   if (/^\$?[0-9]+([.,][0-9]+)?%?$/.test(clean)) return true;
   if (clean.length >= 3 && clean === clean.toUpperCase() && /[A-Z]/.test(clean)) return true;
   return POWER_WORDS.has(clean.toUpperCase());
+}
+
+/**
+ * Combines ContentGen's static POWER_WORDS / uppercase detection with
+ * video-studio's heuristic keyword scorer (pickKeywords) so every multi-word
+ * Hormozi/MrBeast subtitle chunk highlights at least one high-value word.
+ */
+export function computeChunkEmphasisMap(words: string[]): boolean[] {
+  const base = words.map((w) => detectWordEmphasis(w));
+  if (!base.some(Boolean) && words.length >= 2) {
+    const picks = pickKeywords(words.join(' '), 1);
+    for (const idx of picks) {
+      if (idx >= 0 && idx < base.length) {
+        base[idx] = true;
+      }
+    }
+  }
+  return base;
 }
 
 export function resolveSubtitleFont(text: string, requestedFont?: string): string {
@@ -279,7 +298,7 @@ export function drawSubtitleChunk(ctx: CanvasRenderingContext2D, a: DrawSubtitle
   let displayText = rawText;
   let emphasisMap: boolean[] | undefined;
   if (style === 'hormozi' || style === 'mrbeast') {
-    emphasisMap = displayText.split(/\s+/).filter(Boolean).map(detectWordEmphasis);
+    emphasisMap = computeChunkEmphasisMap(displayText.split(/\s+/).filter(Boolean));
     displayText = displayText.toUpperCase();
   }
 

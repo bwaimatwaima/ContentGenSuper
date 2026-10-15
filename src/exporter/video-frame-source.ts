@@ -408,6 +408,18 @@ export class ExportVideoFrameSource {
     cursor.blendCanvas = null;
   }
 
+  /**
+   * Releases decoders for clips that are no longer within the active timeline window.
+   */
+  async retainOnlyActiveCursors(activeCursorKeys: Set<string>): Promise<void> {
+    const allKeys = Array.from(this.cursors.keys());
+    for (const key of allKeys) {
+      if (!activeCursorKeys.has(key)) {
+        await this.releaseCursor(key);
+      }
+    }
+  }
+
   async dispose(): Promise<void> {
     const cursorKeys = Array.from(this.cursors.keys());
     for (const key of cursorKeys) {
@@ -435,9 +447,10 @@ export function getOrCreateExportFrameSource(maxDecodeHeight = 2160): ExportVide
 
 export const getExportFrameSource = getOrCreateExportFrameSource;
 
-export async function disposeExportFrameSource(): Promise<void> {
+export async function disposeExportFrameSource(_clips?: any): Promise<void> {
   if (!sharedExportFrameSource) return;
   const instance = sharedExportFrameSource;
   sharedExportFrameSource = null;
   await instance.dispose();
 }
+

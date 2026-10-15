@@ -8,6 +8,8 @@ import { assetStorage } from '../assetStorage';
 import * as utils from '../utils';
 import { videoRenderContext } from '../videoRenderer';
 import { audioSynthesizer } from '../audioSynthesizer';
+import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
+import { getExportFlags } from './export-flags';
 
 
 
@@ -171,7 +173,14 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
                     const shouldDuck = state.audioDuckingEnabled !== false && (clip as any).audioDuckingOverride !== false && speechBlocks.length > 0 && !!timelineState.masterAudioBuffer;
                     const shouldLoop = (clip as any).loop !== false && (native.duration < (clip.duration * rate));
 
-                    await mixInNative(clipsBus, native, offset, shouldLoop, (g) => {
+                    let audioBuf = native;
+                    let effectivePlaybackRate = rate;
+                    if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
+                        audioBuf = stretchAudioBufferPreservePitch(native, rate);
+                        effectivePlaybackRate = 1.0;
+                    }
+
+                    await mixInNative(clipsBus, audioBuf, offset, shouldLoop, (g) => {
                         if (shouldDuck) {
                             applyDucking(g, clipVol, 0.25);
                         } else {
@@ -186,7 +195,7 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
                                 g.gain.setValueAtTime(clipVol, Math.max(0, endInCtx));
                             }
                         }
-                    }, clip.videoStartOffset || 0, clip.duration * rate, rate);
+                    }, clip.videoStartOffset || 0, clip.duration * rate, effectivePlaybackRate);
                 }
             } catch (e) {
                 console.warn(`[Export] Could not mix native audio for clip ${clip.id}:`, e);
@@ -247,5 +256,6 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
         });
     }
 
-    return await offlineCtx.startRendering();
+    const rendered = await offlineCtx.startRendering();
+    return softClipAudioBuffer(rendered);
 }

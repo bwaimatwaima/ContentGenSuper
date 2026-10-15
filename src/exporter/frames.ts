@@ -10,6 +10,7 @@ import {
   isSequentialVideoExportEnabled,
   getOrCreateExportFrameSource,
   recordHtmlSeek,
+  seekMidFrameSeconds,
   type VideoSlotRole,
 } from './video-frame-source';
 
@@ -362,7 +363,8 @@ async function syncClipVideoSlot(
   await syncVideoToTime(videoEl, targetSourceTime, fps);
 }
 
-export async function syncVideosForExportTime(time: number, fps: number = 30): Promise<void> {
+export async function syncVideosForExportTime(rawTime: number, fps: number = 30): Promise<void> {
+    const time = seekMidFrameSeconds(rawTime, fps);
     startExportStage('video-sync');
     const activeCursorKeys = new Set<string>();
     try {

@@ -15,6 +15,8 @@ import { generateCinematicDroneBuffer } from '../cinematicDrone';
 import { audioSynthesizer } from '../audioSynthesizer';
 import { assetStorage } from '../assetStorage';
 import { validateBeforeExport } from '../timing/timeline-timing';
+import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
+import { getExportFlags } from './export-flags';
 
 export interface TimelineSegment {
     index: number;
@@ -334,9 +336,16 @@ export async function mixSegmentAudio(
 
                     const offset = timelineState.mode === 'audio_locked' ? clipStart : ((clip as any)._legacyCursor ?? clipStart);
 
+                    let audioBuf = native;
+                    let effectiveRate = rate;
+                    if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
+                        audioBuf = stretchAudioBufferPreservePitch(native, rate);
+                        effectiveRate = 1.0;
+                    }
+
                     await mixInNative(
                         clipsBus,
-                        native,
+                        audioBuf,
                         offset,
                         false,
                         (gainNode) => {
@@ -357,7 +366,7 @@ export async function mixSegmentAudio(
                         },
                         clip.videoStartOffset || 0,
                         clipDur * rate,
-                        rate
+                        effectiveRate
                     );
                 }
             } catch (e) {
@@ -445,7 +454,7 @@ export async function mixSegmentAudio(
     }
 
     const rendered = await offlineCtx.startRendering();
-    return rendered;
+    return softClipAudioBuffer(rendered);
 }
 
 /**

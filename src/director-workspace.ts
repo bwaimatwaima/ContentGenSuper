@@ -8,6 +8,7 @@ import { drawVideoFrame } from './videoRenderer';
 import { state } from './state';
 import { getActiveAspectRatio } from './handlers-effects';
 import { vsIcon } from './ui-icons';
+import { buildTransitionsStudioPanel, syncTransitionsPanel } from './transitions-studio-panel';
 
 const WORKSPACE_FLAG_KEY = 'cg_flag_vs_workspace';
 
@@ -457,11 +458,13 @@ export function activateVsWorkspace(): boolean {
               <button type="button" class="tab" role="tab" aria-selected="true" data-vs-left-tab="graphics">${vsIcon('layers', 13)} <span>Graphics</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="audio">${vsIcon('music', 13)} <span>Audio</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="captions">${vsIcon('captions', 13)} <span>Captions</span></button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="transitions">${vsIcon('shuffle', 13)} <span>Transitions</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="effects">${vsIcon('sparkles', 13)} <span>Effects</span></button>
             </div>
             <div class="assets-body" id="vs-left-tab-graphics"></div>
             <div class="assets-body hidden" id="vs-left-tab-audio"><div class="vs-section-intro"><strong>Audio & voice</strong><span>Existing narration and music controls</span></div></div>
             <div class="assets-body hidden" id="vs-left-tab-captions"><div class="vs-section-intro"><strong>Captions & subtitles</strong><span>Existing subtitle controls</span></div></div>
+            <div class="assets-body hidden" id="vs-left-tab-transitions"></div>
             <div class="assets-body hidden" id="vs-left-tab-effects"></div>
           </section>
           <div class="resizer v" id="vs-resizer-left" role="separator" aria-orientation="vertical" aria-label="Resize library panel"></div>
@@ -547,6 +550,7 @@ export function activateVsWorkspace(): boolean {
     const graphicsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-graphics');
     const audioSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-audio');
     const captionsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-captions');
+    const transitionsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-transitions');
     const effectsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-effects');
     const previewSlot = shellEl.querySelector<HTMLElement>('#vs-center-player-panel');
     const timelineSlot = shellEl.querySelector<HTMLElement>('#vs-bottom-timeline-slot');
@@ -640,6 +644,7 @@ export function activateVsWorkspace(): boolean {
     if (responsivePreviewToggle?.parentElement && topbarCenter) moveNode(responsivePreviewToggle.parentElement, topbarCenter);
 
     organizeGraphicsBrowser();
+    if (transitionsSlot) transitionsSlot.appendChild(buildTransitionsStudioPanel());
     if (effectsSlot) effectsSlot.appendChild(buildEffectsStudioPanel());
 
     // Move Visual-First workflow controls into the Production Card slot
@@ -682,9 +687,12 @@ export function activateVsWorkspace(): boolean {
         shellEl?.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((b) => {
           b.setAttribute('aria-selected', String(b === btn));
         });
-        ['graphics', 'audio', 'captions', 'effects'].forEach((key) => {
+        ['graphics', 'audio', 'captions', 'transitions', 'effects'].forEach((key) => {
           shellEl?.querySelector(`#vs-left-tab-${key}`)?.classList.toggle('hidden', key !== target);
         });
+        if (target === 'transitions') {
+          syncTransitionsPanel();
+        }
       });
     });
 
@@ -1505,6 +1513,25 @@ export function initStudioCommandPalette(): void {
         const btn = document.getElementById('ckf-auto-reframe') || 
                     document.getElementById('auto-reframe-btn');
         btn?.click();
+      },
+    },
+    {
+      id: 'open-transitions',
+      title: 'Open Transitions Studio (Cut & Dissolve Blends)',
+      category: 'Editing',
+      shortcut: 'T',
+      action: () => {
+        const tab = document.querySelector<HTMLElement>('[data-vs-left-tab="transitions"]');
+        tab?.click();
+      },
+    },
+    {
+      id: 'randomize-transitions',
+      title: 'Randomize All Cinematic Transitions',
+      category: 'Editing',
+      action: () => {
+        const btn = document.getElementById('vs-trans-randomize-btn');
+        if (btn) btn.click();
       },
     },
     {

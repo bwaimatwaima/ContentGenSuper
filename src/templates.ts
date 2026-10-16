@@ -2677,6 +2677,45 @@ export const MODAL_TEMPLATES = `
       </div>
     </section>
 
+    <!-- Outgoing Shot Transition Section -->
+    <section class="prop-section" id="inspector-transition-section">
+      <div class="prop-section-head">
+        <span>Cut & Transition</span>
+        <span id="inspector-transition-status-badge" style="font-size: 10.5px; color: var(--accent-text); font-weight: 600;">Hard Cut</span>
+      </div>
+
+      <div class="insp-row">
+        <label class="field-label" for="inspector-transition-select">To Next Shot</label>
+        <div class="insp-row-control">
+          <select id="inspector-transition-select" class="select">
+            <option value="cut">⚡ Hard Cut</option>
+            <option value="cross_dissolve">✨ Cross Dissolve</option>
+            <option value="blur_dissolve">🌫️ Blur Dissolve</option>
+            <option value="zoom_dissolve">🔍 Zoom Dissolve</option>
+            <option value="fade_to_black">⬛ Fade to Black</option>
+            <option value="fade_to_white">⬜ Fade to White</option>
+            <option value="swipe_left">⬅️ Swipe Left</option>
+            <option value="swipe_right">➡️ Swipe Right</option>
+            <option value="swipe_up">⬆️ Swipe Up</option>
+            <option value="swipe_down">⬇️ Swipe Down</option>
+            <option value="wipe">🧹 Line Wipe</option>
+            <option value="push">⏩ Whip Push</option>
+            <option value="iris">🔘 Iris Wipe</option>
+            <option value="flash">⚡ Flash Cut</option>
+            <option value="glitch">📺 Glitch / RGB</option>
+            <option value="spin">🔄 Spin Cut</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px;">
+        <span style="font-size: 10.5px; color: var(--text-3);">Speed: <strong id="inspector-transition-speed-label" style="color: var(--text-2);">1.0s</strong></span>
+        <button type="button" id="inspector-open-transitions-panel-btn" class="btn small" style="height: 22px; font-size: 10.5px; color: var(--accent-text);" title="Open this transition in the Transitions Studio Panel">
+          Open in Transitions Panel ➔
+        </button>
+      </div>
+    </section>
+
     <!-- 3. Cinematography, Camera Motion & Keyframes (Phase 4 Integration) -->
     <section class="prop-section">
       <div class="prop-section-head">

@@ -2503,6 +2503,10 @@ export function getTransitionLabel(transition?: string): string {
     case 'fadetowhite': return 'Fade White';
     case 'wipe': return 'Wipe';
     case 'push': return 'Push';
+    case 'flash': return 'Flash';
+    case 'glitch': return 'Glitch';
+    case 'spin': return 'Spin';
+    case 'iris': return 'Iris';
     default: return 'Cut';
   }
 }
@@ -2521,6 +2525,10 @@ export function getTransitionIcon(transition?: string): string {
     case 'fadetowhite': return '⬜';
     case 'wipe': return '🧹';
     case 'push': return '⏩';
+    case 'flash': return '⚡';
+    case 'glitch': return '📺';
+    case 'spin': return '🔄';
+    case 'iris': return '🔘';
     default: return '⚡';
   }
 }

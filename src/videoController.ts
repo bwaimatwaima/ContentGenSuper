@@ -25,6 +25,8 @@ import { forceAlignAudio } from './api/audio';
 import { assetStorage } from './assetStorage';
 import { DB } from './db';
 import { APP_STATE_STORE } from './constants';
+import { isVsWorkspaceEnabled } from './director-workspace';
+import { focusTransitionForClip, syncTransitionsPanel } from './transitions-studio-panel';
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -559,7 +561,11 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     const clipIndexStr = transBtn.dataset.clipIndex;
     const clipIndex = clipIndexStr ? parseInt(clipIndexStr, 10) : 0;
     if (clipId) {
-      showTransitionPickerModal(clipId, clipIndex);
+      if (isVsWorkspaceEnabled()) {
+        focusTransitionForClip(clipId, clipIndex);
+      } else {
+        showTransitionPickerModal(clipId, clipIndex);
+      }
     }
     return;
   }
@@ -576,7 +582,11 @@ export function handleTimelineMouseDown(e: MouseEvent) {
       const clipIndexStr = relatedBtn.dataset.clipIndex;
       const clipIndex = clipIndexStr ? parseInt(clipIndexStr, 10) : 0;
       if (clipId) {
-        showTransitionPickerModal(clipId, clipIndex);
+        if (isVsWorkspaceEnabled()) {
+          focusTransitionForClip(clipId, clipIndex);
+        } else {
+          showTransitionPickerModal(clipId, clipIndex);
+        }
       }
       return;
     }
@@ -2957,6 +2967,7 @@ export function applyTransitionToClip(clipId: string, transitionName: string, ap
   saveVersion(false);
 
   const label = utils.getTransitionLabel(transitionName);
+  syncTransitionsPanel();
   ui.showStatus(applyToAll ? `Applied ${label} transition to ALL shots` : `Shot ${clipIndex >= 0 ? clipIndex + 1 : ''} transition set to ${label}`, false, 2500);
 }
 
@@ -2995,6 +3006,7 @@ export function randomizeAllTransitions() {
     drawVideoFrame(state.videoPauseTime);
   }
   saveVersion(false);
+  syncTransitionsPanel();
   ui.showStatus('Randomized cinematic transitions across all shots', false, 2500);
 }
 

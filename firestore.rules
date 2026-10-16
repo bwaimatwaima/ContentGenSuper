@@ -26,6 +26,34 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Credit Ledger Transactions
+    match /creditLedger/{ledgerId} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow get, list: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Daily Usage Metrics
+    match /usage/{userId}/daily/{dayKey} {
+      allow get, list, create, update: if isSignedIn() && isOwner(userId);
+      allow delete: if false;
+    }
+
+    // Projects Collection
+    match /projects/{projectId} {
+      allow get, list, create, update: if isSignedIn();
+      allow delete: if isSignedIn();
+    }
+
+    // Scenes & Shots
+    match /scenes/{sceneId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+
+    match /shots/{shotId} {
+      allow get, list, create, update, delete: if isSignedIn();
+    }
+
     // Test Probe
     match /test/{docId} {
       allow read: if isValidId(docId);

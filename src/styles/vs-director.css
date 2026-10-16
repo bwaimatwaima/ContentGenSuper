@@ -650,14 +650,13 @@
   overflow: hidden;
 }
 
-/* When #graphic-editor-modal is docked inside the Right Inspector in Phase 4 */
-.vs-director #graphic-editor-modal.is-docked {
+/* When #graphic-editor-modal is docked inside the Right Inspector */
+.vs-director #graphic-editor-modal.is-docked:not(.hidden) {
   position: static !important;
   inset: auto !important;
   background: transparent !important;
   backdrop-filter: none !important;
   padding: 0 !important;
-  display: block !important;
 }
 
 .vs-director #graphic-editor-modal.is-docked .vs-dialog-card {
@@ -912,130 +911,179 @@
    ========================================================================== */
 
 /* Position Glyph Button Strip (#inspector-pip-position-select & talking-head) */
+/* Position Glyph Button Strip (#inspector-pip-position-select & talking-head) */
+.vs-pos-strip,
 .vs-inspector-scope .vs-pos-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-  gap: 5px;
-  margin: 4px 0 8px;
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 4px !important;
+  margin: 6px 0 8px !important;
+  width: 100% !important;
 }
 
+.vs-pos-btn,
 .vs-inspector-scope .vs-pos-btn {
-  height: 30px;
-  padding: 0 4px;
-  border-radius: var(--radius-xs, 4px);
-  border: 1px solid var(--border, #323236);
-  background: var(--bg-input, #18181a);
-  color: var(--text-2, #a9a9b1);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  padding: 4px 2px !important;
+  border-radius: var(--radius-xs, 4px) !important;
+  border: 1px solid var(--border, #323236) !important;
+  background: var(--bg-input, #18181a) !important;
+  color: var(--text-2, #a9a9b1) !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: border-color 120ms, background 120ms, color 120ms !important;
 }
 
+.vs-pos-btn:hover,
 .vs-inspector-scope .vs-pos-btn:hover {
-  border-color: var(--border-strong, #44444a);
-  color: var(--text, #ececee);
+  border-color: var(--border-strong, #44444a) !important;
+  color: var(--text, #ececee) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
+.vs-pos-btn[aria-checked="true"],
+.vs-pos-btn[aria-pressed="true"],
 .vs-inspector-scope .vs-pos-btn[aria-checked="true"] {
-  border-color: var(--accent, #4f8ff7);
-  background: var(--accent-soft, rgba(79, 143, 247, 0.18));
-  color: var(--accent-text, #8fb6fb);
+  border-color: var(--accent, #4f8ff7) !important;
+  background: var(--accent-soft, rgba(79, 143, 247, 0.18)) !important;
+  color: var(--accent-text, #8fb6fb) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 6px rgba(79, 143, 247, 0.2) inset !important;
+}
+
+.vs-pos-btn span:not(.pos-glyph) {
+  font-size: 8.5px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  margin-top: 2px !important;
+  white-space: nowrap !important;
+  text-align: center !important;
 }
 
 /* Mini 16:9 Screen Frame Icon (.pos-glyph from avatar.css) */
+.pos-glyph,
 .vs-inspector-scope .pos-glyph {
-  position: relative;
-  width: 22px;
-  height: 15px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  display: inline-block;
-  flex: none;
-  opacity: 0.9;
+  position: relative !important;
+  width: 22px !important;
+  height: 13px !important;
+  border: 1px solid currentColor !important;
+  border-radius: 2px !important;
+  display: block !important;
+  flex: none !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+  box-sizing: border-box !important;
 }
 
+.pos-glyph::after,
 .vs-inspector-scope .pos-glyph::after {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 5px;
-  border-radius: 1px;
-  background: currentColor;
-  transition: all 120ms;
+  content: '' !important;
+  position: absolute !important;
+  width: 6px !important;
+  height: 4.5px !important;
+  border-radius: 1px !important;
+  background: currentColor !important;
+  transition: all 120ms ease !important;
+  box-sizing: border-box !important;
 }
 
 /* Corner & Center Pip Dot Positions */
-.vs-inspector-scope .pos-glyph.pos-tl::after { left: 2px; top: 2px; }
-.vs-inspector-scope .pos-glyph.pos-tr::after { right: 2px; top: 2px; }
-.vs-inspector-scope .pos-glyph.pos-bl::after { left: 2px; bottom: 2px; }
-.vs-inspector-scope .pos-glyph.pos-br::after { right: 2px; bottom: 2px; }
-.vs-inspector-scope .pos-glyph.pos-cl::after { left: 2px; top: 50%; transform: translateY(-50%); }
-.vs-inspector-scope .pos-glyph.pos-cr::after { right: 2px; top: 50%; transform: translateY(-50%); }
+.pos-glyph.pos-tl::after, .vs-inspector-scope .pos-glyph.pos-tl::after { left: 1.5px !important; top: 1.5px !important; right: auto !important; bottom: auto !important; width: 6px !important; height: 4.5px !important; }
+.pos-glyph.pos-tr::after, .vs-inspector-scope .pos-glyph.pos-tr::after { right: 1.5px !important; top: 1.5px !important; left: auto !important; bottom: auto !important; width: 6px !important; height: 4.5px !important; }
+.pos-glyph.pos-bl::after, .vs-inspector-scope .pos-glyph.pos-bl::after { left: 1.5px !important; bottom: 1.5px !important; right: auto !important; top: auto !important; width: 6px !important; height: 4.5px !important; }
+.pos-glyph.pos-br::after, .vs-inspector-scope .pos-glyph.pos-br::after { right: 1.5px !important; bottom: 1.5px !important; left: auto !important; top: auto !important; width: 6px !important; height: 4.5px !important; }
+.pos-glyph.pos-cl::after, .vs-inspector-scope .pos-glyph.pos-cl::after { left: 1.5px !important; top: 50% !important; transform: translateY(-50%) !important; right: auto !important; bottom: auto !important; width: 6px !important; height: 4.5px !important; }
+.pos-glyph.pos-cr::after, .vs-inspector-scope .pos-glyph.pos-cr::after { right: 1.5px !important; top: 50% !important; transform: translateY(-50%) !important; left: auto !important; bottom: auto !important; width: 6px !important; height: 4.5px !important; }
 
 /* Special Glyphs for Fullscreen, Split Screen, Custom Drag & Hidden */
-.vs-inspector-scope .pos-glyph.pos-full::after {
-  inset: 2px;
-  width: auto;
-  height: auto;
+.pos-glyph.pos-full::after, .vs-inspector-scope .pos-glyph.pos-full::after {
+  top: 1.5px !important;
+  left: 1.5px !important;
+  right: 1.5px !important;
+  bottom: 1.5px !important;
+  width: auto !important;
+  height: auto !important;
+  background: currentColor !important;
+  opacity: 0.85 !important;
 }
 
-.vs-inspector-scope .pos-glyph.pos-split::after {
-  left: 2px;
-  top: 2px;
-  bottom: 2px;
-  width: 8px;
-  height: auto;
+.pos-glyph.pos-split::after, .vs-inspector-scope .pos-glyph.pos-split::after {
+  top: 1.5px !important;
+  left: 1.5px !important;
+  bottom: 1.5px !important;
+  width: 8.5px !important;
+  height: auto !important;
+  right: auto !important;
+  background: currentColor !important;
+  opacity: 0.85 !important;
 }
 
-.vs-inspector-scope .pos-glyph.pos-custom::after {
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border: 1px dashed currentColor;
-  background: transparent;
+.pos-glyph.pos-custom::after, .vs-inspector-scope .pos-glyph.pos-custom::after {
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 8px !important;
+  height: 5px !important;
+  border: 1px dashed currentColor !important;
+  background: transparent !important;
+  right: auto !important;
+  bottom: auto !important;
 }
 
-.vs-inspector-scope .pos-glyph.pos-none::after {
-  display: none;
+.pos-glyph.pos-none::after, .vs-inspector-scope .pos-glyph.pos-none::after {
+  display: none !important;
 }
 
-/* One-Click Speed Preset Chips (.chip-row & .chip from inspector.css) */
+/* One-Click Speed Preset Chips (.chip-row & .chip) */
+.vs-speed-chips-strip,
+.chip-row,
 .vs-inspector-scope .chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 2px 0 10px calc(var(--insp-label-w, 88px) + 8px);
+  display: flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  margin: 3px 0 6px 0 !important;
+  width: 100% !important;
 }
 
+.vs-speed-chip,
+.chip,
 .vs-inspector-scope .chip {
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 11px;
-  border: 1px solid var(--border, #323236);
-  background: var(--bg-input, #18181a);
-  color: var(--text-2, #a9a9b1);
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition: border-color 120ms, background 120ms, color 120ms;
+  flex: 1 !important;
+  height: 20px !important;
+  padding: 0 !important;
+  border-radius: 3px !important;
+  border: 1px solid var(--border, #323236) !important;
+  background: var(--bg-input, #18181a) !important;
+  color: var(--text-2, #a9a9b1) !important;
+  font-family: var(--font-mono, monospace) !important;
+  font-size: 9.5px !important;
+  font-weight: 600 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: border-color 120ms, background 120ms, color 120ms !important;
 }
 
+.vs-speed-chip:hover,
+.chip:hover,
 .vs-inspector-scope .chip:hover {
-  color: var(--text, #ececee);
-  border-color: var(--border-strong, #44444a);
+  color: var(--text, #ececee) !important;
+  border-color: var(--border-strong, #44444a) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
+.vs-speed-chip[aria-pressed="true"],
+.chip[aria-pressed="true"],
 .vs-inspector-scope .chip[aria-pressed="true"] {
-  border-color: var(--accent, #4f8ff7);
-  background: var(--accent-soft, rgba(79, 143, 247, 0.18));
-  color: var(--accent-text, #8fb6fb);
-  font-weight: 600;
+  border-color: var(--accent, #4f8ff7) !important;
+  background: var(--accent-soft, rgba(79, 143, 247, 0.2)) !important;
+  color: var(--accent-text, #8fb6fb) !important;
+  font-weight: 700 !important;
 }
 
 /* ==========================================================================
@@ -2235,14 +2283,167 @@
 }
 
 /* Docked Graphic Editor inside Studio UI Right Inspector (#vs-insp-tab-graphic) */
+#vs-insp-tab-graphic,
+.vs-director #vs-insp-tab-graphic,
 .vs-director .vs-workspace-docked-graphic {
   width: 100% !important;
-  max-width: none !important;
+  max-width: 100% !important;
   height: 100% !important;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
   pointer-events: auto !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.vs-director .vs-workspace-docked-graphic * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+/* Fix text, select option and input box overflow in inspector */
+.vs-director .vs-workspace-docked-graphic select,
+.vs-director .vs-workspace-docked-graphic input[type="text"],
+.vs-director .vs-workspace-docked-graphic input[type="number"] {
+  width: 100% !important;
+  max-width: 100% !important;
+  text-overflow: ellipsis !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+  font-size: 11.5px !important;
+  padding: 5px 7px !important;
+  border-radius: 6px !important;
+  background-color: #1a1b20 !important;
+}
+
+.vs-director .vs-workspace-docked-graphic select option {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 11px !important;
+  background: #1a1b20 !important;
+  color: #ececee !important;
+}
+
+.vs-director .vs-workspace-docked-graphic textarea {
+  width: 100% !important;
+  max-width: 100% !important;
+  font-size: 11px !important;
+  padding: 6px 8px !important;
+  border-radius: 6px !important;
+  word-break: break-word !important;
+  white-space: pre-wrap !important;
+  background-color: #141519 !important;
+}
+
+.vs-director .vs-workspace-docked-graphic label,
+.vs-director .vs-workspace-docked-graphic h3,
+.vs-director .vs-workspace-docked-graphic h4,
+.vs-director .vs-workspace-docked-graphic p,
+.vs-director .vs-workspace-docked-graphic span {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  white-space: normal !important;
+  line-height: 1.35 !important;
+}
+
+.vs-director .vs-workspace-docked-graphic label {
+  font-size: 11.5px !important;
+  margin-bottom: 2px !important;
+}
+
+/* Responsive grid columns: never crush 3 columns into narrow inspector */
+.vs-director .vs-workspace-docked-graphic .grid {
+  display: grid !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px !important;
+}
+
+.vs-director .vs-workspace-docked-graphic .grid-cols-3 {
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)) !important;
+}
+
+.vs-director .vs-workspace-docked-graphic .grid-cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)) !important;
+}
+
+/* Banner containers and header bars */
+.vs-director .vs-workspace-docked-graphic .flex.items-center.justify-between {
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+
+/* Preset quick chips */
+.vs-director .vs-workspace-docked-graphic #ge-preset-chips {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  max-width: 100% !important;
+  padding-bottom: 6px !important;
+  gap: 4px !important;
+  scrollbar-width: thin !important;
+}
+
+.vs-director .vs-workspace-docked-graphic #ge-preset-chips button,
+.vs-director .vs-workspace-docked-graphic .ge-preset-chip {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  font-size: 10.5px !important;
+  padding: 3px 7px !important;
+}
+
+/* Compact padding in inspector */
+.vs-director .vs-workspace-docked-graphic .p-5 {
+  padding: 10px 8px !important;
+}
+
+.vs-director .vs-workspace-docked-graphic .space-y-4 > * + * {
+  margin-top: 8px !important;
+}
+
+/* Header & Footer adjustments inside docked inspector */
+.vs-director .vs-workspace-docked-graphic > div:first-child {
+  padding: 8px 10px !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+
+.vs-director .vs-workspace-docked-graphic > div:last-child {
+  padding: 8px 10px !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+
+.vs-director .vs-workspace-docked-graphic #ge-snap-playhead-btn {
+  font-size: 10.5px !important;
+  padding: 3px 7px !important;
+  white-space: nowrap !important;
+}
+
+.vs-director .vs-workspace-docked-graphic #ge-upload-image-btn {
+  white-space: normal !important;
+  font-size: 11px !important;
+  padding: 5px 8px !important;
+  line-height: 1.25 !important;
+}
+
+.vs-director .vs-workspace-docked-graphic #ge-nudge-left,
+.vs-director .vs-workspace-docked-graphic #ge-nudge-up,
+.vs-director .vs-workspace-docked-graphic #ge-nudge-down,
+.vs-director .vs-workspace-docked-graphic #ge-nudge-right,
+.vs-director .vs-workspace-docked-graphic #ge-nudge-center {
+  padding: 3px 5px !important;
+  font-size: 10.5px !important;
+  flex: 1 1 auto !important;
+}
+
+.vs-director .vs-workspace-docked-graphic #ge-hf-ai-prompt {
+  min-width: 0 !important;
+  width: 100% !important;
 }
 
 /* Video Studio Inspired NLE Polish for ContentGen AI */
@@ -2433,4 +2634,53 @@
   color: #e2e4ea;
   font-weight: 600;
 }
+
+/* ==========================================================================
+   Studio Production & Workflow Inspector Cards
+   ========================================================================== */
+
+.vs-prod-card {
+  margin-bottom: 10px;
+  border: 1px solid var(--border, #323236);
+  border-radius: var(--radius, 8px);
+  background: var(--bg-panel-2, #2a2a2d);
+  overflow: hidden;
+}
+
+.vs-prod-card-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #323236);
+  background: #1f2026;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vs-prod-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text, #ececee);
+  letter-spacing: 0.02em;
+}
+
+.vs-prod-card-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vs-prod-btn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.vs-prod-btn-grid .vs-btn {
+  padding: 0 6px;
+  font-size: 11px;
+  height: 30px;
+}
+
 

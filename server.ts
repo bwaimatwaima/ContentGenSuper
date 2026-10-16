@@ -73,6 +73,11 @@ app.use('/api', backendAuthGuard, authRouter);
 app.use('/api', backendAuthGuard, mediaLimiter, mediaRouter);
 app.use('/api', backendAuthGuard, cloudRenderLimiter, cloudRenderRouter);
 
+// Catch-all handler for unhandled /api/* requests to guarantee JSON error response instead of HTML
+app.use('/api/*', (_req: express.Request, res: express.Response) => {
+    res.status(404).json({ error: 'API endpoint not found' });
+});
+
 // Serve Built Frontend & Vite Dev Middleware
 async function startServer() {
     // 1. Electron supplies a dynamic PORT. Cloud Run supplies PORT=8080 at runtime.
@@ -127,7 +132,7 @@ async function startServer() {
             app.get('*', async (req, res, next) => {
                 const url = req.originalUrl || req.url;
                 if (url.startsWith('/api/') || url.startsWith('/ffmpeg-export')) {
-                    return next();
+                    return res.status(404).json({ error: 'API endpoint not found' });
                 }
                 try {
                     const rawIndexHtml = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');

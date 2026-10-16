@@ -548,8 +548,49 @@ export function activateVsWorkspace(): boolean {
               <div id="vs-cinema-keyframes-slot"></div>
             </div>
             <div class="inspector-body hidden" id="vs-insp-tab-production">
-              <div class="vs-section-intro"><strong>Production controls</strong><span>All original workflow controls stay available</span></div>
-              <details class="vs-workflow-details"><summary>Workflow, project & export controls</summary><div id="vs-legacy-controls-body"></div></details>
+              <div class="vs-section-intro"><strong>Production & Workflow</strong><span>Project persistence, save state and execution rhythm</span></div>
+              
+              <!-- Section 1: Project Persistence -->
+              <div class="vs-prod-card">
+                <div class="vs-prod-card-head">
+                  <span class="vs-prod-card-title">📁 Project & Persistence</span>
+                </div>
+                <div class="vs-prod-card-body">
+                  <div class="vs-prod-btn-grid">
+                    <button type="button" id="vs-prod-save-btn" class="vs-btn subtle" title="Save Project to Storage">${vsIcon('download', 13)} <span>Save</span></button>
+                    <button type="button" id="vs-prod-archive-btn" class="vs-btn subtle" title="Export Full Project Archive (.cgproj)">${vsIcon('download', 13)} <span>Archive</span></button>
+                    <button type="button" id="vs-prod-import-btn" class="vs-btn subtle" title="Import Project Archive (.cgproj)">${vsIcon('panel-left', 13)} <span>Import</span></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Workflow Rhythm -->
+              <div class="vs-prod-card">
+                <div class="vs-prod-card-head">
+                  <span class="vs-prod-card-title">🎬 Workflow Rhythm & Audio</span>
+                </div>
+                <div class="vs-prod-card-body">
+                  <div id="vs-prod-workflow-slot"></div>
+                  <button type="button" id="vs-prod-upload-audio-btn" class="vs-btn subtle full" style="margin-top: 6px; border-color: rgba(245, 158, 11, 0.4); color: #fcd34d; background: rgba(245, 158, 11, 0.12);">
+                    <span>📁 Upload Audio / Voiceover</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Section 3: Studio Sequence Tools -->
+              <div class="vs-prod-card">
+                <div class="vs-prod-card-head">
+                  <span class="vs-prod-card-title">🛠️ Sequence & Studio Tools</span>
+                </div>
+                <div class="vs-prod-card-body">
+                  <div class="vs-prod-btn-grid">
+                    <button type="button" id="vs-prod-seq-btn" class="vs-btn subtle" title="Toggle Sequence Track Drawer"><span>🎞️ Sequence Track</span></button>
+                    <button type="button" id="vs-prod-vfx-btn" class="vs-btn subtle" style="color: #e9d5ff; border-color: rgba(168, 85, 247, 0.35); background: rgba(168, 85, 247, 0.12);" title="Open Visual Effects & Color Grade Studio"><span>✨ FX Studio</span></button>
+                  </div>
+                </div>
+              </div>
+
+              <div id="vs-legacy-controls-body" class="hidden" style="display:none !important;"></div>
               <div id="vs-production-sidebar-slot"></div>
             </div>
           </aside>
@@ -606,6 +647,9 @@ export function activateVsWorkspace(): boolean {
 
     const graphicInspSlot = shellEl.querySelector<HTMLElement>('#vs-insp-tab-graphic');
     const graphicModal = document.getElementById('graphic-editor-modal');
+    if (graphicModal) {
+      graphicModal.classList.add('hidden');
+    }
     const graphicDrawerInner = graphicModal?.firstElementChild as HTMLElement | null;
     if (graphicDrawerInner && graphicInspSlot) {
       moveNode(graphicDrawerInner, graphicInspSlot);
@@ -656,6 +700,39 @@ export function activateVsWorkspace(): boolean {
 
     organizeGraphicsBrowser();
     if (effectsSlot) effectsSlot.appendChild(buildEffectsStudioPanel());
+
+    // Move Visual-First workflow controls into the Production Card slot
+    const vfBtn = document.getElementById('direct-video-visual-first-btn');
+    const vfParent = vfBtn?.closest('.flex.items-center.bg-zinc-900\\/90') || vfBtn?.parentElement;
+    const wfSlot = shellEl.querySelector<HTMLElement>('#vs-prod-workflow-slot');
+    if (vfParent && wfSlot) {
+      moveNode(vfParent as HTMLElement, wfSlot);
+      (vfParent as HTMLElement).style.cssText = 'width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 4px; background: rgba(0,0,0,0.25); border-radius: 6px;';
+    }
+
+    // Proxy Production card button clicks to real application handlers
+    shellEl.querySelector('#vs-prod-save-btn')?.addEventListener('click', () => {
+      document.getElementById('save-project-video-btn')?.click();
+    });
+    shellEl.querySelector('#vs-prod-archive-btn')?.addEventListener('click', () => {
+      document.getElementById('export-project-archive-video-btn')?.click();
+    });
+    shellEl.querySelector('#vs-prod-import-btn')?.addEventListener('click', () => {
+      const impBtn = document.getElementById('import-project-video-btn');
+      if (impBtn) impBtn.click();
+      else document.getElementById('import-project-input')?.click();
+    });
+    shellEl.querySelector('#vs-prod-upload-audio-btn')?.addEventListener('click', () => {
+      const upBtn = document.getElementById('upload-audio-btn');
+      if (upBtn) upBtn.click();
+      else document.getElementById('audio-upload-input')?.click();
+    });
+    shellEl.querySelector('#vs-prod-seq-btn')?.addEventListener('click', () => {
+      document.getElementById('toggle-timeline-btn-modal')?.click();
+    });
+    shellEl.querySelector('#vs-prod-vfx-btn')?.addEventListener('click', () => {
+      document.getElementById('vfx-studio-video-director-btn')?.click();
+    });
 
     // Tabs share one small controller. Every panel remains the original DOM node.
     shellEl.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((btn) => {
@@ -746,8 +823,15 @@ export function activateVsWorkspace(): boolean {
 }
 
 export function deactivateVsWorkspace(): void {
+  const modal = document.getElementById('graphic-editor-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
   restoreAllMovedNodes();
   restoreGraphicsBrowserScaffold();
+  if (modal) {
+    modal.classList.add('hidden');
+  }
   if (shellEl) {
     shellEl.remove();
     shellEl = null;

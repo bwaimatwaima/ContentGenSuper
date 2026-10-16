@@ -17,6 +17,7 @@ import { videoRenderContext, setVideoRenderContext, drawVideoFrame } from './vid
 import { fetchAndPopulateVoices } from './audioPipeline';
 import { sliceAudioBuffer, spliceAudioBuffer } from './audioBufferUtils';
 import { invalidateSpectrumCache } from './graphics-engine';
+import { HyperFramesEngine } from './hyperframes-engine';
 import { saveVersion } from './projectVersioning';
 import { sliceTranscriptForShots } from './timelineBuilder';
 import { openGraphicEditor } from './handlers-graphics';
@@ -2454,10 +2455,19 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
       const ev = (timelineState.graphics || []).find(g => g.id === gId);
       if (ev) {
         timelineState.saveSnapshot();
-        timelineState.setGraphics((timelineState.graphics || []).filter(g => g.id !== gId));
+        const nextGraphics = (timelineState.graphics || []).filter(g => g.id !== gId);
+        timelineState.setGraphics(nextGraphics);
         timelineState.setSelectedGraphicId(null);
+        try {
+          const el = document.getElementById(`hf-clip-${gId}`);
+          if (el) el.remove();
+          HyperFramesEngine.seek(state.lastRenderedTime || state.videoPauseTime || 0, nextGraphics);
+        } catch {}
         ui.renderTimelineEditor();
-        ui.showStatus('🗑️ Deleted SFX clip from timeline.', false, 2000);
+        if (!state.isVideoPlaying) {
+          drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
+        }
+        ui.showStatus('🗑️ Deleted overlay / SFX clip from timeline.', false, 2000);
         return;
       }
     }
@@ -2471,8 +2481,17 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
       });
       if (sfxAtTime) {
         timelineState.saveSnapshot();
-        timelineState.setGraphics((timelineState.graphics || []).filter(g => g.id !== sfxAtTime.id));
+        const nextGraphics = (timelineState.graphics || []).filter(g => g.id !== sfxAtTime.id);
+        timelineState.setGraphics(nextGraphics);
+        try {
+          const el = document.getElementById(`hf-clip-${sfxAtTime.id}`);
+          if (el) el.remove();
+          HyperFramesEngine.seek(state.lastRenderedTime || state.videoPauseTime || 0, nextGraphics);
+        } catch {}
         ui.renderTimelineEditor();
+        if (!state.isVideoPlaying) {
+          drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
+        }
         ui.showStatus('🗑️ Deleted SFX clip under playhead.', false, 2000);
         return;
       }

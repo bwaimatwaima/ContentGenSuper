@@ -986,15 +986,21 @@ export function openGraphicEditor(id?: string, defaultStart?: number) {
     updateGraphicEditorOptions();
     syncPresetChips(dom.geType.value);
     syncMotionGraphicsUI();
-    dom.graphicEditorModal?.classList.remove('hidden');
     if (isVsWorkspaceEnabled()) {
-        // Switch right-hand Inspector in Studio UI directly to the docked Graphic tab
+        // In Studio UI, keep standalone modal wrapper hidden and activate the docked Graphic tab in Right Inspector
+        dom.graphicEditorModal?.classList.add('hidden');
         const graphicInspTab = document.querySelector<HTMLButtonElement>('[data-vs-insp-tab="graphic"]');
-        graphicInspTab?.click();
+        if (graphicInspTab) {
+            graphicInspTab.click();
+        } else {
+            dom.graphicEditorModal?.classList.remove('hidden');
+        }
+    } else {
+        dom.graphicEditorModal?.classList.remove('hidden');
     }
     renderGraphicsList();
     if (!state.isVideoPlaying) {
-        drawVideoFrame(state.lastRenderedTime);
+        drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
     }
 }
 
@@ -1168,9 +1174,8 @@ export function closeGraphicEditor() {
     if (isVsWorkspaceEnabled()) {
         // Return to the Shot tab when closing the graphic inspector in Studio UI
         document.querySelector<HTMLButtonElement>('[data-vs-insp-tab="shot"]')?.click();
-    } else {
-        dom.graphicEditorModal?.classList.add('hidden');
     }
+    dom.graphicEditorModal?.classList.add('hidden');
     currentEditingGraphicId = null;
     (window as any)._currentEditingGraphicId = null;
     renderGraphicsList();
@@ -1497,12 +1502,20 @@ export function deleteGraphicEvent(id: string) {
     const events = (timelineState.graphics || []).filter(g => g.id !== id);
     timelineState.setGraphics(events);
     ui.renderTimelineEditor();
+
+    // Immediately remove DOM node for hyperFrames from preview overlay
+    try {
+      const el = document.getElementById(`hf-clip-${id}`);
+      if (el) el.remove();
+      HyperFramesEngine.seek(state.lastRenderedTime || state.videoPauseTime || 0, events);
+    } catch {}
+
     if (currentEditingGraphicId === id) {
         closeGraphicEditor();
     } else {
         renderGraphicsList();
         if (!state.isVideoPlaying) {
-            drawVideoFrame(state.lastRenderedTime);
+            drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
         }
     }
     ui.showStatus('🗑️ Overlay deleted', false, 2000);
@@ -1558,16 +1571,21 @@ export function applyPresetGalleryFilters() {
   let visibleCount = 0;
 
   for (const card of cards) {
-    const presetId = card.getAttribute('data-gallery-preset') || '';
+    const presetId = card.getAttribute('data-gallery-preset') || card.getAttribute('data-sfx-type') || '';
     const rawCats = (card.getAttribute('data-mg-category') || '')
       .toLowerCase()
       .split(/[\s,]+/)
       .filter(Boolean);
     const searchableText = (card.textContent || '').toLowerCase();
+    const isHfCard = presetId.startsWith('hyperframe:') || rawCats.includes('hyperframe') || rawCats.includes('hyperframes');
+    const isMotionCard = !isHfCard && !card.hasAttribute('data-sfx-type');
 
     const matchesCategory =
       selectedCategory === 'all' ||
-      (selectedCategory === 'favorites' ? favs.has(presetId) : rawCats.includes(selectedCategory));
+      (selectedCategory === 'favorites' ? favs.has(presetId) :
+       selectedCategory === 'hyperframe' ? isHfCard :
+       selectedCategory === 'motion' ? isMotionCard :
+       rawCats.includes(selectedCategory));
 
     const matchesSearch = !query || searchableText.includes(query) || presetId.toLowerCase().includes(query);
     const show = matchesCategory && matchesSearch;
@@ -1608,6 +1626,7 @@ const CATEGORY_ICON_MAP: Record<string, { icon: VsIconName; label: string }> = {
   all: { icon: 'layout-grid', label: 'All Presets' },
   favorites: { icon: 'star', label: 'Favorites' },
   hyperframe: { icon: 'zap', label: 'HyperFrames' },
+  motion: { icon: 'layers', label: 'Motion Graphics' },
   soundfx: { icon: 'volume-2', label: 'Sound FX' },
   ecommerce: { icon: 'shopping-bag', label: 'E-Commerce' },
   viral: { icon: 'flame', label: 'Viral Hooks' },
@@ -1621,17 +1640,24 @@ export function enhanceGraphicsGalleryCards() {
   const tabs = document.getElementById('mg-category-tabs');
   if (!grid) return;
 
-  // 1. Ensure "Favorites" category button exists in #mg-category-tabs
-  if (tabs && !tabs.querySelector('[data-mg-category="favorites"], [data-mg-filter="favorites"]')) {
-    const favTab = document.createElement('button');
-    favTab.type = 'button';
-    favTab.className = 'mg-filter-btn asset-cat';
-    favTab.setAttribute('data-mg-filter', 'favorites');
-    favTab.setAttribute('data-mg-category', 'favorites');
-    favTab.innerHTML = `${vsIcon('star', 13)} <span>Favorites</span>`;
-    const allTab = tabs.querySelector('[data-mg-category="all"], [data-mg-filter="all"]');
-    if (allTab?.nextSibling) tabs.insertBefore(favTab, allTab.nextSibling);
-    else tabs.prepend(favTab);
+  // 1. Ensure "Favorites", "HyperFrames", and "Motion Graphics" category buttons exist in #mg-category-tabs
+  if (tabs) {
+    const ensureCategoryBtn = (catKey: string, icon: VsIconName, label: string) => {
+      if (!tabs.querySelector(`[data-mg-category="${catKey}"], [data-mg-filter="${catKey}"]`)) {
+        const catBtn = document.createElement('button');
+        catBtn.type = 'button';
+        catBtn.className = 'mg-filter-btn asset-cat';
+        catBtn.setAttribute('data-mg-filter', catKey);
+        catBtn.setAttribute('data-mg-category', catKey);
+        catBtn.innerHTML = `${vsIcon(icon, 13)} <span>${label}</span>`;
+        const allTab = tabs.querySelector('[data-mg-category="all"], [data-mg-filter="all"]');
+        if (allTab?.nextSibling) tabs.insertBefore(catBtn, allTab.nextSibling);
+        else tabs.appendChild(catBtn);
+      }
+    };
+    ensureCategoryBtn('favorites', 'star', 'Favorites');
+    ensureCategoryBtn('hyperframe', 'zap', 'HyperFrames');
+    ensureCategoryBtn('motion', 'layers', 'Motion Graphics');
   }
 
   // 2. Upgrade all category tab buttons with crisp Lucide SVGs

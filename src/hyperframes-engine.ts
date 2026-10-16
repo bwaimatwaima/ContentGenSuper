@@ -758,6 +758,15 @@ export class HyperFramesEngine {
       (ev): ev is HyperFrameEvent => ev && ev.type === 'hyperFrame'
     );
 
+    if (hyperEvents.length === 0) {
+      if (container) {
+        container.innerHTML = '';
+      }
+      this.activeNodes.clear();
+      this.playedSfxSet.clear();
+      return;
+    }
+
     const activeIds = new Set<string>();
 
     for (const ev of hyperEvents) {
@@ -832,40 +841,35 @@ export class HyperFramesEngine {
           animTransform = `scale(${eased * scale}) translateY(${(1 - inProgress) * 20}px)`;
         } else if (anim === 'fade-up') {
           const eased = easeOutCubic(inProgress);
-          animTransform = `translateY(${(1 - eased) * 40}px) scale(${scale})`;
+          animTransform = `scale(${scale}) translateY(${(1 - eased) * 40}px)`;
         } else if (anim === 'slide-left') {
           const eased = easeOutCubic(inProgress);
-          animTransform = `translateX(${(1 - eased) * 80}px) scale(${scale})`;
+          animTransform = `scale(${scale}) translateX(${(1 - eased) * -80}px)`;
         } else if (anim === 'scale-pop') {
           const eased = easeOutBack(inProgress);
           animTransform = `scale(${eased * scale})`;
         } else if (anim === 'blur-in') {
-          const eased = easeOutCubic(inProgress);
-          filter += `blur(${(1 - eased) * 12}px) `;
+          filter += `blur(${(1 - inProgress) * 12}px) `;
           animTransform = `scale(${scale})`;
         } else if (anim === 'flip-x') {
-          const eased = easeOutCubic(inProgress);
-          animTransform = `perspective(800px) rotateX(${(1 - eased) * 75}deg) scale(${scale})`;
+          const rot = (1 - inProgress) * 90;
+          animTransform = `perspective(600px) rotateX(${rot}deg) scale(${scale})`;
         } else {
           animTransform = `scale(${scale})`;
         }
       } else if (outProgress < 1.0) {
         // Exiting phase
-        const anim = ev.animationOut || 'scale-down';
+        const anim = ev.animationOut || 'fade-down';
         opacity = outProgress;
 
-        if (anim === 'scale-down') {
-          const eased = 1 - easeOutCubic(1 - outProgress);
-          animTransform = `scale(${eased * scale})`;
-        } else if (anim === 'fade-down') {
-          const eased = 1 - easeOutCubic(1 - outProgress);
-          animTransform = `translateY(${(1 - eased) * 35}px) scale(${scale})`;
+        if (anim === 'fade-down') {
+          animTransform = `scale(${scale}) translateY(${(1 - outProgress) * 30}px)`;
         } else if (anim === 'slide-right') {
-          const eased = 1 - easeOutCubic(1 - outProgress);
-          animTransform = `translateX(${(1 - eased) * 70}px) scale(${scale})`;
+          animTransform = `scale(${scale}) translateX(${(1 - outProgress) * 60}px)`;
+        } else if (anim === 'scale-down') {
+          animTransform = `scale(${outProgress * scale})`;
         } else if (anim === 'blur-out') {
-          const eased = 1 - easeOutCubic(1 - outProgress);
-          filter += `blur(${(1 - eased) * 12}px) `;
+          filter += `blur(${(1 - outProgress) * 12}px) `;
           animTransform = `scale(${scale})`;
         } else {
           animTransform = `scale(${scale})`;
@@ -906,28 +910,24 @@ export class HyperFramesEngine {
       node.style.display = 'block';
     }
 
-    // Clean up inactive nodes
+    // Clean up inactive nodes:
+    // If an event is no longer in hyperEvents (e.g. DELETED) or not visible at current time, remove it from DOM!
     for (const [id, node] of this.activeNodes.entries()) {
       if (!activeIds.has(id)) {
         node.style.display = 'none';
+        node.remove();
+        this.activeNodes.delete(id);
       }
     }
   }
 
-  /**
-   * Helper to set CSS positioning based on preset position anchor or custom coords
-   */
   private static applyNodePositioning(node: HTMLElement, ev: HyperFrameEvent) {
     const pos = ev.position || 'bottom';
-    
     // Clear previously set position styles
     node.style.top = '';
     node.style.bottom = '';
     node.style.left = '';
     node.style.right = '';
-    node.style.maxWidth = '92%';
-    node.style.boxSizing = 'border-box';
-    node.style.transformOrigin = 'center center';
 
     if (pos === 'custom' && ev.customX !== undefined && ev.customY !== undefined) {
       node.style.left = `${ev.customX * 100}%`;
@@ -948,6 +948,7 @@ export class HyperFramesEngine {
         node.style.transformOrigin = 'top center';
         break;
       case 'bottom':
+      default:
         node.style.bottom = '10%';
         node.style.left = '50%';
         node.style.transformOrigin = 'bottom center';

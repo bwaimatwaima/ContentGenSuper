@@ -3304,12 +3304,17 @@ export function drawGraphics(
     graphicsAccentColor?: string;
   }
 ) {
-  if (!events || events.length === 0) return;
+  const isExporting = options?.isExporting ?? (typeof state !== 'undefined' ? state.isExporting : true);
+  if (!events || events.length === 0) {
+    if (typeof document !== 'undefined' && !isExporting) {
+      HyperFramesEngine.seek(time, []);
+    }
+    return;
+  }
 
   if (options?.graphicsAccentColor) {
     currentGlobalAccent = options.graphicsAccentColor;
   }
-  const isExporting = options?.isExporting ?? (typeof state !== 'undefined' ? state.isExporting : true);
 
   const editingId = (typeof window !== 'undefined' && (window as any)._currentEditingGraphicId) || null;
   const draggingId = (typeof window !== 'undefined' && (window as any)._draggingGraphicId) || null;

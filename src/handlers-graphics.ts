@@ -14,6 +14,8 @@ import { syncMotionGraphicsUI } from './handlers-settings';
 import { getAllStoryboardShots } from './handlers-inspector';
 import { t0, t1 } from './perfMonitor';
 import { markInteraction, scheduleFullQualityRedraw } from './interaction';
+import { vsIcon, type VsIconName } from './ui-icons';
+import { isVsWorkspaceEnabled } from './director-workspace';
 
 let currentEditingGraphicId: string | null = null;
 let currentCustomImageUrl: string | null = null;
@@ -215,6 +217,10 @@ export function renderGraphicsList() {
     if (countBadge) {
         countBadge.textContent = events.length.toString();
     }
+    const subtabCountBadge = document.getElementById('vs-mg-layers-count');
+    if (subtabCountBadge) {
+        subtabCountBadge.textContent = events.length.toString();
+    }
 
     const curPlayhead = (state.lastRenderedTime !== undefined && state.lastRenderedTime >= 0)
         ? state.lastRenderedTime
@@ -225,69 +231,58 @@ export function renderGraphicsList() {
         const s = (curPlayhead % 60).toFixed(1);
         playheadDisplay.textContent = `${m}:${s.padStart(4, '0')}`;
     }
-    
-    // If the panel is hidden, skip expensive DOM rebuild of all items
+
     if (!isPanelVisible) return;
 
     if (events.length === 0) {
-        dom.graphicsListContainer.innerHTML = '<div class="text-gray-500 text-center py-6 text-xs bg-gray-950/40 rounded-xl border border-dashed border-gray-800">No motion graphics on timeline yet. Click any preset card above or use \'Auto-Direct Overlays\'.</div>';
+        dom.graphicsListContainer.innerHTML = `
+            <div class="vs-mg-empty-layers">
+                ${vsIcon('layers', 20)}
+                <p>No motion graphics on timeline yet.</p>
+                <span>Click any preset tile in Presets or use Auto-Direct Overlays.</span>
+            </div>`;
         return;
     }
-    
+
     dom.graphicsListContainer.innerHTML = '';
-    
-    // Do not sort by start time, so we preserve Z-order (array order).
-    // Display in reverse order so highest Z (drawn last) is at the top of the list.
     const displayEvents = [...events].reverse();
-    
+
     displayEvents.forEach((ev, displayIdx) => {
         const actualIdx = events.length - 1 - displayIdx;
         const div = document.createElement('div');
         const isActive = currentEditingGraphicId === ev.id;
-        div.className = `rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all ${isActive ? 'bg-teal-950/70 border border-teal-500/80 shadow-md ring-1 ring-teal-500/40' : 'bg-gray-950/70 hover:bg-gray-850/80 border border-gray-800'}`;
-        
-        const typeLabel = getGraphicTypeLabel(ev.type);
+        div.className = `vs-layer-item ${isActive ? 'active' : ''}`;
+
+        const typeLabel = getGraphicTypeLabel(ev.type).replace(/[^\w]+/g, '').trim();
         const isHyperFrame = ev.type === 'hyperFrame';
         const isAudioReactive = (ev as any).audioReactive !== false;
         const animLabel = (ev as any).animationIn || (ev as any).animationType || 'fade';
         const displayTitle = ev.title ? ev.title : (ev.type === 'iconOverlay' ? 'Icon Overlay' : 'Untitled Graphic');
         const duration = Math.max(0.1, ev.end - ev.start).toFixed(1);
-        
+
         div.innerHTML = `
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${isHyperFrame ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-teal-500/20 text-teal-300 border border-teal-500/30'}">${typeLabel}</span>
-                    <span class="text-xs font-mono text-gray-300 bg-black/40 px-1.5 py-0.5 rounded border border-white/5">${ev.start.toFixed(1)}s — ${ev.end.toFixed(1)}s (${duration}s)</span>
-                    <span class="text-[10px] text-gray-400 font-mono flex items-center gap-1">
-                        <span>⚡ ${animLabel}</span>
-                        ${isAudioReactive ? '<span class="text-teal-400">· 🎵 Audio Sync</span>' : ''}
-                    </span>
+            <div class="vs-layer-head">
+                <span class="vs-layer-index">${actualIdx + 1}</span>
+                <div class="vs-layer-title-wrap">
+                    <span class="vs-layer-name">${displayTitle}</span>
+                    ${ev.subtitle ? `<span class="vs-layer-sub">${ev.subtitle}</span>` : ''}
                 </div>
-                <div class="text-white text-xs mt-1 font-semibold truncate max-w-full sm:max-w-[340px] md:max-w-[420px] flex items-center gap-1.5">
-                    <span>${displayTitle}</span>
-                    ${ev.subtitle ? `<span class="text-gray-400 font-normal">(${ev.subtitle})</span>` : ''}
-                </div>
+                <span class="vs-layer-type-badge ${isHyperFrame ? 'is-hf' : ''}">${typeLabel}</span>
             </div>
-            <div class="flex items-center gap-1.5 shrink-0">
-                <div class="flex gap-0.5 mr-1 bg-black/30 p-0.5 rounded-lg border border-white/5">
-                    <button class="up-btn text-gray-400 hover:text-teal-300 p-1 text-xs rounded hover:bg-white/10 transition cursor-pointer" ${actualIdx === events.length - 1 ? 'disabled style="opacity:0.25"' : ''} title="Move Forward in Layer Stack (Higher Z-Order)">▲</button>
-                    <button class="down-btn text-gray-400 hover:text-teal-300 p-1 text-xs rounded hover:bg-white/10 transition cursor-pointer" ${actualIdx === 0 ? 'disabled style="opacity:0.25"' : ''} title="Move Backward in Layer Stack (Lower Z-Order)">▼</button>
+            <div class="vs-layer-meta-row">
+                <span class="vs-layer-time">${ev.start.toFixed(1)}s - ${ev.end.toFixed(1)}s (${duration}s)</span>
+                <span class="vs-layer-anim">${vsIcon('zap', 11)} ${animLabel}${isAudioReactive ? ' · Audio Sync' : ''}</span>
+                <div class="vs-layer-actions">
+                    <button type="button" class="up-btn vs-layer-btn" ${actualIdx === events.length - 1 ? 'disabled' : ''} title="Move Forward in Layer Stack (Higher Z-Order)">▲</button>
+                    <button type="button" class="down-btn vs-layer-btn" ${actualIdx === 0 ? 'disabled' : ''} title="Move Backward in Layer Stack (Lower Z-Order)">▼</button>
+                    <button type="button" class="snap-btn vs-layer-btn" title="Snap start time to playhead">${vsIcon('crosshair', 12)}</button>
+                    <button type="button" class="dup-btn vs-layer-btn" title="Duplicate overlay">${vsIcon('copy', 13)}</button>
+                    <button type="button" class="edit-btn vs-layer-btn" title="Edit in Inspector">${vsIcon('sliders', 13)}</button>
+                    <button type="button" class="delete-btn vs-layer-btn is-danger" title="Delete overlay">${vsIcon('trash-2', 13)}</button>
                 </div>
-                <button class="snap-btn text-amber-300 hover:text-amber-200 text-xs font-semibold px-2 py-1 bg-amber-950/40 hover:bg-amber-900/60 rounded-lg border border-amber-700/50 transition cursor-pointer flex items-center gap-1" title="Snap start time to current video playhead">
-                    <span>🎯</span>
-                </button>
-                <button class="dup-btn text-indigo-300 hover:text-indigo-200 text-xs font-semibold px-2 py-1 bg-indigo-950/40 hover:bg-indigo-900/60 rounded-lg border border-indigo-700/50 transition cursor-pointer flex items-center gap-1" title="Duplicate overlay">
-                    <span>📑</span>
-                </button>
-                <button class="edit-btn text-teal-300 hover:text-teal-200 text-xs font-semibold px-2.5 py-1 bg-teal-950/50 hover:bg-teal-900/70 rounded-lg border border-teal-700/50 transition cursor-pointer">
-                    Edit
-                </button>
-                <button class="delete-btn text-red-400 hover:text-red-300 text-xs font-semibold px-2 py-1 bg-red-950/40 hover:bg-red-900/60 rounded-lg border border-red-800/50 transition cursor-pointer" title="Delete overlay">
-                    ✕
-                </button>
             </div>
         `;
-        
+
         div.addEventListener('click', (e) => {
             if ((e.target as HTMLElement).closest('button')) return;
             openGraphicEditor(ev.id);
@@ -340,7 +335,7 @@ export function renderGraphicsList() {
                 if (!state.isVideoPlaying) drawVideoFrame(state.lastRenderedTime);
             }
         });
-        
+
         dom.graphicsListContainer.appendChild(div);
     });
 }
@@ -992,6 +987,11 @@ export function openGraphicEditor(id?: string, defaultStart?: number) {
     syncPresetChips(dom.geType.value);
     syncMotionGraphicsUI();
     dom.graphicEditorModal?.classList.remove('hidden');
+    if (isVsWorkspaceEnabled()) {
+        // Switch right-hand Inspector in Studio UI directly to the docked Graphic tab
+        const graphicInspTab = document.querySelector<HTMLButtonElement>('[data-vs-insp-tab="graphic"]');
+        graphicInspTab?.click();
+    }
     renderGraphicsList();
     if (!state.isVideoPlaying) {
         drawVideoFrame(state.lastRenderedTime);
@@ -1165,7 +1165,12 @@ export function updateGraphicEditorOptions() {
 }
 
 export function closeGraphicEditor() {
-    dom.graphicEditorModal?.classList.add('hidden');
+    if (isVsWorkspaceEnabled()) {
+        // Return to the Shot tab when closing the graphic inspector in Studio UI
+        document.querySelector<HTMLButtonElement>('[data-vs-insp-tab="shot"]')?.click();
+    } else {
+        dom.graphicEditorModal?.classList.add('hidden');
+    }
     currentEditingGraphicId = null;
     (window as any)._currentEditingGraphicId = null;
     renderGraphicsList();
@@ -1540,7 +1545,11 @@ export function applyPresetGalleryFilters() {
 
   const activeBtn = tabsContainer?.querySelector<HTMLElement>(
     '[aria-current="true"], .active, .on, [data-active="true"]'
-  ) || document.querySelector<HTMLElement>('.mg-filter-btn.active, .mg-filter-btn.on, .mg-filter-btn[aria-current="true"]');
+  ) || (
+    document.querySelector<HTMLElement>('.mg-filter-btn.active, .mg-filter-btn.on, .mg-filter-btn[aria-current="true"]')
+  ) || (
+    tabsContainer?.querySelector<HTMLElement>('.mg-filter-btn') || null
+  );
   const selectedCategory = (activeBtn?.getAttribute('data-mg-category') || activeBtn?.getAttribute('data-mg-filter') || 'all').toLowerCase().trim();
   const query = (searchInput?.value || '').toLowerCase().trim();
   const favs = getFavoritePresets();
@@ -1595,25 +1604,52 @@ export function applyPresetGalleryFilters() {
  * video-studio's ★ favorite toggle and + add-at-playhead badge without breaking
  * delegated click handlers on gallery cards.
  */
+const CATEGORY_ICON_MAP: Record<string, { icon: VsIconName; label: string }> = {
+  all: { icon: 'layout-grid', label: 'All Presets' },
+  favorites: { icon: 'star', label: 'Favorites' },
+  hyperframe: { icon: 'zap', label: 'HyperFrames' },
+  soundfx: { icon: 'volume-2', label: 'Sound FX' },
+  ecommerce: { icon: 'shopping-bag', label: 'E-Commerce' },
+  viral: { icon: 'flame', label: 'Viral Hooks' },
+  data: { icon: 'bar-chart-2', label: 'Data & KPIs' },
+  broadcast: { icon: 'tv', label: 'Broadcast' },
+};
+
 export function enhanceGraphicsGalleryCards() {
+  const panel = document.getElementById('motion-graphics-panel');
   const grid = document.getElementById('mg-preset-grid');
   const tabs = document.getElementById('mg-category-tabs');
   if (!grid) return;
 
-  // Ensure "Favorites" category button exists in #mg-category-tabs
+  // 1. Ensure "Favorites" category button exists in #mg-category-tabs
   if (tabs && !tabs.querySelector('[data-mg-category="favorites"], [data-mg-filter="favorites"]')) {
     const favTab = document.createElement('button');
     favTab.type = 'button';
-    favTab.className = 'mg-filter-btn';
+    favTab.className = 'mg-filter-btn asset-cat';
     favTab.setAttribute('data-mg-filter', 'favorites');
     favTab.setAttribute('data-mg-category', 'favorites');
-    favTab.innerHTML = `★ Favorites`;
+    favTab.innerHTML = `${vsIcon('star', 13)} <span>Favorites</span>`;
     const allTab = tabs.querySelector('[data-mg-category="all"], [data-mg-filter="all"]');
     if (allTab?.nextSibling) tabs.insertBefore(favTab, allTab.nextSibling);
     else tabs.prepend(favTab);
   }
 
-  // Sync aria-current & on/active class on category click
+  // 2. Upgrade all category tab buttons with crisp Lucide SVGs
+  if (tabs) {
+    tabs.querySelectorAll<HTMLElement>('.mg-filter-btn').forEach((btn) => {
+      if (btn.dataset.vsIconUpgraded === '1') return;
+      btn.dataset.vsIconUpgraded = '1';
+      const filterKey = (btn.getAttribute('data-mg-filter') || btn.getAttribute('data-mg-category') || 'all').toLowerCase();
+      const spec = CATEGORY_ICON_MAP[filterKey];
+      if (spec) {
+        const countMatch = (btn.textContent || '').match(/\((\d+)\)/);
+        const countHtml = countMatch ? `<span class="vs-cat-count">${countMatch[1]}</span>` : '';
+        btn.innerHTML = `<span class="vs-cat-label">${vsIcon(spec.icon, 13)}<span>${spec.label}</span></span>${countHtml}`;
+      }
+    });
+  }
+
+  // 3. Sync aria-current & on/active class on category click
   if (tabs && !tabs.dataset.vsBound) {
     tabs.dataset.vsBound = '1';
     tabs.addEventListener('click', (e) => {
@@ -1629,29 +1665,127 @@ export function enhanceGraphicsGalleryCards() {
     });
   }
 
+  // 4. Mount Video Studio Sub-Tabs (Presets | AI Create | Layers [N]) inside #motion-graphics-panel
+  if (panel && !panel.querySelector('#vs-mg-subtabs')) {
+    const aiBox = document.getElementById('mg-ai-prompt-input')?.closest<HTMLElement>('.bg-gray-950\\/70');
+    const layersBox = document.getElementById('graphics-list-container')?.parentElement as HTMLElement | null;
+    const searchInput = document.getElementById('mg-preset-search');
+    const searchWrap = searchInput?.parentElement;
+    if (searchWrap && !searchWrap.querySelector('.vs-svg-icon')) {
+      const emojiSpan = searchWrap.querySelector('span');
+      if (emojiSpan) emojiSpan.innerHTML = vsIcon('search', 13);
+    }
+
+    const subtabBar = document.createElement('div');
+    subtabBar.id = 'vs-mg-subtabs';
+    subtabBar.className = 'vs-mg-subtabs';
+    subtabBar.setAttribute('role', 'tablist');
+    const currentCount = (timelineState.graphics || []).length;
+    subtabBar.innerHTML = `
+      <button type="button" role="tab" aria-selected="true" class="vs-mg-subtab active" data-mg-subtab="presets">
+        ${vsIcon('layout-grid', 13)} <span>Presets</span>
+      </button>
+      <button type="button" role="tab" aria-selected="false" class="vs-mg-subtab" data-mg-subtab="ai">
+        ${vsIcon('sparkles', 13)} <span>AI Create</span>
+      </button>
+      <button type="button" role="tab" aria-selected="false" class="vs-mg-subtab" data-mg-subtab="layers">
+        ${vsIcon('layers', 13)} <span>Layers</span><span id="vs-mg-layers-count" class="vs-mg-badge">${currentCount}</span>
+      </button>
+    `;
+
+    const firstInner = panel.firstElementChild as HTMLElement | null;
+    const headerRow = firstInner?.firstElementChild as HTMLElement | null;
+    if (firstInner && headerRow) {
+      firstInner.insertBefore(subtabBar, headerRow.nextSibling);
+    }
+
+    const setSubtab = (mode: 'presets' | 'ai' | 'layers') => {
+      panel.dataset.mgSubtab = mode;
+      subtabBar.querySelectorAll<HTMLButtonElement>('[data-mg-subtab]').forEach((b) => {
+        const on = b.dataset.mgSubtab === mode;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', String(on));
+      });
+      const currentAiBox = document.getElementById('mg-ai-prompt-box') || document.getElementById('mg-ai-prompt-input')?.closest<HTMLElement>('.bg-gray-950\\/70') || (document.getElementById('mg-ai-prompt-input')?.parentElement?.parentElement as HTMLElement | null);
+      const currentLayersBox = document.getElementById('graphics-list-container')?.parentElement as HTMLElement | null;
+      if (currentAiBox) currentAiBox.classList.toggle('vs-subtab-hidden', mode !== 'ai');
+      if (currentLayersBox) currentLayersBox.classList.toggle('vs-subtab-hidden', mode !== 'layers');
+      grid.classList.toggle('vs-subtab-hidden', mode !== 'presets');
+      const catRow = tabs?.parentElement;
+      if (catRow) catRow.classList.toggle('vs-subtab-hidden', mode !== 'presets');
+      const wsLayout = document.getElementById('vs-mg-workspace-layout');
+      if (wsLayout) {
+        const sidebar = wsLayout.querySelector<HTMLElement>('.vs-mg-sidebar');
+        const toolbar = wsLayout.querySelector<HTMLElement>('.vs-mg-toolbar');
+        if (sidebar) sidebar.classList.toggle('vs-subtab-hidden', mode !== 'presets');
+        if (toolbar) toolbar.classList.toggle('vs-subtab-hidden', mode !== 'presets');
+      }
+      if (mode === 'layers') renderGraphicsList();
+    };
+
+    subtabBar.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-mg-subtab]');
+      if (!btn) return;
+      setSubtab((btn.dataset.mgSubtab as 'presets' | 'ai' | 'layers') || 'presets');
+    });
+
+    setSubtab('presets');
+  }
+
+  // 5. Enhance each card with Video Studio .tile-fav (★), .tile-plus (+), and clean footer label
   const favs = getFavoritePresets();
   grid.querySelectorAll<HTMLElement>('.graphic-preset-card, .mg-card').forEach((card) => {
-    const presetId = card.getAttribute('data-gallery-preset');
+    const presetId = card.getAttribute('data-gallery-preset') || card.getAttribute('data-sfx-type');
     if (!presetId) return;
 
+    const titleEl = card.querySelector('h4');
+    const titleText = titleEl?.textContent?.trim() || presetId;
+    const isSfx = card.hasAttribute('data-sfx-type');
+    const isHf = presetId.startsWith('hyperframe:');
+
+    if (card.dataset.vsEnhanced !== '1') {
+      card.dataset.vsEnhanced = '1';
+
+      // Extract or create compact footer label
+      let metaBar = card.querySelector<HTMLElement>('.vs-tile-meta');
+      if (!metaBar) {
+        metaBar = document.createElement('div');
+        metaBar.className = 'vs-tile-meta';
+        const kindBadge = isSfx ? 'SFX' : isHf ? 'HF' : 'GFX';
+        metaBar.innerHTML = `
+          <span class="tile-label" title="${titleText}">${titleText}</span>
+          <span class="vs-tile-kind ${isSfx ? 'is-sfx' : isHf ? 'is-hf' : ''}">${kindBadge}</span>
+        `;
+        card.appendChild(metaBar);
+      }
+    }
+
     let favBtn = card.querySelector<HTMLElement>('.mg-fav-btn, .tile-fav');
-    if (!favBtn && card.dataset.vsEnhanced !== '1') {
+    if (!favBtn) {
       const buttonEl = document.createElement('button');
       buttonEl.type = 'button';
       buttonEl.className = `tile-fav mg-fav-btn ${favs.has(presetId) ? 'on' : ''}`;
       buttonEl.title = 'Toggle favorite';
       buttonEl.setAttribute('aria-label', 'Favorite preset');
-      buttonEl.textContent = '★';
+      buttonEl.innerHTML = vsIcon('star', 12);
       favBtn = buttonEl;
       card.prepend(favBtn);
     }
-    card.dataset.vsEnhanced = '1';
+
+    let plusBtn = card.querySelector<HTMLElement>('.tile-plus');
+    if (!plusBtn) {
+      plusBtn = document.createElement('span');
+      plusBtn.className = 'tile-plus';
+      plusBtn.title = isSfx ? 'Add SFX at Playhead' : 'Drop Graphic at Playhead';
+      plusBtn.innerHTML = vsIcon('plus', 12);
+      card.prepend(plusBtn);
+    }
 
     if (favBtn && !favBtn.dataset.vsBound) {
       favBtn.dataset.vsBound = '1';
       favBtn.classList.toggle('on', favs.has(presetId));
       favBtn.addEventListener('click', (ev) => {
-        ev.stopPropagation(); // Do not trigger dropGraphicAtPlayhead() when starring
+        ev.stopPropagation();
         const on = toggleFavoritePreset(presetId);
         favBtn!.classList.toggle('on', on);
         applyPresetGalleryFilters();
@@ -1660,6 +1794,35 @@ export function enhanceGraphicsGalleryCards() {
   });
 
   initGraphicPresetCanvasPreviews();
+  syncQuickGraphicPresetsMenu();
+}
+
+/**
+ * Keeps the Classic Director floating menu (#video-graphic-presets-menu) synced
+ * with all presets from #mg-preset-grid and routes Studio UI clicks directly to the left Graphics browser.
+ */
+function syncQuickGraphicPresetsMenu() {
+  const addBtn = dom.videoAddGraphicBtn;
+  const menu = dom.videoGraphicPresetsMenu;
+  const grid = document.getElementById('mg-preset-grid');
+  if (!addBtn || !menu || !grid || menu.dataset.vsSynced === '1') return;
+  menu.dataset.vsSynced = '1';
+
+  // When Studio UI is active, clicking "+ Add Overlay" focuses the left Graphics browser
+  addBtn.addEventListener(
+    'click',
+    (e) => {
+      if (isVsWorkspaceEnabled()) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        menu.classList.add('hidden');
+        document.querySelector<HTMLButtonElement>('[data-vs-left-tab="graphics"]')?.click();
+        document.querySelector<HTMLButtonElement>('[data-mg-subtab="presets"]')?.click();
+        (document.getElementById('mg-preset-search') as HTMLInputElement | null)?.focus();
+      }
+    },
+    true
+  );
 }
 
 /**
@@ -2065,6 +2228,115 @@ let isDraggingGraphic = false;
 let startDragX = 0;
 let startDragY = 0;
 
+export function toggleAiDirectorDropdown(forceOpen?: boolean) {
+    const btn = document.getElementById('timeline-ai-director-menu-btn');
+    const dd = document.getElementById('timeline-ai-director-dropdown');
+    const arrow = document.getElementById('timeline-ai-director-arrow');
+    if (!dd || !btn) return;
+
+    if (dd.parentElement !== document.body) {
+        document.body.appendChild(dd);
+    }
+
+    const currentlyVisible = dd.style.display === 'block' && !dd.classList.contains('hidden');
+    const shouldOpen = forceOpen !== undefined ? forceOpen : !currentlyVisible;
+
+    if (shouldOpen) {
+        const rhythmSelect = dd.querySelector<HTMLSelectElement>('#timeline-aroll-rhythm-select');
+        if (rhythmSelect && !rhythmSelect.children.length) {
+            import('./masterAudioDirector').then(m => m.populateRhythmTemplateSelectors?.()).catch(() => {});
+        }
+
+        const rect = btn.getBoundingClientRect();
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+        const menuWidth = 330;
+
+        dd.classList.remove('hidden');
+        dd.style.position = 'fixed';
+        dd.style.zIndex = '100000';
+        dd.style.display = 'block';
+
+        const left = Math.max(12, Math.min(viewportW - menuWidth - 12, rect.left));
+        dd.style.left = `${left}px`;
+        dd.style.right = 'auto';
+
+        const spaceAbove = rect.top;
+        const spaceBelow = viewportH - rect.bottom;
+
+        if (spaceAbove >= 280 || spaceAbove >= spaceBelow) {
+            const maxH = Math.min(540, Math.max(200, spaceAbove - 20));
+            dd.style.maxHeight = `${maxH}px`;
+            dd.style.bottom = `${Math.max(10, viewportH - rect.top + 8)}px`;
+            dd.style.top = 'auto';
+        } else {
+            const maxH = Math.min(540, Math.max(200, spaceBelow - 20));
+            dd.style.maxHeight = `${maxH}px`;
+            dd.style.top = `${rect.bottom + 8}px`;
+            dd.style.bottom = 'auto';
+        }
+
+        arrow?.classList.add('rotate-180');
+    } else {
+        dd.classList.add('hidden');
+        dd.style.display = 'none';
+        arrow?.classList.remove('rotate-180');
+    }
+}
+
+export function closeAiDirectorDropdown() {
+    toggleAiDirectorDropdown(false);
+}
+
+export function toggleTimelineSfxDropdown(forceOpen?: boolean) {
+    const btn = document.getElementById('timeline-add-sfx-btn');
+    const dd = document.getElementById('timeline-sfx-dropdown');
+    if (!dd || !btn) return;
+
+    if (dd.parentElement !== document.body) {
+        document.body.appendChild(dd);
+    }
+
+    const currentlyVisible = dd.style.display === 'block' && !dd.classList.contains('hidden');
+    const shouldOpen = forceOpen !== undefined ? forceOpen : !currentlyVisible;
+
+    if (shouldOpen) {
+        const rect = btn.getBoundingClientRect();
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+        const menuWidth = 240;
+
+        dd.classList.remove('hidden');
+        dd.style.position = 'fixed';
+        dd.style.zIndex = '100000';
+        dd.style.display = 'block';
+
+        const left = Math.max(10, Math.min(viewportW - menuWidth - 10, rect.left));
+        dd.style.left = `${left}px`;
+        dd.style.right = 'auto';
+
+        const spaceAbove = rect.top;
+        const spaceBelow = viewportH - rect.bottom;
+
+        if (spaceAbove >= 220 || spaceAbove >= spaceBelow) {
+            dd.style.maxHeight = `${Math.min(420, spaceAbove - 16)}px`;
+            dd.style.bottom = `${Math.max(10, viewportH - rect.top + 8)}px`;
+            dd.style.top = 'auto';
+        } else {
+            dd.style.maxHeight = `${Math.min(420, spaceBelow - 16)}px`;
+            dd.style.top = `${rect.bottom + 8}px`;
+            dd.style.bottom = 'auto';
+        }
+    } else {
+        dd.classList.add('hidden');
+        dd.style.display = 'none';
+    }
+}
+
+export function closeTimelineSfxDropdown() {
+    toggleTimelineSfxDropdown(false);
+}
+
 export function setupCanvasInteraction() {
     if (dom.timelineAddOverlayBtn) {
         dom.timelineAddOverlayBtn.addEventListener('click', () => {
@@ -2119,20 +2391,7 @@ export function setupCanvasInteraction() {
         if (aiDirectorToggle) {
             e.preventDefault();
             e.stopPropagation();
-            const dd = document.getElementById('timeline-ai-director-dropdown');
-            const arrow = document.getElementById('timeline-ai-director-arrow');
-            if (dd) {
-                const isHidden = dd.classList.toggle('hidden');
-                if (!isHidden) {
-                    const rect = aiDirectorToggle.getBoundingClientRect();
-                    dd.style.position = 'fixed';
-                    dd.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 8)}px`;
-                    dd.style.left = `${Math.max(10, Math.min(window.innerWidth - 330, rect.left))}px`;
-                }
-                if (arrow) {
-                    arrow.classList.toggle('rotate-180', !isHidden);
-                }
-            }
+            toggleAiDirectorDropdown();
             return;
         }
 
@@ -2140,17 +2399,15 @@ export function setupCanvasInteraction() {
         const closeAiDirectorBtn = target.closest('#close-ai-director-dropdown-btn');
         if (closeAiDirectorBtn) {
             e.preventDefault();
-            document.getElementById('timeline-ai-director-dropdown')?.classList.add('hidden');
-            document.getElementById('timeline-ai-director-arrow')?.classList.remove('rotate-180');
+            closeAiDirectorDropdown();
             return;
         }
 
         // Close AI Director Dropdown on outside click
         const aiDirectorDropdown = document.getElementById('timeline-ai-director-dropdown');
-        if (aiDirectorDropdown && !aiDirectorDropdown.classList.contains('hidden')) {
+        if (aiDirectorDropdown && (aiDirectorDropdown.style.display === 'block' || !aiDirectorDropdown.classList.contains('hidden'))) {
             if (!target.closest('#timeline-ai-director-dropdown') && !target.closest('#timeline-ai-director-menu-btn')) {
-                aiDirectorDropdown.classList.add('hidden');
-                document.getElementById('timeline-ai-director-arrow')?.classList.remove('rotate-180');
+                closeAiDirectorDropdown();
             }
         }
 
@@ -2171,8 +2428,7 @@ export function setupCanvasInteraction() {
         const btn = target.closest('#timeline-autodirect-overlays-btn, #autodirect-graphics-btn, [data-action="autodirect-overlays"]');
         if (btn) {
             e.preventDefault();
-            document.getElementById('timeline-ai-director-dropdown')?.classList.add('hidden');
-            document.getElementById('timeline-ai-director-arrow')?.classList.remove('rotate-180');
+            closeAiDirectorDropdown();
             autoGenerateGraphics(false, true);
             return;
         }
@@ -2180,8 +2436,7 @@ export function setupCanvasInteraction() {
         const polishBtn = target.closest('#timeline-magic-polish-btn, #director-review-btn');
         if (polishBtn) {
             e.preventDefault();
-            document.getElementById('timeline-ai-director-dropdown')?.classList.add('hidden');
-            document.getElementById('timeline-ai-director-arrow')?.classList.remove('rotate-180');
+            closeAiDirectorDropdown();
             import('./videoDirector').then(m => m.handleDirectorReviewLoop());
             return;
         }
@@ -2378,7 +2633,7 @@ export function setupCanvasInteraction() {
             const sfxType = (quickSfxBtn.getAttribute('data-sfx') || 'whoosh') as ProceduralSfxType;
             AudioSynthesizer.getInstance().playSfx(sfxType, 0.6);
             dropSfxCueAtPlayhead(sfxType);
-            document.getElementById('timeline-sfx-dropdown')?.classList.add('hidden');
+            closeTimelineSfxDropdown();
             return;
         }
 
@@ -2387,22 +2642,16 @@ export function setupCanvasInteraction() {
         if (addSfxMenuBtn) {
             e.preventDefault();
             e.stopPropagation();
-            const dropdown = document.getElementById('timeline-sfx-dropdown');
-            if (dropdown) {
-                const isHidden = dropdown.classList.toggle('hidden');
-                if (!isHidden) {
-                    const rect = addSfxMenuBtn.getBoundingClientRect();
-                    dropdown.style.position = 'fixed';
-                    dropdown.style.bottom = `${Math.max(10, window.innerHeight - rect.top + 8)}px`;
-                    dropdown.style.left = `${Math.max(10, Math.min(window.innerWidth - 240, rect.left))}px`;
-                }
-            }
+            toggleTimelineSfxDropdown();
             return;
         }
 
         // Close timeline SFX dropdown when clicking outside
-        if (!target.closest('#timeline-add-sfx-menu-container')) {
-            document.getElementById('timeline-sfx-dropdown')?.classList.add('hidden');
+        const sfxDropdown = document.getElementById('timeline-sfx-dropdown');
+        if (sfxDropdown && (sfxDropdown.style.display === 'block' || !sfxDropdown.classList.contains('hidden'))) {
+            if (!target.closest('#timeline-sfx-dropdown') && !target.closest('#timeline-add-sfx-btn')) {
+                closeTimelineSfxDropdown();
+            }
         }
 
         // Standalone SFX Card in Preset Grid
@@ -2827,61 +3076,7 @@ User Request: "${prompt}"`
         });
     });
 
-    if (dom.timelineActionSplitBtn) {
-        dom.timelineActionSplitBtn.addEventListener('click', () => {
-            handleSplitClip();
-        });
-    }
-    if (dom.timelineActionTrimStartBtn) {
-        dom.timelineActionTrimStartBtn.addEventListener('click', () => {
-            handleTrimClip('start');
-        });
-    }
-    if (dom.timelineActionTrimEndBtn) {
-        dom.timelineActionTrimEndBtn.addEventListener('click', () => {
-            handleTrimClip('end');
-        });
-    }
-    if (dom.timelineActionRippleDeleteBtn) {
-        dom.timelineActionRippleDeleteBtn.addEventListener('click', () => {
-            handleDeleteClip({ deleteAudio: true });
-        });
-    }
-    if (dom.timelineActionTrimSilenceBtn) {
-        dom.timelineActionTrimSilenceBtn.addEventListener('click', () => {
-            handleTrimDeadAir();
-        });
-    }
-    if (dom.timelineActionResyncBtn) {
-        dom.timelineActionResyncBtn.addEventListener('click', () => {
-            handleResyncTimeline();
-        });
-    }
-    if (dom.timelineActionUndoBtn) {
-        dom.timelineActionUndoBtn.addEventListener('click', () => {
-            handleUndoTimeline();
-        });
-    }
-    if (dom.timelineActionRedoBtn) {
-        dom.timelineActionRedoBtn.addEventListener('click', () => {
-            handleRedoTimeline();
-        });
-    }
-    if (dom.timelineZoomInBtn) {
-        dom.timelineZoomInBtn.addEventListener('click', () => {
-            handleTimelineZoomIn();
-        });
-    }
-    if (dom.timelineZoomOutBtn) {
-        dom.timelineZoomOutBtn.addEventListener('click', () => {
-            handleTimelineZoomOut();
-        });
-    }
-    if (dom.timelineZoomFitBtn) {
-        dom.timelineZoomFitBtn.addEventListener('click', () => {
-            handleTimelineZoomFit();
-        });
-    }
+
     // Document-level event delegation for dynamic timeline sliders
     document.addEventListener('input', (e) => {
         const target = e.target as HTMLElement;

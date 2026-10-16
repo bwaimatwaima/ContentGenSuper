@@ -326,7 +326,8 @@ async function syncClipVideoSlot(
   targetSourceTime: number,
   shouldLoop: boolean,
   activeCursorKeys: Set<string>,
-  fps: number = 30
+  fps: number = 30,
+  exportHeight?: number
 ): Promise<void> {
   if (!videoEl) return;
 
@@ -342,7 +343,8 @@ async function syncClipVideoSlot(
   activeCursorKeys.add(cursorKey);
 
   if (isSequentialVideoExportEnabled()) {
-    const frameSource = getOrCreateExportFrameSource();
+    const maxDecodeHeight = exportHeight ? Math.min(2160, Math.round(exportHeight * 1.25)) : 2160;
+    const frameSource = getOrCreateExportFrameSource(maxDecodeHeight);
     const decodedFrame = await frameSource.getFrameForClipSlot(
       clipId,
       role,
@@ -363,7 +365,7 @@ async function syncClipVideoSlot(
   await syncVideoToTime(videoEl, targetSourceTime, fps);
 }
 
-export async function syncVideosForExportTime(rawTime: number, fps: number = 30): Promise<void> {
+export async function syncVideosForExportTime(rawTime: number, fps: number = 30, exportHeight?: number): Promise<void> {
     const time = seekMidFrameSeconds(rawTime, fps);
     startExportStage('video-sync');
     const activeCursorKeys = new Set<string>();
@@ -426,7 +428,7 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30)
             }
 
             if (!syncedVideos.has(cur.videoElement)) {
-                promises.push(syncClipVideoSlot(cur, 'primary', cur.videoElement, targetTime, shouldLoop, activeCursorKeys, fps));
+                promises.push(syncClipVideoSlot(cur, 'primary', cur.videoElement, targetTime, shouldLoop, activeCursorKeys, fps, exportHeight));
                 syncedVideos.add(cur.videoElement);
             }
         }
@@ -441,7 +443,7 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30)
                 ? (nxt.startTime || 0)
                 : (nxt.videoStartOffset || 0);
             if (!syncedVideos.has(nxt.videoElement)) {
-                promises.push(syncClipVideoSlot(nxt, 'primary', nxt.videoElement, nxtOffset, false, activeCursorKeys, fps));
+                promises.push(syncClipVideoSlot(nxt, 'primary', nxt.videoElement, nxtOffset, false, activeCursorKeys, fps, exportHeight));
                 syncedVideos.add(nxt.videoElement);
             }
         }
@@ -469,7 +471,7 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30)
                 targetTime = ((targetTime % d) + d) % d;
             }
 
-            promises.push(syncClipVideoSlot(activeClip, 'talkingHead', thVideo, targetTime, shouldLoop, activeCursorKeys, fps));
+            promises.push(syncClipVideoSlot(activeClip, 'talkingHead', thVideo, targetTime, shouldLoop, activeCursorKeys, fps, exportHeight));
             syncedVideos.add(thVideo);
         }
 
@@ -487,7 +489,7 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30)
                     targetPipTime = ((targetPipTime % d) + d) % d;
                 }
 
-                promises.push(syncClipVideoSlot(pipC, 'secondary', pipMedia, targetPipTime, shouldLoop, activeCursorKeys, fps));
+                promises.push(syncClipVideoSlot(pipC, 'secondary', pipMedia, targetPipTime, shouldLoop, activeCursorKeys, fps, exportHeight));
                 syncedVideos.add(pipMedia);
             }
         }
@@ -497,7 +499,8 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30)
         }
 
         if (isSequentialVideoExportEnabled()) {
-            await getOrCreateExportFrameSource().retainOnlyActiveCursors(activeCursorKeys);
+            const maxDecodeH = exportHeight ? Math.min(2160, Math.round(exportHeight * 1.25)) : 2160;
+            await getOrCreateExportFrameSource(maxDecodeH).retainOnlyActiveCursors(activeCursorKeys);
         }
     } finally {
         endExportStage('video-sync');

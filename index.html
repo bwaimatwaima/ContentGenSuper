@@ -298,6 +298,7 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="bg-gray-900 text-white antialiased">
+    <div id="status-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[99999] text-center my-4 h-8 pointer-events-none"></div>
     <div class="noise-overlay"></div>
     <div id="aurora-bg-container" class="aurora-bg">
         <div class="aurora-blob"></div>
@@ -2404,7 +2405,6 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="status-container" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] text-center my-4 h-8 pointer-events-none"></div>
                         <div id="results-container" class="relative z-10 space-y-0"></div>
                     </div>
                     <div id="panel-video-clips" class="tab-panel p-4">
@@ -2503,7 +2503,7 @@
                             </div>
 
                             <!-- Compact AI Motion Prompt Bar -->
-                            <div class="bg-gray-950/70 border border-sky-500/20 rounded-xl p-2.5">
+                            <div id="mg-ai-prompt-box" class="bg-gray-950/70 border border-sky-500/20 rounded-xl p-2.5">
                                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                     <div class="relative flex-1">
                                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sky-400 text-xs">✨</span>

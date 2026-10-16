@@ -1081,6 +1081,8 @@ export let exportSummaryFormatBadge: HTMLElement;
 export let exportSummaryFpsBadge: HTMLElement;
 export let exportSummaryQualityBadge: HTMLElement;
 export let exportSummaryDuration: HTMLElement;
+export let exportSummaryFilesize: HTMLElement;
+export let exportSummaryEta: HTMLElement;
 export let cloudRenderQuotaBadge: HTMLElement;
 export let cloudRenderQuotaText: HTMLElement;
 export let exportEngineLocalRadio: HTMLInputElement;
@@ -2036,7 +2038,7 @@ export function initDOM() {
     directVideoAudioFirstBtn = document.getElementById('direct-video-audio-first-btn') as HTMLButtonElement;
     uploadAudioBtn = document.getElementById('upload-audio-btn') as HTMLButtonElement;
     sidebarUploadAudioBtn = document.getElementById('sidebar-upload-audio-btn') as HTMLButtonElement;
-    timelineUploadAudioBtn = document.getElementById('timeline-upload-audio-btn') as HTMLButtonElement;
+    timelineUploadAudioBtn = (document.getElementById('timeline-upload-audio-btn') || document.getElementById('sidebar-upload-audio-btn') || document.getElementById('upload-audio-btn')) as HTMLButtonElement;
     audioUploadInput = document.getElementById('audio-upload-input') as HTMLInputElement;
     videoPlayPauseBtn = document.getElementById('video-play-pause-btn') as HTMLButtonElement;
     videoFullscreenBtn = document.getElementById('video-fullscreen-btn') as HTMLButtonElement;
@@ -2053,7 +2055,7 @@ export function initDOM() {
     autoPipCuesBtn = document.getElementById('auto-pip-cues-btn') as HTMLButtonElement;
     quickAutoPipBtn = document.getElementById('quick-auto-pip-btn') as HTMLButtonElement;
     clearAllPipBtn = document.getElementById('clear-all-pip-btn') as HTMLButtonElement;
-    inspectorClearAllPipBtn = document.getElementById('inspector-clear-all-pip-btn') as HTMLButtonElement;
+    inspectorClearAllPipBtn = (document.getElementById('inspector-clear-all-pip-btn') || document.getElementById('clear-all-pip-btn') || document.getElementById('sidebar-clear-pip-btn')) as HTMLButtonElement;
     sidebarClearPipBtn = document.getElementById('sidebar-clear-pip-btn') as HTMLButtonElement;
     videoSubtitlesCheckbox = document.getElementById('video-subtitles-checkbox') as HTMLInputElement;
     videoSubtitleStyleSelect = document.getElementById('video-subtitle-style-select') as HTMLSelectElement;
@@ -2179,6 +2181,8 @@ export function initDOM() {
     exportSummaryFpsBadge = document.getElementById('export-summary-fps-badge') as HTMLElement;
     exportSummaryQualityBadge = document.getElementById('export-summary-quality-badge') as HTMLElement;
     exportSummaryDuration = document.getElementById('export-summary-duration') as HTMLElement;
+    exportSummaryFilesize = document.getElementById('export-summary-filesize') as HTMLElement;
+    exportSummaryEta = document.getElementById('export-summary-eta') as HTMLElement;
     cloudRenderQuotaBadge = document.getElementById('cloud-render-quota-badge') as HTMLElement;
     cloudRenderQuotaText = document.getElementById('cloud-render-quota-text') as HTMLElement;
     exportEngineLocalRadio = document.getElementById('export-engine-local') as HTMLInputElement;
@@ -2221,7 +2225,7 @@ export function initDOM() {
     timelineDurationBadge = document.getElementById('timeline-duration-badge') as HTMLSpanElement;
     timelineClipsBadge = document.getElementById('timeline-clips-badge') as HTMLSpanElement;
     timelinePacingBadge = document.getElementById('timeline-pacing-badge') as HTMLSpanElement;
-    storyboardTimelineDurationBadge = document.getElementById('storyboard-timeline-duration-badge') as HTMLSpanElement;
+    storyboardTimelineDurationBadge = (document.getElementById('storyboard-timeline-duration-badge') || document.getElementById('timeline-duration-badge')) as HTMLSpanElement;
     timelineModeRippleBtn = document.getElementById('timeline-mode-ripple') as HTMLButtonElement;
     timelineModeSlipBtn = document.getElementById('timeline-mode-slip') as HTMLButtonElement;
     timelineActionSplitBtn = document.getElementById('timeline-action-split') as HTMLButtonElement;
@@ -2286,7 +2290,7 @@ export function initDOM() {
     forceAlignSubtitleStatus = document.getElementById('force-align-subtitle-status') as HTMLParagraphElement;
     openVoiceStudioBtn = document.getElementById('open-voice-studio-btn') as HTMLButtonElement;
     openVoiceStudioBtnMobile = document.getElementById('open-voice-studio-btn-mobile') as HTMLButtonElement;
-    openVoiceStudioHeaderBtn = document.getElementById('open-voice-studio-header-btn') as HTMLButtonElement | null;
+    openVoiceStudioHeaderBtn = (document.getElementById('open-voice-studio-header-btn') || document.getElementById('open-voice-studio-btn')) as HTMLButtonElement | null;
     voiceCloningModal = document.getElementById('voice-cloning-modal') as HTMLDivElement;
     openCloningModalBtn = document.getElementById('open-cloning-modal-btn') as HTMLButtonElement;
     closeCloningModalBtn = document.getElementById('close-cloning-modal-btn') as HTMLButtonElement;

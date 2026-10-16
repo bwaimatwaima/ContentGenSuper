@@ -221,7 +221,7 @@ export async function exportWithFFmpeg(
         }
 
         const time = frameIndex / fps;
-        await syncVideosForExportTime(time, fps);
+        await syncVideosForExportTime(time, fps, height);
         await drawExportFrameCached(time, exportCanvas as any, exportCtx as any);
 
         const imageData = exportCtx.getImageData(0, 0, width, height);

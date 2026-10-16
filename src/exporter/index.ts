@@ -20,7 +20,8 @@ import { getTimelineAudioDrift } from './audio';
 import { exportWithFFmpeg } from './backend-ffmpeg';
 import { exportWithMemory } from './backend-memory';
 import { exportWithStreaming } from './backend-streaming';
-import { exportWithSegmentedPipeline, exportWithElectronWorker } from './segmented-exporter';
+import { exportWithSegmentedPipeline, exportWithElectronWorker, mixSegmentAudio, clearSegmentAudioCaches } from './segmented-exporter';
+import { isChunkedAudioExportEnabled } from './audio-chunk-provider';
 import { handleCloudRenderExport } from './cloud-render';
 import { calculateBitrate } from './codecs';
 import { getExportDeviceProfile } from './device-profile';
@@ -412,7 +413,18 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const hasDroneAudio = !!state.cinematicDroneAudio;
     const hasAnyAudioSources = hasMasterAudio || hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
 
-    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline;
+    const useChunkedAudio =
+        isChunkedAudioExportEnabled() &&
+        format !== 'mp4-ffmpeg' &&
+        !useLongElectronSegmentedPipeline &&
+        hasAnyAudioSources;
+
+    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
+
+    const audioSegmentProvider = useChunkedAudio
+        ? (startSec: number, durSec: number) =>
+              mixSegmentAudio(startSec, Math.min(exportDuration, startSec + durSec), TARGET_SAMPLE_RATE)
+        : undefined;
 
     if (shouldBuildFullAudioMix && (audioBuffer || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasOriginalAudio || hasDroneAudio)) {
         ui.updateProcessingProgress(5, 'Mastering audio tracks & multi-bus mixing...');
@@ -723,7 +735,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     }
 
     const finalAudioBuffer = shouldBuildFullAudioMix ? (mixedBuffer || audioBuffer) : null;
-    const hasAudio = shouldBuildFullAudioMix && !!(finalAudioBuffer && finalAudioBuffer.length > 0 && finalAudioBuffer.duration > 0.1);
+    const hasAudio = useChunkedAudio || (shouldBuildFullAudioMix && !!(finalAudioBuffer && finalAudioBuffer.length > 0 && finalAudioBuffer.duration > 0.1));
     const totalDuration = exportDuration;
     const currentRatio = (state.aspectRatio || dom.videoDirectorAspectSelect?.value || dom.imageResolutionSelect?.value || '16:9') as any;
     let resolutionKey = dom.videoExportResolutionSelect ? dom.videoExportResolutionSelect.value : '';
@@ -1108,12 +1120,12 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
             }
         } else if (stream) {
             try {
-                await exportWithStreaming(stream, format, width, height, finalAudioBuffer, hasAudio, preferHardware);
+                await exportWithStreaming(stream, format, width, height, finalAudioBuffer, hasAudio, preferHardware, audioSegmentProvider);
             } catch (streamErr: any) {
                 if (preferHardware && (streamErr?.code === 'GPU_ENCODER_FAILED' || streamErr?.message?.includes('Hardware') || streamErr?.message?.includes('GPU'))) {
                     console.warn('[EXPORT] Hardware acceleration failed mid-render. Seamlessly retrying with software encoder...', streamErr);
                     ui.showStatus('GPU encoder busy, switching to software encoder...', false, 4000);
-                    await exportWithStreaming(stream, format, width, height, finalAudioBuffer, hasAudio, false);
+                    await exportWithStreaming(stream, format, width, height, finalAudioBuffer, hasAudio, false, audioSegmentProvider);
                 } else {
                     throw streamErr;
                 }
@@ -1240,12 +1252,12 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
             await new Promise(r => setTimeout(r, 1000)); // Give user time to see 100%
         } else if (format !== 'mp4-ffmpeg' as any) {
             try {
-                await exportWithMemory(format, filename, width, height, finalAudioBuffer, hasAudio, preferHardware);
+                await exportWithMemory(format, filename, width, height, finalAudioBuffer, hasAudio, preferHardware, audioSegmentProvider);
             } catch (memErr: any) {
                 if (preferHardware && (memErr?.code === 'GPU_ENCODER_FAILED' || memErr?.message?.includes('Hardware') || memErr?.message?.includes('GPU'))) {
                     console.warn('[EXPORT] Hardware acceleration failed in memory export. Retrying with software encoder...', memErr);
                     ui.showStatus('GPU encoder busy, switching to software encoder...', false, 4000);
-                    await exportWithMemory(format, filename, width, height, finalAudioBuffer, hasAudio, false);
+                    await exportWithMemory(format, filename, width, height, finalAudioBuffer, hasAudio, false, audioSegmentProvider);
                 } else {
                     throw memErr;
                 }
@@ -1291,6 +1303,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
         }
 
         try { clearStaticFrameCache(); } catch (e) {}
+        try { clearSegmentAudioCaches(); } catch (e) {}
         try { clearExportOptimizedImages(videoRenderContext?.clips, timelineState.clips); } catch (e) {}
         syncTaskbarProgress(-1); // remove taskbar progress when done/cancelled
 

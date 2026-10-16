@@ -160,11 +160,13 @@ export async function encodeToMuxer(
             : 0;
         // Slice ~1 second of audio samples per iteration rather than 1024 to minimize allocations and micro-awaits
         const audioFramesPerChunk = Math.max(1024, sampleRate);
-        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? 4 : 2;
+        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? 8 : 2;
 
         let activeSegmentBuffer: AudioBuffer | null = null;
         let activeSegmentStartSec = -1;
         let activeSegmentEndSec = -1;
+
+        let lastYieldTime = performance.now();
 
         while (videoFrameIndex < totalFrames || audioSampleIndex < totalSamples) {
             if (videoEncoderError) throw videoEncoderError;
@@ -175,7 +177,7 @@ export async function encodeToMuxer(
             const audioTime = audioSampleIndex < totalSamples ? (audioSampleIndex / sampleRate) : Infinity;
 
             if (videoTime <= audioTime) {
-                // Keep GPU encoder fed with up to 4 frames in flight when hardware acceleration is active
+                // Keep GPU encoder fed with up to 8 frames in flight when hardware acceleration is active
                 while (videoEncoder.encodeQueueSize > maxVideoQueue) {
                     await yieldToMain();
                     if (!state.isVideoProductionRunning) throw new Error("Cancelled.");
@@ -190,7 +192,7 @@ export async function encodeToMuxer(
                 const timestampUs = Math.round(videoFrameIndex * (1_000_000 / fps));
 
                 startExportStage('video-sync');
-                await syncVideosForExportTime(time, fps);
+                await syncVideosForExportTime(time, fps, height);
                 endExportStage('video-sync');
 
                 startExportStage('frame-render');
@@ -207,11 +209,10 @@ export async function encodeToMuxer(
                     }
                 }
 
-                // Worker-adaptive yield interval (every 32 frames in dedicated worker, 8 frames in main UI)
-                const isDedicatedWorker = typeof (globalThis as any).WorkerGlobalScope !== 'undefined' || typeof window === 'undefined' || Boolean((globalThis as any)._isExportWorker);
-                const yieldInterval = isDedicatedWorker ? 32 : 8;
-                if (videoFrameIndex % yieldInterval === 0) {
+                const now = performance.now();
+                if (now - lastYieldTime >= 16) {
                     await yieldToMain();
+                    lastYieldTime = performance.now();
                 }
 
                 if (videoFrameIndex % 15 === 0 || videoFrameIndex === totalFrames - 1) {
@@ -284,7 +285,11 @@ export async function encodeToMuxer(
                     }
                 }
 
-                await yieldToMain();
+                const now = performance.now();
+                if (now - lastYieldTime >= 16) {
+                    await yieldToMain();
+                    lastYieldTime = performance.now();
+                }
                 audioSampleIndex += len;
             }
         }

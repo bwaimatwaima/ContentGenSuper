@@ -994,14 +994,6 @@ export const MODAL_TEMPLATES = `
                                     <input id="timeline-scroll-slider" type="range" min="0" max="100" value="0" step="0.1" class="w-16 lg:w-28 h-1.5 bg-zinc-800 accent-amber-500 rounded cursor-pointer opacity-90 hover:opacity-100 transition-opacity" />
                                 </div>
                             </div>
-
-                            <!-- Dedicated Header Seek / Playhead Scrubber Slider (Always in View at Top of Timeline) -->
-                            <div class="flex items-center gap-1.5 bg-zinc-950/95 border border-cyan-500/40 rounded-lg px-2.5 py-0.5 shadow-md shadow-cyan-950/20 shrink-0" title="Slide to scrub timeline playhead position">
-                                <span class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider shrink-0 flex items-center gap-0.5">🎯 Seek</span>
-                                <span class="text-[10px] font-mono text-cyan-300 font-bold tabular-nums" id="timeline-header-current-time">0.0s</span>
-                                <input id="timeline-scrub-slider" type="range" min="0" max="100" value="0" step="0.01" class="w-20 sm:w-28 md:w-36 lg:w-48 h-2 bg-zinc-800 accent-cyan-400 rounded-full cursor-pointer hover:bg-zinc-700 transition-all shadow-inner" />
-                                <span class="text-[10px] font-mono text-gray-400 font-bold tabular-nums" id="timeline-header-total-time">0.0s</span>
-                            </div>
                         </div>
 
                         <!-- ZONE 3: Right - View, Transcript & Zoom Controls -->
@@ -3211,23 +3203,33 @@ export const MODAL_TEMPLATES = `
                 </div>
             </div>
 
-            <!-- Live Export Summary Card -->
-            <div class="bg-gradient-to-r from-zinc-800/90 to-zinc-900/90 border border-zinc-700/70 rounded-xl p-4 flex items-center justify-between shadow-inner">
+            <!-- Live Export Summary Card (with Est. File Size & Est. Render Time) -->
+            <div class="bg-gradient-to-r from-zinc-800/90 to-zinc-900/90 border border-zinc-700/70 rounded-xl p-4 flex flex-col gap-3">
                 <div class="space-y-1">
                     <div class="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider">Output Summary</div>
-                    <div id="export-summary-resolution-badge" class="text-sm font-bold text-indigo-300 flex items-center gap-2">
+                    <div id="export-summary-resolution-badge" class="text-sm font-bold text-indigo-300 flex items-center gap-1.5">
                         1080p Full HD (1920×1080)
                     </div>
-                    <div class="text-xs text-zinc-400 flex items-center gap-2 pt-0.5">
-                        <span id="export-summary-format-badge" class="font-bold text-white bg-indigo-600/80 px-2 py-0.5 rounded text-[10px] uppercase tracking-wide">MP4</span>
+                    <div class="text-xs text-zinc-400 flex items-center gap-2 pt-0.5 flex-wrap">
+                        <span id="export-summary-format-badge" class="font-bold text-white bg-indigo-600/80 px-2 py-0.5 rounded text-[10px]">MP4</span>
                         <span id="export-summary-fps-badge" class="text-zinc-300 font-medium">30 FPS</span>
                         <span>•</span>
                         <span id="export-summary-quality-badge" class="text-emerald-400 font-medium">Medium Quality</span>
                     </div>
                 </div>
-                <div class="text-right border-l border-zinc-700/60 pl-4">
-                    <div class="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Video Duration</div>
-                    <div id="export-summary-duration" class="text-base font-mono font-bold text-amber-300">00:00</div>
+                <div class="flex items-center gap-4 border-l border-zinc-700/60 pl-4">
+                    <div class="text-right">
+                        <div class="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Est. Size</div>
+                        <div id="export-summary-filesize" class="text-xs font-mono font-semibold text-zinc-300">~0 MB</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Est. Time</div>
+                        <div id="export-summary-eta" class="text-xs font-mono font-semibold text-emerald-400">~00:00</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">Video Duration</div>
+                        <div id="export-summary-duration" class="text-base font-mono font-bold text-amber-300">00:00</div>
+                    </div>
                 </div>
             </div>
 

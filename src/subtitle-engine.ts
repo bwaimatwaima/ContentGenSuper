@@ -132,7 +132,7 @@ interface BitmapCacheEntry {
     y: number;
     lastUsed: number;
 }
-const bitmapCache = new LRUCache<string, BitmapCacheEntry>(15, (_key, entry) => {
+const bitmapCache = new LRUCache<string, BitmapCacheEntry>(60, (_key, entry) => {
     entry.canvas.width = 0;
     entry.canvas.height = 0;
 });
@@ -389,7 +389,8 @@ function prerenderStaticText(
     height: number,
     colors: any,
     fontSize: number,
-    typography?: StyleTypography
+    typography?: StyleTypography,
+    activeWordIndex: number = -1
 ): { canvas: HTMLCanvasElement; y: number } {
     const offscreen = document.createElement('canvas');
     const firstY = layout.lines.length > 0 ? layout.lines[0].y : height * 0.8;
@@ -422,11 +423,11 @@ function prerenderStaticText(
     const options: SubtitleRenderContext = {
         fontSize,
         lineHeight: layout.lineHeight,
-        activeWordIndex: -1,
+        activeWordIndex,
         width,
         height: cropHeight,
         colors,
-        hasTimestamps: false,
+        hasTimestamps: activeWordIndex !== -1,
         clipTime: 0,
         isPlaying: false
     };
@@ -705,17 +706,20 @@ export const SubtitleEngine = {
             }
         }
 
-        if (STATIC_STYLES.has(styleName)) {
+        const canCacheWordBitmap =
+            styleName !== 'typewriter' &&
+            (STATIC_STYLES.has(styleName) || chunkEntranceProgress >= 1);
+
+        if (canCacheWordBitmap) {
             const colorSig = getColorsSignature(colors);
-            const bmpKey = `${cacheKey}::${colorSig}`;
+            const wordKey = STATIC_STYLES.has(styleName) ? -1 : activeWordIndex;
+            const bmpKey = `${cacheKey}::${colorSig}::w${wordKey}`;
             let bmpEntry = bitmapCache.get(bmpKey);
             if (!bmpEntry) {
-                const { canvas: bmpCanvas, y: cropY } = prerenderStaticText(styleName, layout, width, height, colors, fontSize, typography);
-                bmpEntry = {
-                    canvas: bmpCanvas,
-                    y: cropY,
-                    lastUsed: performance.now()
-                };
+                const { canvas: bmpCanvas, y: cropY } = prerenderStaticText(
+                    styleName, layout, width, height, colors, fontSize, typography, wordKey
+                );
+                bmpEntry = { canvas: bmpCanvas, y: cropY, lastUsed: performance.now() };
                 bitmapCache.set(bmpKey, bmpEntry);
             } else {
                 bmpEntry.lastUsed = performance.now();

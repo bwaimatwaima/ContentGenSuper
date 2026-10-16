@@ -198,7 +198,7 @@ export async function exportWithStreaming(
     output.addVideoTrack(videoSource, { frameRate: fps });
     
     let audioSource: EncodedAudioPacketSource | null = null;
-    if (hasAudio && audioBuffer) {
+    if (hasAudio && (audioBuffer || audioSegmentProvider)) {
         audioSource = new EncodedAudioPacketSource(format === 'mp4' ? 'aac' : 'opus');
         output.addAudioTrack(audioSource);
     }

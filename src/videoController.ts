@@ -1068,13 +1068,41 @@ export async function resyncTimelineVisualsFromStoryboard(): Promise<boolean> {
 
     if (!shot) continue;
 
-    const shotVideoURL = shot._videoObjectURL;
-    const shotImageURL = shot._imageObjectURL;
+    let shotVideoURL = shot._videoObjectURL;
+    let shotImageURL = shot._imageObjectURL;
+
+    if (!shotImageURL && shot.image_id) {
+      try {
+        const { assetStorage } = await import('./assetStorage');
+        const blob = await assetStorage.getAsset(shot.image_id);
+        if (blob) {
+          shotImageURL = URL.createObjectURL(blob);
+          shot._imageObjectURL = shotImageURL;
+        }
+      } catch (e) {
+        console.warn(`[Timeline Resync] Failed to load image asset for shot ${shot.id}:`, e);
+      }
+    }
+    if (!shotVideoURL && shot.video_id) {
+      try {
+        const { assetStorage } = await import('./assetStorage');
+        const vBlob = await assetStorage.getAsset(shot.video_id);
+        if (vBlob) {
+          shotVideoURL = URL.createObjectURL(vBlob);
+          shot._videoObjectURL = shotVideoURL;
+        }
+      } catch (e) {
+        console.warn(`[Timeline Resync] Failed to load video asset for shot ${shot.id}:`, e);
+      }
+    }
+
     const clipVideoURL = clip._videoObjectURL;
     const clipImageURL = clip._imageObjectURL;
 
     const needsVideoReload = (shotVideoURL && shotVideoURL !== clipVideoURL) || (shotVideoURL && !clip.videoElement);
-    const needsImageReload = (!shotVideoURL && shotImageURL && shotImageURL !== clipImageURL) || (!shotVideoURL && shotImageURL && !clip.image);
+    const needsImageReload = (!shotVideoURL && shotImageURL && shotImageURL !== clipImageURL) || 
+                             (!shotVideoURL && shotImageURL && (!clip.image || !clip.image.src || clip.image.src.includes('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7') || (clip.image as any).naturalWidth === 0)) ||
+                             (!clip.image && !!shotImageURL);
 
     const shotTHMode = shot.talkingHeadMode || (state.uploadedVideoElement ? 'pip-br' : 'none');
     const shotTHShape = shot.talkingHeadShape || 'circle';
@@ -1134,11 +1162,25 @@ export async function resyncTimelineVisualsFromStoryboard(): Promise<boolean> {
         }
       }
       if (shotImageURL) {
-        if (needsImageReload || !img) {
+        if (needsImageReload || !img || !img.src) {
           try {
             img = await utils.loadImageOrThrow(shotImageURL);
           } catch (e) {
             console.warn(`Failed to reload image for clip ${clip.id}`, e);
+            if (shot.image_id) {
+              try {
+                const { assetStorage } = await import('./assetStorage');
+                const freshBlob = await assetStorage.getAsset(shot.image_id);
+                if (freshBlob) {
+                  const freshUrl = URL.createObjectURL(freshBlob);
+                  shot._imageObjectURL = freshUrl;
+                  shotImageURL = freshUrl;
+                  img = await utils.loadImageOrThrow(freshUrl);
+                }
+              } catch (reHydrateErr) {
+                console.warn("Re-hydration from assetStorage failed:", reHydrateErr);
+              }
+            }
           }
         }
         if (!hasDualMedia && !shotVideoURL) {
@@ -1260,7 +1302,10 @@ export async function handleOpenVideoDirector() {
       ui.showStatus('Timeline built from storyboard.', false, 3000);
   }
 
-  if (timelineState.clips?.length > 0 && timelineState.videoGenerated) {
+  if (timelineState.clips?.length > 0) {
+      if (!timelineState.videoGenerated) {
+          timelineState.setVideoGenerated(true);
+      }
       if (dom.videoPreGenerationOverlay) dom.videoPreGenerationOverlay.classList.add('hidden');
       if (dom.videoControlsContainer) dom.videoControlsContainer.classList.remove('hidden');
       if (dom.videoPostGenerationOverlay) dom.videoPostGenerationOverlay.classList.remove('hidden');
@@ -1268,6 +1313,7 @@ export async function handleOpenVideoDirector() {
           dom.videoCanvas.classList.remove('hidden');
           dom.videoCanvas.style.display = 'block';
       }
+      updateVideoContext();
       drawVideoFrame(state.videoPauseTime || 0);
   }
   if (dom.videoExportBtn && (timelineState.clips?.length > 0 || state.uploadedVideoElement || timelineState.masterAudioBuffer || state.uploadedAudioBuffer)) {
@@ -2120,6 +2166,11 @@ export function handleVideoEffectsChange() {
   
 export function handleUndoTimeline() {
     forcePausePlayback();
+    if (!timelineState.canUndo()) {
+        ui.showStatus('ℹ️ Nothing to undo on timeline.', false, 1500);
+        timelineState.updateUndoRedoUI();
+        return;
+    }
     if (timelineState.undo()) {
         try { SubtitleEngine.clearBitmapCache(); } catch {}
         try { invalidateSpectrumCache(); } catch {}
@@ -2130,12 +2181,17 @@ export function handleUndoTimeline() {
             drawVideoFrame(state.videoPauseTime);
             ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
         }
-        ui.showStatus('Undo timeline edit', false, 1500);
+        ui.showStatus('↩️ Undid last timeline edit', false, 1500);
     }
 }
 
 export function handleRedoTimeline() {
     forcePausePlayback();
+    if (!timelineState.canRedo()) {
+        ui.showStatus('ℹ️ Nothing to redo on timeline.', false, 1500);
+        timelineState.updateUndoRedoUI();
+        return;
+    }
     if (timelineState.redo()) {
         try { SubtitleEngine.clearBitmapCache(); } catch {}
         try { invalidateSpectrumCache(); } catch {}
@@ -2146,7 +2202,7 @@ export function handleRedoTimeline() {
             drawVideoFrame(state.videoPauseTime);
             ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
         }
-        ui.showStatus('Redo timeline edit', false, 1500);
+        ui.showStatus('↪️ Redid timeline edit', false, 1500);
     }
 }
 
@@ -2167,8 +2223,20 @@ export function handleSetEditMode(mode: 'ripple' | 'slip') {
 }
   
 export function handleSplitClip() {
-    if (!timelineState.videoGenerated || !videoRenderContext) return;
-    const time = state.videoPauseTime;
+    if (!timelineState.clips || timelineState.clips.length === 0) {
+        // Also check if an SFX/Graphic clip exists
+        const hasGraphics = Boolean(timelineState.graphics && timelineState.graphics.length > 0);
+        if (!hasGraphics && !timelineState.masterAudioBuffer) {
+            ui.showStatus('⚠️ No shots or cues on timeline to split. Build shots first.', true, 2500);
+            return;
+        }
+    }
+
+    if (!videoRenderContext && timelineState.clips && timelineState.clips.length > 0) {
+        try { updateVideoContext(); } catch {}
+    }
+
+    const time = state.videoPauseTime || 0;
 
     // Check if an SFX/Graphic clip is selected or at playhead position
     const graphics = timelineState.graphics || [];
@@ -2179,7 +2247,7 @@ export function handleSplitClip() {
     if (!targetSfx) {
       targetSfx = graphics.find(g => {
         const isSfx = (g as any).isSfxOnly || (g as any).type === 'sfxCue' || Boolean((g as any).sfxTrigger && (g as any).sfxTrigger !== 'none');
-        return isSfx && time > g.start && time < g.end;
+        return isSfx && time >= g.start && time <= g.end;
       });
     }
 
@@ -2237,15 +2305,31 @@ export function handleSplitClip() {
         return;
     }
 
-    const clipIndex = timelineState.clips.findIndex((c) => time > c.startTime && time < c.endTime);
+    if (!timelineState.clips || timelineState.clips.length === 0) {
+        ui.showStatus('⚠️ No shots on timeline to split. Build shots first.', true, 2500);
+        return;
+    }
+
+    let clipIndex = timelineState.clips.findIndex((c) => {
+        const s = c.startTime ?? 0;
+        const e = c.endTime ?? (s + c.duration);
+        return time >= s && time <= e;
+    });
+
+    if (clipIndex === -1 && timelineState.selectedClipId) {
+        clipIndex = timelineState.clips.findIndex(c => c.id === timelineState.selectedClipId);
+    }
+
     if (clipIndex === -1) {
-      ui.showStatus('Playhead not inside a clip.', true, 2000);
+      ui.showStatus('Position the playhead over a shot or click a shot to split.', true, 2500);
       return;
     }
+
     const clip = timelineState.clips[clipIndex];
-    const splitPoint = time - clip.startTime;
-    if (splitPoint < 0.1 || clip.duration - splitPoint < 0.1) {
-      ui.showStatus('Split point too close to edge.', true, 3000);
+    const clipStart = clip.startTime ?? 0;
+    const splitPoint = time - clipStart;
+    if (splitPoint < 0.05 || clip.duration - splitPoint < 0.05) {
+      ui.showStatus('Split point too close to edge of shot (min 0.05s).', true, 2500);
       return;
     }
 
@@ -2267,7 +2351,7 @@ export function handleSplitClip() {
     timelineState.setClips(newClips);
     normalizeTimeline();
     ui.renderTimelineEditor();
-    ui.showStatus('Clip split at playhead.', false, 1500);
+    ui.showStatus('✂️ Shot split at playhead.', false, 1500);
 }
 
 export function handleDeleteAudioClip(index: number, ripple: boolean = false) {

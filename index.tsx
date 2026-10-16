@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import * as dom from './src/dom';
-import './src/styles/vs-director.css';
 import './src/perfMonitor';
 import * as audioFirstDirector from './src/audio-first-director';
 import * as audioUploadDirector from './src/audio-upload-director';
@@ -52,11 +51,9 @@ import { initPatternInterruptUI } from './src/pattern-interrupt/ui';
 import { setParallaxDepthReadyHandler } from './src/parallax/adapter';
 import { initParallaxAdvancedControls } from './src/parallax/ui';
 import { exportProjectArchive, importProjectArchive } from './src/projectArchive';
+import './src/styles/vs-director.css';
 import {
-  isVsWorkspaceEnabled,
-  activateVsWorkspace,
-  setVsWorkspaceEnabled,
-  initDirectorWorkspaceControls,
+  initVsWorkspaceToggle,
   mountInspectorPositionGlyphs,
   mountInspectorSpeedChips,
   mountPlayerStageOverlays,
@@ -1628,6 +1625,8 @@ function registerEventListeners() {
     dom.timelineActionTrimStartBtn?.addEventListener('click', () => videoController.handleTrimClip('start'));
     dom.timelineActionTrimEndBtn?.addEventListener('click', () => videoController.handleTrimClip('end'));
     dom.timelineActionRippleDeleteBtn?.addEventListener('click', () => shortcuts.rippleDeleteClipUnderPlayhead());
+    dom.timelineActionTrimSilenceBtn?.addEventListener('click', () => videoController.handleTrimDeadAir());
+    dom.timelineActionResyncBtn?.addEventListener('click', () => videoController.handleResyncTimeline());
     dom.timelineActionUndoBtn?.addEventListener('click', videoController.handleUndoTimeline);
     dom.timelineActionRedoBtn?.addEventListener('click', videoController.handleRedoTimeline);
     dom.timelineZoomInBtn?.addEventListener('click', videoController.handleTimelineZoomIn);
@@ -1651,12 +1650,6 @@ function registerEventListeners() {
 
     // Player Stage Composition Overlays (Rule of Thirds, Crosshair, Safe Zones)
     mountPlayerStageOverlays();
-
-    // Video Director Workspace Controls & Startup Activation
-    initDirectorWorkspaceControls();
-    if (isVsWorkspaceEnabled()) {
-        activateVsWorkspace();
-    }
 
     // Flush pending changes before unload to prevent data loss
     const flushPendingAutosaves = () => {
@@ -1915,6 +1908,7 @@ async function startApp() {
         initSystemConfigListener();
         setupAdminSystemTabHandlers();
         registerEventListeners();
+        initVsWorkspaceToggle();
         exporter.initCloudRenderBackgroundTracker();
         await initializeApp();
     } catch (err) {

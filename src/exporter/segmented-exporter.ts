@@ -613,6 +613,7 @@ export async function encodeSingleSegmentToFile(
     const sampleRate = segAudio ? segAudio.sampleRate : 48000;
     const numChannels = segAudio ? segAudio.numberOfChannels : 2;
     const audioFramesPerChunk = Math.max(1024, sampleRate);
+    let lastYieldTime = performance.now();
 
     while (localFrameIdx < totalSegFrames || localAudioSampleIdx < totalSegSamples) {
         if (videoError) throw videoError;
@@ -632,7 +633,7 @@ export async function encodeSingleSegmentToFile(
             const globalTime = segment.startSec + (localFrameIdx / fps);
             const segmentTimestampUs = Math.round(localFrameIdx * (1_000_000 / fps));
 
-            await syncVideosForExportTime(globalTime, fps);
+            await syncVideosForExportTime(globalTime, fps, height);
             await drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any);
 
             let frame: VideoFrame | null = null;
@@ -648,10 +649,10 @@ export async function encodeSingleSegmentToFile(
                 }
             }
 
-            const isDedicatedWorker = typeof (globalThis as any).WorkerGlobalScope !== 'undefined' || typeof window === 'undefined' || Boolean((globalThis as any)._isExportWorker);
-            const yieldInterval = isDedicatedWorker ? 32 : 8;
-            if (localFrameIdx % yieldInterval === 0) {
+            const now = performance.now();
+            if (now - lastYieldTime >= 16) {
                 await yieldToMain();
+                lastYieldTime = performance.now();
             }
 
             if (localFrameIdx % 15 === 0 || localFrameIdx === totalSegFrames - 1) {
@@ -698,8 +699,10 @@ export async function encodeSingleSegmentToFile(
                 }
             }
 
-            if (localAudioSampleIdx > 0 && localAudioSampleIdx % (audioFramesPerChunk * 4) === 0) {
+            const now = performance.now();
+            if (now - lastYieldTime >= 16) {
                 await yieldToMain();
+                lastYieldTime = performance.now();
             }
 
             localAudioSampleIdx += len;

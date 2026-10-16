@@ -542,6 +542,9 @@ function findShotById(id: string): any {
  * Hydrates visible shot images via IntersectionObserver to prevent OOM on 100+ shots.
  */
 export function hydrateVisibleShots() {
+  if (dom.videoDirectorModal && !dom.videoDirectorModal.classList.contains("hidden")) {
+    return;
+  }
   const images = document.querySelectorAll(".generated-img[data-id]");
   const observer = getShotImageObserver();
 
@@ -1042,6 +1045,7 @@ export function openVideoDirectorModal() {
   if (dom.videoDirectorModal) {
     dom.videoDirectorModal.classList.remove("hidden");
     document.body.classList.add("overflow-hidden");
+    window.dispatchEvent(new Event('contentgen:video-director-opened'));
 
     if (dom.saveProjectVideoBtn) {
       dom.saveProjectVideoBtn.disabled = false;
@@ -1091,6 +1095,7 @@ export function openVideoDirectorModal() {
 
 export function closeVideoDirectorModal() {
   if (dom.videoDirectorModal) {
+    window.dispatchEvent(new Event('contentgen:video-director-closing'));
     dom.videoDirectorModal.classList.add("hidden");
     document.body.classList.remove("overflow-hidden");
 
@@ -1311,6 +1316,7 @@ export function renderBrollEditor(
 
     // Update Timeline Drawer metrics & badges
     const formattedDur = `${(totalDuration ?? 0).toFixed(1)}s`;
+    timelineState.updateUndoRedoUI();
     if (dom.timelineArollRhythmSelect) {
       if (!dom.timelineArollRhythmSelect.children.length) {
         dom.timelineArollRhythmSelect.innerHTML = generateRhythmOptionsHtml(state.selectedRhythmTemplateId || 'youtube_essay');
@@ -1415,17 +1421,6 @@ export function renderBrollEditor(
                         </div>
                     </div>
                 </div>
-            </div>
-            <!-- Dedicated Timeline Navigation & Playhead Scrubber Bar (Always Visible) -->
-            <div id="timeline-navigation-bar" class="w-full bg-[#090a10] border-t border-white/15 px-3 py-1.5 flex items-center gap-3 text-xs z-30 select-none shrink-0 shadow-2xl">
-                <div class="flex items-center gap-1 shrink-0">
-                    <span class="text-[10px] uppercase tracking-wider text-cyan-400 font-bold">🎯 Seek</span>
-                    <span class="text-[10px] font-mono text-cyan-300 shrink-0 font-bold bg-zinc-900 border border-cyan-500/40 px-2 py-0.5 rounded shadow-xs" id="timeline-nav-current-time">0.0s</span>
-                </div>
-                <div class="flex-grow flex items-center relative group">
-                    <input id="timeline-scrub-slider" type="range" min="0" max="100" value="0" step="0.01" class="w-full h-2.5 bg-zinc-800 accent-cyan-400 rounded-full cursor-pointer hover:bg-zinc-700 transition-all shadow-inner" title="Slide to move playhead across sequence" />
-                </div>
-                <span class="text-[10px] font-mono text-gray-300 shrink-0 font-bold bg-zinc-900 border border-white/15 px-2 py-0.5 rounded shadow-xs" id="timeline-nav-total-time">0.0s</span>
             </div>
         </div>
           `;

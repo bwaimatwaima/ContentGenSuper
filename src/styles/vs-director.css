@@ -2244,3 +2244,101 @@
   box-shadow: none !important;
   pointer-events: auto !important;
 }
+
+/* Video Studio Inspired NLE Polish for ContentGen AI */
+:root {
+  --vs-bg-panel: #222224;
+  --vs-bg-panel-2: #2a2a2d;
+  --vs-bg-input: #18181a;
+  --vs-border: #323236;
+  --vs-border-strong: #44444a;
+  --vs-accent: #4f8ff7;
+  --vs-accent-soft: rgba(79, 143, 247, 0.18);
+  --vs-snap: #f5d142;
+}
+
+/* Stackable Clip Effect Cards */
+.vs-clipfx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vs-clipfx-item {
+  border: 1px solid var(--vs-border);
+  border-radius: 6px;
+  background: var(--vs-bg-panel-2);
+  padding: 6px 8px 8px;
+  transition: opacity 120ms ease;
+}
+.vs-clipfx-item.is-off .vs-clipfx-params {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.vs-clipfx-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.vs-clipfx-index {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #a9a9b1;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Color Grading Gradient Slider Tracks */
+.vs-slider-temp input[type='range']::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #3f78e6, #9a9aa2 50%, #e8c23a);
+  height: 5px;
+  border-radius: 999px;
+}
+.vs-slider-tint input[type='range']::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #3fb35a, #9a9aa2 50%, #c84fc2);
+  height: 5px;
+  border-radius: 999px;
+}
+.vs-slider-sat input[type='range']::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #7b7b80, #9a9aa2 50%, #e5484d);
+  height: 5px;
+  border-radius: 999px;
+}
+
+/* Proxy Media Status Pill */
+.vs-proxy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+.vs-proxy-badge[data-state='ready'] .vs-proxy-dot {
+  color: #3fbf7f;
+}
+.vs-proxy-badge-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.vs-proxy-badge-bar > span {
+  display: block;
+  height: 100%;
+  width: calc(var(--progress, 0) * 100%);
+  background: var(--vs-accent);
+  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
+}

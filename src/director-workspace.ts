@@ -6,7 +6,6 @@
 import * as dom from './dom';
 import { drawVideoFrame } from './videoRenderer';
 import { state } from './state';
-import { timelineState } from './state-timeline';
 import { getActiveAspectRatio } from './handlers-effects';
 import { vsIcon } from './ui-icons';
 
@@ -38,6 +37,7 @@ interface ReparentRecord {
   originalParent: HTMLElement;
   nextSibling: ChildNode | null;
   originalClassName: string;
+  originalStyle: string | null;
 }
 
 const movedNodes: ReparentRecord[] = [];
@@ -45,6 +45,7 @@ let shellEl: HTMLDivElement | null = null;
 let graphicsLayoutScaffold: { gallery: HTMLElement; layout: HTMLElement; categoryRow: HTMLElement } | null = null;
 let workspaceToggleInitialized = false;
 let workspaceModalLifecycleInitialized = false;
+let scopeUpdateInterval: number | null = null;
 
 /**
  * Move existing controls rather than cloning them. Their IDs and attached event
@@ -59,6 +60,7 @@ function moveNode(el: HTMLElement | null | undefined, targetSlot: HTMLElement | 
     originalParent: parent,
     nextSibling: el.nextSibling,
     originalClassName: el.className,
+    originalStyle: el.getAttribute('style'),
   });
   targetSlot.appendChild(el);
 }
@@ -73,6 +75,8 @@ function restoreAllMovedNodes(): void {
         rec.originalParent.appendChild(rec.el);
       }
       rec.el.className = rec.originalClassName;
+      if (rec.originalStyle === null) rec.el.removeAttribute('style');
+      else rec.el.setAttribute('style', rec.originalStyle);
     } catch (err) {
       console.warn('[VS Workspace] Failed to restore node:', err);
     }
@@ -268,17 +272,17 @@ function buildEffectsStudioPanel(): HTMLElement {
   lutSection.className = 'vs-lut-section';
   lutSection.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-      <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-2, #a9a9b1);">${vsIcon('sliders', 12)} Color Grade & LUTs</span>
+      <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-2, #a9a9b1);">${vsIcon('sliders', 12)} Looks & Effects Presets</span>
       <button type="button" id="vs-lut-reset-btn" class="vs-btn subtle" style="padding:2px 6px; font-size:10px;">${vsIcon('rotate-ccw', 10)} Reset</button>
     </div>
     <div class="vs-lut-grid" role="radiogroup" aria-label="LUT Presets">
       <div class="vs-lut-tile" role="radio" aria-checked="true" data-preset="clean-default">
         <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #4b5563, #9ca3af);"></div>
-        <span class="vs-lut-label">Natural Rec.709</span>
+        <span class="vs-lut-label">Clean Look</span>
       </div>
       <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="cyberpunk-neon">
         <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #06b6d4, #ec4899);"></div>
-        <span class="vs-lut-label">Teal & Orange</span>
+        <span class="vs-lut-label">Neon Pulse</span>
       </div>
       <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="golden-hour">
         <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #f59e0b, #d97706);"></div>
@@ -299,39 +303,6 @@ function buildEffectsStudioPanel(): HTMLElement {
     </div>
   `;
   panel.appendChild(lutSection);
-
-  // 3. Interactive Color Balance Sliders
-  const balanceSection = document.createElement('div');
-  balanceSection.className = 'vs-slider-section';
-  balanceSection.style.cssText = 'display:flex; flex-direction:column; gap:10px; background:var(--vs-bg-panel-2, #2a2a2d); border:1px solid var(--vs-border, #323236); border-radius:8px; padding:10px 12px;';
-  balanceSection.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-2, #a9a9b1);">Color Balance</span>
-      <span style="font-size:10px; color:var(--text-3, #8d8d96);">Live Preview</span>
-    </div>
-    <div class="vs-slider-temp" style="display:flex; flex-direction:column; gap:4px;">
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
-        <span>Temperature</span>
-        <span id="vs-temp-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">0</span>
-      </div>
-      <input type="range" id="vs-temp-slider" min="-100" max="100" value="0" style="width:100%;" />
-    </div>
-    <div class="vs-slider-tint" style="display:flex; flex-direction:column; gap:4px;">
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
-        <span>Tint</span>
-        <span id="vs-tint-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">0</span>
-      </div>
-      <input type="range" id="vs-tint-slider" min="-100" max="100" value="0" style="width:100%;" />
-    </div>
-    <div class="vs-slider-sat" style="display:flex; flex-direction:column; gap:4px;">
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
-        <span>Saturation</span>
-        <span id="vs-sat-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">100%</span>
-      </div>
-      <input type="range" id="vs-sat-slider" min="0" max="200" value="100" style="width:100%;" />
-    </div>
-  `;
-  panel.appendChild(balanceSection);
 
   // 4. VFX & Particle Studio Advanced Launcher
   const launcher = document.createElement('div');
@@ -363,9 +334,14 @@ function buildEffectsStudioPanel(): HTMLElement {
   });
 
   if (canvas) {
-    const updateScope = () => renderSignalScope(canvas, currentScopeMode);
-    setInterval(updateScope, 400);
-    setTimeout(updateScope, 50);
+    // Only one scope timer may exist. It is stopped when Studio UI deactivates.
+    if (scopeUpdateInterval !== null) window.clearInterval(scopeUpdateInterval);
+    const updateScope = () => {
+      if (!canvas.isConnected) return;
+      renderSignalScope(canvas, currentScopeMode);
+    };
+    scopeUpdateInterval = window.setInterval(updateScope, 400);
+    window.setTimeout(updateScope, 50);
   }
 
   // Wire LUT Tiles
@@ -386,47 +362,9 @@ function buildEffectsStudioPanel(): HTMLElement {
       const defaultTile = lutSection.querySelector<HTMLElement>('[data-preset="clean-default"]');
       if (defaultTile) defaultTile.setAttribute('aria-checked', 'true');
       applyPreset('clean-default');
-      const tSlider = panel.querySelector<HTMLInputElement>('#vs-temp-slider');
-      const tintSl = panel.querySelector<HTMLInputElement>('#vs-tint-slider');
-      const satSl = panel.querySelector<HTMLInputElement>('#vs-sat-slider');
-      if (tSlider) { tSlider.value = '0'; panel.querySelector('#vs-temp-val')!.textContent = '0'; }
-      if (tintSl) { tintSl.value = '0'; panel.querySelector('#vs-tint-val')!.textContent = '0'; }
-      if (satSl) { satSl.value = '100'; panel.querySelector('#vs-sat-val')!.textContent = '100%'; }
       if (canvas) setTimeout(() => renderSignalScope(canvas, currentScopeMode), 50);
     });
   });
-
-  // Wire Sliders
-  const tempSlider = panel.querySelector<HTMLInputElement>('#vs-temp-slider');
-  const tintSlider = panel.querySelector<HTMLInputElement>('#vs-tint-slider');
-  const satSlider = panel.querySelector<HTMLInputElement>('#vs-sat-slider');
-
-  const onSliderChange = () => {
-    const temp = parseInt(tempSlider?.value || '0', 10);
-    const tint = parseInt(tintSlider?.value || '0', 10);
-    const sat = parseInt(satSlider?.value || '100', 10);
-
-    const tempValEl = panel.querySelector('#vs-temp-val');
-    const tintValEl = panel.querySelector('#vs-tint-val');
-    const satValEl = panel.querySelector('#vs-sat-val');
-    if (tempValEl) tempValEl.textContent = String(temp);
-    if (tintValEl) tintValEl.textContent = String(tint);
-    if (satValEl) satValEl.textContent = `${sat}%`;
-
-    // Apply color temperature/balance to preview canvas
-    const pCanvas = document.getElementById('video-canvas') || document.querySelector('canvas:not(#export-render-canvas):not(.vs-scope-canvas)');
-    if (pCanvas) {
-      const sepiaVal = temp > 0 ? (temp / 100) * 0.3 : 0;
-      const hueVal = temp < 0 ? (temp / 100) * 15 : (tint / 100) * 20;
-      const satVal = sat / 100;
-      (pCanvas as HTMLElement).style.filter = `saturate(${satVal}) sepia(${sepiaVal}) hue-rotate(${hueVal}deg)`;
-    }
-    if (canvas) setTimeout(() => renderSignalScope(canvas, currentScopeMode), 50);
-  };
-
-  tempSlider?.addEventListener('input', onSliderChange);
-  tintSlider?.addEventListener('input', onSliderChange);
-  satSlider?.addEventListener('input', onSliderChange);
 
   return panel;
 }
@@ -590,7 +528,10 @@ export function activateVsWorkspace(): boolean {
                 </div>
               </div>
 
-              <div id="vs-legacy-controls-body" class="hidden" style="display:none !important;"></div>
+              <details class="vs-legacy-tools-details">
+                <summary>More existing tools</summary>
+                <div id="vs-legacy-controls-body"></div>
+              </details>
               <div id="vs-production-sidebar-slot"></div>
             </div>
           </aside>
@@ -823,6 +764,10 @@ export function activateVsWorkspace(): boolean {
 }
 
 export function deactivateVsWorkspace(): void {
+  if (scopeUpdateInterval !== null) {
+    window.clearInterval(scopeUpdateInterval);
+    scopeUpdateInterval = null;
+  }
   const modal = document.getElementById('graphic-editor-modal');
   if (modal) {
     modal.classList.add('hidden');
@@ -949,34 +894,63 @@ export function syncGraphicEditorToInspector(): void {
  * Automatically injects video-studio timeline and track CSS classes onto
  * ContentGen's rendered timeline elements without altering internal DOM IDs or state.
  */
+let enhancedTimelineContainer: HTMLElement | null = null;
+let timelineDecorationObserver: MutationObserver | null = null;
+
+function decorateTimelineClip(clip: HTMLElement): void {
+  if (!clip.classList.contains('tl-clip')) clip.classList.add('tl-clip');
+  const type = (clip.dataset.type || '').toLowerCase();
+  if (type === 'image' || type === 'video') clip.classList.add('kind-video');
+  else if (type === 'audio') clip.classList.add('kind-audio');
+  else if (type === 'text') clip.classList.add('kind-text');
+}
+
+function decorateTimelineLanes(container: HTMLElement): void {
+  const lanes = container.querySelectorAll<HTMLElement>('.tl-lane, tr, [data-track-lane]');
+  lanes.forEach((lane, idx) => {
+    const label = (lane.textContent || '').toLowerCase();
+    if (idx === 0) lane.classList.add('main', 'is-main');
+    else if (label.includes('audio') || label.includes('voice')) lane.classList.add('audio', 'is-audio');
+    else lane.classList.add('overlay', 'is-overlay');
+  });
+}
+
+/**
+ * Apply Studio timeline classes once, then decorate only newly inserted DOM nodes.
+ * The regular timeline renderer calls this frequently; it now returns immediately
+ * after initial setup instead of querying every lane and clip on every render.
+ */
 export function enhanceTimelineDom(): void {
   const container = document.getElementById('timeline-editor-container');
   if (!container) return;
-
-  // Mark container with video-studio styling scope
   container.classList.add('vs-timeline-shell');
+  if (enhancedTimelineContainer === container && timelineDecorationObserver) return;
 
-  // Assign track row classes based on order or data attributes
-  container.querySelectorAll<HTMLElement>('.tl-lane, tr, [data-track-lane]').forEach((lane, idx) => {
-    if (idx === 0) lane.classList.add('main', 'is-main');
-    else if (lane.textContent?.toLowerCase().includes('audio') || lane.textContent?.toLowerCase().includes('voice')) {
-      lane.classList.add('audio', 'is-audio');
-    } else {
-      lane.classList.add('overlay', 'is-overlay');
-    }
-  });
+  timelineDecorationObserver?.disconnect();
+  enhancedTimelineContainer = container;
 
-  // Assign clip classes
-  container.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach((clip) => {
-    if (!clip.classList.contains('tl-clip')) clip.classList.add('tl-clip');
-    if (clip.dataset.type === 'image' || clip.dataset.type === 'video') {
-      clip.classList.add('kind-video');
-    } else if (clip.dataset.type === 'audio') {
-      clip.classList.add('kind-audio');
-    } else if (clip.dataset.type === 'text') {
-      clip.classList.add('kind-text');
-    }
+  decorateTimelineLanes(container);
+  container.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach(decorateTimelineClip);
+
+  timelineDecorationObserver = new MutationObserver((records) => {
+    let lanesChanged = false;
+    const decorateSubtree = (element: HTMLElement) => {
+      if (element.matches('.tl-lane, tr, [data-track-lane]')) lanesChanged = true;
+      if (element.matches('.tl-clip, [data-clip-id]')) decorateTimelineClip(element);
+      element.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach(decorateTimelineClip);
+      if (element.querySelector('.tl-lane, tr, [data-track-lane]')) lanesChanged = true;
+    };
+
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) decorateSubtree(node as HTMLElement);
+      });
+    });
+
+    // Lane count/order changes are uncommon; rescan lanes only when a lane subtree changes.
+    if (lanesChanged) decorateTimelineLanes(container);
   });
+  timelineDecorationObserver.observe(container, { childList: true, subtree: true });
 }
 
 interface PosGlyphSpec {
@@ -1147,18 +1121,7 @@ export function mountInspectorPositionGlyphs(): void {
   attachGlyphStripToSelect(pipSelect, 'vs-pip-pos-glyph-strip', PIP_CORNER_GLYPHS);
   attachGlyphStripToSelect(thSelect, 'vs-th-pos-glyph-strip', TALKING_HEAD_GLYPHS);
 
-  // Mount Proxy Media status badge in inspector
-  const mediaContainer = document.getElementById('inspector-media-container');
-  if (mediaContainer && !document.getElementById('vs-inspector-proxy-badge')) {
-    const badge = document.createElement('div');
-    badge.id = 'vs-inspector-proxy-badge';
-    badge.className = 'vs-proxy-badge';
-    badge.dataset.state = 'ready';
-    badge.style.cssText = 'margin:6px 0; align-self:flex-start;';
-    badge.title = 'Real-time 540p editing proxy active for lag-free playback and scrub';
-    badge.innerHTML = `<span class="vs-proxy-dot" style="color:#3fbf7f;">●</span> <span>Proxy 540p (Active)</span><div class="vs-proxy-badge-bar"><span style="width:100%;"></span></div>`;
-    mediaContainer.parentElement?.insertBefore(badge, mediaContainer);
-  }
+  // Do not display a proxy-status badge until real proxy generation/status exists.
 }
 
 /**
@@ -1383,99 +1346,81 @@ export function mountPlayerStageOverlays(): void {
  * live frame preview stage, and estimated file size calculator readout.
  */
 export function mountExportStudioCard(): void {
-  const container = document.getElementById('export-modal-body') || document.querySelector('.export-dialog-content') || document.getElementById('export-modal');
+  // Stable ID is defined in src/templates.ts on the real export modal body.
+  const container = document.getElementById('export-settings-modal-body');
   if (!container || document.getElementById('vs-export-studio-card')) return;
 
   const card = document.createElement('div');
   card.id = 'vs-export-studio-card';
   card.className = 'vs-export-studio-card';
-
   card.innerHTML = `
     <div class="vs-export-preview-col">
       <div class="vs-export-stage">
-        <canvas id="vs-export-preview-canvas" width="320" height="180"></canvas>
-        <div class="vs-export-stage-badge">LIVE PREVIEW</div>
+        <canvas id="vs-export-preview-canvas" width="320" height="180" aria-label="Snapshot of the current video preview"></canvas>
+        <div class="vs-export-stage-badge">PREVIEW SNAPSHOT</div>
       </div>
-      <div class="vs-export-specs">
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">EST. FILE SIZE</span>
-          <span class="vs-export-spec-value" id="vs-export-est-size">~12.4 MB</span>
-        </div>
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">EST. DURATION</span>
-          <span class="vs-export-spec-value" id="vs-export-est-duration">0:15.0</span>
-        </div>
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">EST. PEAK RAM</span>
-          <span class="vs-export-spec-value" id="vs-export-est-ram" style="color:#38bdf8;">~160 MB</span>
-        </div>
-        <div class="vs-export-spec-pill">
-          <span class="vs-export-spec-label">PIPELINE / STORAGE</span>
-          <span class="vs-export-spec-value" id="vs-export-est-engine" style="color:#34d399;">WebCodecs + OPFS</span>
-        </div>
-      </div>
+      <p class="vs-export-note">A snapshot of the current preview frame, not a live playback monitor. Final output uses the selected settings below.</p>
     </div>
     <div class="vs-export-settings-col">
       <div class="vs-export-field">
-        <label class="vs-export-field-label">EXPORT PRESET</label>
-        <div class="vs-export-radio-group" role="radiogroup">
-          <button type="button" class="vs-export-radio-btn" aria-checked="true" data-preset="mp4">MP4 (H.264)</button>
-          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="webm">WebM (VP9)</button>
-          <button type="button" class="vs-export-radio-btn" aria-checked="false" data-preset="gif">Animated GIF</button>
+        <label class="vs-export-field-label">OUTPUT FORMAT</label>
+        <div class="vs-export-radio-group" role="radiogroup" aria-label="Output format">
+          <button type="button" class="vs-export-radio-btn" role="radio" aria-checked="false" data-preset="mp4">MP4 · H.264</button>
+          <button type="button" class="vs-export-radio-btn" role="radio" aria-checked="false" data-preset="mp4-ffmpeg">MP4 · FFmpeg Beta</button>
+          <button type="button" class="vs-export-radio-btn" role="radio" aria-checked="false" data-preset="webm">WebM · VP9</button>
         </div>
       </div>
+      <p class="vs-export-note">Resolution, frame rate, quality and save location remain controlled by the existing export settings below. File size and peak memory are not estimated here because they depend on codec settings, scene complexity and the machine.</p>
     </div>
   `;
-
   container.prepend(card);
 
-  // Snapshot preview frame
-  const pCanvas = card.querySelector<HTMLCanvasElement>('#vs-export-preview-canvas');
-  if (pCanvas) {
-    const sCanvas =
-      (document.getElementById('video-canvas') as HTMLCanvasElement | null) ||
-      (document.getElementById('video-director-canvas') as HTMLCanvasElement | null) ||
-      (document.getElementById('director-preview-canvas') as HTMLCanvasElement | null);
-    if (sCanvas && sCanvas.width > 0 && sCanvas.height > 0) {
-      const pCtx = pCanvas.getContext('2d');
-      pCtx?.drawImage(sCanvas, 0, 0, pCanvas.width, pCanvas.height);
+  // Snapshot the currently rendered frame. This deliberately does not claim to be live.
+  const preview = card.querySelector<HTMLCanvasElement>('#vs-export-preview-canvas');
+  const source = [
+    document.getElementById('video-canvas'),
+    document.getElementById('video-director-canvas'),
+    document.getElementById('director-preview-canvas'),
+  ].find((el): el is HTMLCanvasElement =>
+    el instanceof HTMLCanvasElement && el.width > 0 && el.height > 0
+  );
+  if (preview && source) {
+    try {
+      const context = preview.getContext('2d');
+      context?.drawImage(source, 0, 0, preview.width, preview.height);
+    } catch (error) {
+      console.warn('[VS Export Card] Preview snapshot unavailable:', error);
     }
   }
 
-  // Calculate estimated duration & file size & RAM
-  const clips = (timelineState as any).clips;
-  let estSec = 15;
-  if (clips && clips.length > 0) {
-    estSec = clips.reduce((sum: number, c: any) => sum + (c.duration || 3.5), 0);
-  } else {
-    const shotCount = (state as any).shots?.length || state.currentScenes?.length || 4;
-    estSec = shotCount * 3.5;
-  }
-  const mins = Math.floor(estSec / 60);
-  const secs = (estSec % 60).toFixed(1).padStart(4, '0');
-  const durEl = card.querySelector('#vs-export-est-duration');
-  if (durEl) durEl.textContent = `${mins}:${secs}`;
-  const sizeEl = card.querySelector('#vs-export-est-size');
-  if (sizeEl) sizeEl.textContent = `~${Math.max(1, estSec * 1.05).toFixed(1)} MB`;
-  const ramEl = card.querySelector('#vs-export-est-ram');
-  if (ramEl) {
-    const isHighRes = (document.getElementById('video-export-resolution') as HTMLSelectElement | null)?.value === '1080p';
-    ramEl.textContent = isHighRes ? '~210 MB' : '~145 MB';
-  }
+  const formatSelect = document.getElementById('video-export-format') as HTMLSelectElement | null;
+  const formatButtons = Array.from(card.querySelectorAll<HTMLButtonElement>('.vs-export-radio-btn'));
+  const syncFormatButtons = () => {
+    const current = formatSelect?.value || 'mp4';
+    formatButtons.forEach((button) => {
+      button.setAttribute('aria-checked', String(button.dataset.preset === current));
+    });
+  };
 
-  // Sync format radio buttons
-  card.querySelectorAll<HTMLButtonElement>('.vs-export-radio-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      card.querySelectorAll('.vs-export-radio-btn').forEach((b) => b.setAttribute('aria-checked', 'false'));
-      btn.setAttribute('aria-checked', 'true');
-      const preset = btn.dataset.preset;
-      const formatSelect = document.getElementById('export-format') as HTMLSelectElement | null;
-      if (formatSelect && preset) {
-        formatSelect.value = preset;
-        formatSelect.dispatchEvent(new Event('change', { bubbles: true }));
+  formatButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const requested = button.dataset.preset;
+      if (!formatSelect || !requested) return;
+      // Only allow values present in the real app's supported format select.
+      const supported = Array.from(formatSelect.options).some((option) => option.value === requested);
+      if (!supported) {
+        console.warn(`[VS Export Card] Unsupported export format requested: ${requested}`);
+        syncFormatButtons();
+        return;
       }
+      formatSelect.value = requested;
+      formatSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      syncFormatButtons();
     });
   });
+
+  formatSelect?.addEventListener('change', syncFormatButtons);
+  syncFormatButtons();
 }
 
 let commandPaletteOpenFn: (() => void) | null = null;

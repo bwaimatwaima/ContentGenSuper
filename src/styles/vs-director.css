@@ -1479,6 +1479,13 @@
   margin-bottom: 12px;
 }
 
+.vs-export-note {
+  margin: 0;
+  color: var(--text-2, #a9a9b1);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 @media (max-width: 680px) {
   .vs-export-studio-card {
     grid-template-columns: 1fr;
@@ -1853,6 +1860,21 @@
 .vs-director .vs-workspace-production > div { padding: 8px !important; overflow: visible !important; }
 .vs-director .vs-workflow-details { margin-bottom: 9px; border: 1px solid #363844; border-radius: 7px; background: #202127; }
 .vs-director .vs-workflow-details > summary { padding: 9px 10px; color: #d5d8e3; cursor: pointer; font-size: 10.5px; font-weight: 700; }
+.vs-director .vs-legacy-tools-details {
+  flex: none;
+  margin: 8px 0;
+  border: 1px solid #363844;
+  border-radius: 8px;
+  background: #202127;
+}
+.vs-director .vs-legacy-tools-details > summary {
+  padding: 9px 10px;
+  color: #c9ccda;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  user-select: none;
+}
 .vs-director #vs-legacy-controls-body { max-height: 48vh; padding: 8px; overflow: auto; border-top: 1px solid #343641; }
 .vs-director #vs-legacy-controls-body > div { width: 100%; max-width: none; }
 .vs-director #vs-legacy-controls-body #video-export-btn { display: none; }
@@ -2508,40 +2530,6 @@
   background: linear-gradient(to right, #7b7b80, #9a9aa2 50%, #e5484d);
   height: 5px;
   border-radius: 999px;
-}
-
-/* Proxy Media Status Pill */
-.vs-proxy-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  background: rgba(0, 0, 0, 0.65);
-  color: #ffffff;
-  position: relative;
-  overflow: hidden;
-}
-.vs-proxy-badge[data-state='ready'] .vs-proxy-dot {
-  color: #3fbf7f;
-}
-.vs-proxy-badge-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.18);
-}
-.vs-proxy-badge-bar > span {
-  display: block;
-  height: 100%;
-  width: calc(var(--progress, 0) * 100%);
-  background: var(--vs-accent);
-  transition: width 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ==========================================================================

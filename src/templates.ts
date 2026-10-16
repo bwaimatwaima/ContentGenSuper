@@ -3112,7 +3112,7 @@ export const MODAL_TEMPLATES = `
         </div>
 
         <!-- Modal Body -->
-        <div class="p-6 space-y-5 overflow-y-auto max-h-[80vh]">
+        <div id="export-settings-modal-body" class="p-6 space-y-5 overflow-y-auto max-h-[80vh]">
             <!-- Guest Account Export Restriction Banner -->
             <div id="export-guest-warning" class="hidden rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 space-y-2.5">
                 <div class="flex items-start gap-3">

@@ -6,6 +6,7 @@
 import * as dom from './dom';
 import { drawVideoFrame } from './videoRenderer';
 import { state } from './state';
+import { timelineState } from './state-timeline';
 import { getActiveAspectRatio } from './handlers-effects';
 import { vsIcon } from './ui-icons';
 
@@ -647,12 +648,10 @@ export function activateVsWorkspace(): boolean {
       cinemaAccordion.classList.add('vs-workspace-accordion');
     }
 
-    // Keep the actual aspect/resolution controls wired to their original handlers.
+    // Keep the actual aspect/preview controls wired to their original handlers.
     const aspectSelect = document.getElementById('video-director-aspect-select');
-    const previewResolutionSelect = document.getElementById('video-preview-resolution-select');
     const responsivePreviewToggle = document.getElementById('video-responsive-preview-toggle');
     if (aspectSelect?.parentElement && topbarCenter) moveNode(aspectSelect.parentElement, topbarCenter);
-    if (previewResolutionSelect?.parentElement && topbarCenter) moveNode(previewResolutionSelect.parentElement, topbarCenter);
     if (responsivePreviewToggle?.parentElement && topbarCenter) moveNode(responsivePreviewToggle.parentElement, topbarCenter);
 
     organizeGraphicsBrowser();
@@ -1322,6 +1321,14 @@ export function mountExportStudioCard(): void {
           <span class="vs-export-spec-label">EST. DURATION</span>
           <span class="vs-export-spec-value" id="vs-export-est-duration">0:15.0</span>
         </div>
+        <div class="vs-export-spec-pill">
+          <span class="vs-export-spec-label">EST. PEAK RAM</span>
+          <span class="vs-export-spec-value" id="vs-export-est-ram" style="color:#38bdf8;">~160 MB</span>
+        </div>
+        <div class="vs-export-spec-pill">
+          <span class="vs-export-spec-label">PIPELINE / STORAGE</span>
+          <span class="vs-export-spec-value" id="vs-export-est-engine" style="color:#34d399;">WebCodecs + OPFS</span>
+        </div>
       </div>
     </div>
     <div class="vs-export-settings-col">
@@ -1351,15 +1358,26 @@ export function mountExportStudioCard(): void {
     }
   }
 
-  // Calculate estimated duration & file size
-  const shotCount = (state as any).shots?.length || state.currentScenes?.length || 4;
-  const estSec = shotCount * 3.5;
+  // Calculate estimated duration & file size & RAM
+  const clips = (timelineState as any).clips;
+  let estSec = 15;
+  if (clips && clips.length > 0) {
+    estSec = clips.reduce((sum: number, c: any) => sum + (c.duration || 3.5), 0);
+  } else {
+    const shotCount = (state as any).shots?.length || state.currentScenes?.length || 4;
+    estSec = shotCount * 3.5;
+  }
   const mins = Math.floor(estSec / 60);
   const secs = (estSec % 60).toFixed(1).padStart(4, '0');
   const durEl = card.querySelector('#vs-export-est-duration');
   if (durEl) durEl.textContent = `${mins}:${secs}`;
   const sizeEl = card.querySelector('#vs-export-est-size');
-  if (sizeEl) sizeEl.textContent = `~${(estSec * 1.15).toFixed(1)} MB`;
+  if (sizeEl) sizeEl.textContent = `~${Math.max(1, estSec * 1.05).toFixed(1)} MB`;
+  const ramEl = card.querySelector('#vs-export-est-ram');
+  if (ramEl) {
+    const isHighRes = (document.getElementById('video-export-resolution') as HTMLSelectElement | null)?.value === '1080p';
+    ramEl.textContent = isHighRes ? '~210 MB' : '~145 MB';
+  }
 
   // Sync format radio buttons
   card.querySelectorAll<HTMLButtonElement>('.vs-export-radio-btn').forEach((btn) => {

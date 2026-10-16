@@ -272,19 +272,54 @@ export const IMAGE_STYLE_OPTIONS = `
 `;
 
 export const MODAL_TEMPLATES = `
-<!-- Non-Modal Progress Indicator -->
-<div id="progress-indicator" class="fixed bottom-0 left-0 right-0 p-4 hidden transition-transform duration-300 translate-y-full pointer-events-none" style="z-index: 9999;">
-    <div class="max-w-2xl mx-auto glass-panel rounded-xl shadow-2xl p-4 pointer-events-auto">
-        <h3 id="progress-title" class="text-lg font-bold mb-3 text-white tracking-wide text-center">Processing...</h3>
-        <div class="relative w-full h-4 bg-gray-700 rounded-full overflow-hidden mb-2 shadow-inner">
-            <div id="progress-bar-indicator" class="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-300 ease-out" style="width: 0%"></div>
+<!-- Non-Modal Studio Progress Indicator & Live Diagnostics -->
+<div id="progress-indicator" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-xl w-auto hidden transition-all duration-300 translate-y-full pointer-events-none" style="z-index: 9999;">
+    <div class="vs-studio-progress-card p-4 rounded-xl shadow-2xl pointer-events-auto border border-[#34384a] bg-[#14151b]/95 backdrop-blur-xl text-white">
+        <!-- Header: Title, Stage Badge, and Live Percent -->
+        <div class="flex items-center justify-between gap-3 mb-2.5">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="vs-progress-live-dot w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0"></span>
+                <h3 id="progress-title" class="text-xs sm:text-sm font-bold tracking-wide text-gray-100 truncate">Processing...</h3>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 font-mono">
+                <span id="progress-stage-badge" class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-cyan-950/80 text-cyan-300 border border-cyan-500/30">ENCODING</span>
+                <span id="progress-percent" class="text-xs sm:text-sm font-bold text-cyan-400">0%</span>
+            </div>
         </div>
-        <div class="flex justify-between items-center text-sm font-mono text-gray-400">
-            <span id="progress-text">Starting...</span>
-            <span id="progress-percent">0%</span>
+
+        <!-- Sleek Studio Progress Bar Track (7px) with Glowing Playhead Leading Edge -->
+        <div class="vs-progress-track mb-3">
+            <div id="progress-bar-indicator" class="vs-progress-fill" style="width: 0%">
+                <div class="vs-progress-head"></div>
+            </div>
         </div>
-        <div id="progress-cancel-container" class="text-center mt-3 hidden">
-            <button id="progress-cancel-btn" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-4 text-xs rounded-lg transition">Stop Processing</button>
+
+        <!-- Telemetry Diagnostics Readout Strip -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2.5 text-[10px] font-mono">
+            <div class="vs-telemetry-pill">
+                <span class="vs-tel-label">FRM:</span>
+                <span id="progress-frame-stat" class="vs-tel-value truncate">-- / --</span>
+            </div>
+            <div class="vs-telemetry-pill">
+                <span class="vs-tel-label">SPD:</span>
+                <span id="progress-fps-stat" class="vs-tel-value truncate" style="color:#34d399;">~0 FPS</span>
+            </div>
+            <div class="vs-telemetry-pill">
+                <span class="vs-tel-label">RAM:</span>
+                <span id="progress-ram-stat" class="vs-tel-value truncate" style="color:#38bdf8;">-- MB</span>
+            </div>
+            <div class="vs-telemetry-pill">
+                <span class="vs-tel-label">ETA:</span>
+                <span id="progress-eta-stat" class="vs-tel-value truncate" style="color:#fbbf24;">--</span>
+            </div>
+        </div>
+
+        <!-- Status description message and subtle cancel button -->
+        <div class="flex items-center justify-between gap-3 text-xs font-mono text-gray-400 min-h-[22px]">
+            <span id="progress-text" class="truncate">Starting...</span>
+            <div id="progress-cancel-container" class="shrink-0 hidden">
+                <button id="progress-cancel-btn" type="button" class="px-2.5 py-1 rounded text-[11px] font-sans font-semibold text-gray-300 hover:text-red-300 hover:bg-red-950/40 border border-white/10 hover:border-red-500/30 transition-all cursor-pointer">Stop Processing</button>
+            </div>
         </div>
     </div>
 </div>
@@ -538,19 +573,6 @@ export const MODAL_TEMPLATES = `
                             <option value="1:1" class="bg-zinc-900 text-white">1:1 Square</option>
                             <option value="4:3" class="bg-zinc-900 text-white">4:3 Standard</option>
                             <option value="3:4" class="bg-zinc-900 text-white">3:4 Portrait</option>
-                        </select>
-                    </div>
-
-                    <div class="h-3.5 w-px bg-white/10 hidden md:block"></div>
-
-                    <!-- Preview Resolution Switcher -->
-                    <div class="hidden md:flex items-center px-1.5 py-0.5 gap-1 hover:text-white transition-colors" title="Canvas Preview Render Quality">
-                        <span class="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider select-none">Quality</span>
-                        <select id="video-preview-resolution-select" class="bg-transparent text-zinc-200 border-none text-xs font-medium outline-none cursor-pointer pr-1">
-                            <option value="720p" class="bg-zinc-900 text-white">720p HD</option>
-                            <option value="520p" selected class="bg-zinc-900 text-white">520p</option>
-                            <option value="320p" class="bg-zinc-900 text-white">320p</option>
-                            <option value="240p" class="bg-zinc-900 text-white">240p</option>
                         </select>
                     </div>
 
@@ -1027,17 +1049,6 @@ export const MODAL_TEMPLATES = `
                         </div>
                     </div>
                     <div id="timeline-clips-container" class="flex-grow flex w-full min-h-0 overflow-hidden p-0 bg-black/60 relative"></div>
-                    <!-- Dedicated Timeline Navigation & Playhead Scrubber Bar -->
-                    <div id="timeline-navigation-bar" class="w-full bg-[#0c0d14] border-t border-white/10 px-3 py-1.5 flex items-center gap-3 text-xs z-30 select-none shrink-0 shadow-lg">
-                        <div class="flex items-center gap-1 shrink-0">
-                            <span class="text-[9px] uppercase tracking-wider text-cyan-400/90 font-bold">Seek</span>
-                            <span class="text-[10px] font-mono text-cyan-300 shrink-0 font-bold bg-zinc-900/90 border border-cyan-500/30 px-2 py-0.5 rounded shadow-xs" id="timeline-nav-current-time">0.0s</span>
-                        </div>
-                        <div class="flex-grow flex items-center relative group">
-                            <input id="timeline-scrub-slider" type="range" min="0" max="100" value="0" step="0.01" class="w-full h-2 bg-zinc-800 accent-cyan-400 rounded-full cursor-pointer hover:bg-zinc-700 transition-all shadow-inner" title="Slide to move playhead across sequence" />
-                        </div>
-                        <span class="text-[10px] font-mono text-gray-400 shrink-0 font-bold bg-zinc-900/90 border border-white/10 px-2 py-0.5 rounded shadow-xs" id="timeline-nav-total-time">0.0s</span>
-                    </div>
                 </div>
             </div>
 

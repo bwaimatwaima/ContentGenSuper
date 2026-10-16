@@ -768,6 +768,11 @@ export let progressText: HTMLSpanElement;
 export let progressPercent: HTMLSpanElement;
 export let progressCancelContainer: HTMLDivElement;
 export let progressCancelBtn: HTMLButtonElement;
+export let progressStageBadge: HTMLSpanElement | null = null;
+export let progressFrameStat: HTMLSpanElement | null = null;
+export let progressFpsStat: HTMLSpanElement | null = null;
+export let progressRamStat: HTMLSpanElement | null = null;
+export let progressEtaStat: HTMLSpanElement | null = null;
 
 // --- Image Modal & Editing ---
 export let imageModal: HTMLDivElement;
@@ -1875,6 +1880,11 @@ export function initDOM() {
     progressPercent = document.getElementById('progress-percent') as HTMLSpanElement;
     progressCancelContainer = document.getElementById('progress-cancel-container') as HTMLDivElement;
     progressCancelBtn = document.getElementById('progress-cancel-btn') as HTMLButtonElement;
+    progressStageBadge = document.getElementById('progress-stage-badge') as HTMLSpanElement | null;
+    progressFrameStat = document.getElementById('progress-frame-stat') as HTMLSpanElement | null;
+    progressFpsStat = document.getElementById('progress-fps-stat') as HTMLSpanElement | null;
+    progressRamStat = document.getElementById('progress-ram-stat') as HTMLSpanElement | null;
+    progressEtaStat = document.getElementById('progress-eta-stat') as HTMLSpanElement | null;
     imageModal = document.getElementById('image-modal') as HTMLDivElement;
     closeModalBtn = document.getElementById('close-modal-btn') as HTMLButtonElement;
     generatedImage = document.getElementById('generated-image') as HTMLImageElement;

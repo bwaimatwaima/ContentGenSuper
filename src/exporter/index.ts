@@ -252,10 +252,12 @@ async function maybeExportSidecarSubtitles(filename: string) {
 async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: boolean) {
     sessionStorage.setItem('export.lastFrame', '0');
     
-    // Release cached visual data before the memory-hungry render starts
-    try {
-        invalidateSpectrumCache();
-    } catch (e) {}
+    // Proactively purge visual caches, WebGL textures, and segment buffers to free maximum RAM for export
+    try { invalidateSpectrumCache(); } catch (e) {}
+    try { cleanupWebGL(); } catch (e) {}
+    try { clearStaticFrameCache(); } catch (e) {}
+    try { clearSegmentAudioCaches(); } catch (e) {}
+    await yieldToMain();
 
     try {
         const { forcePausePlayback } = await import('../videoController');

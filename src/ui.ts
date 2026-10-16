@@ -268,6 +268,9 @@ let processingStartTimeMs = 0;
 let encodingPhaseStartMs = 0;
 let encodingStartPercent = 0;
 let smoothedEtaSec: number | null = null;
+let telemetryLastFrameCount = 0;
+let telemetryLastFrameTime = 0;
+let telemetrySmoothedFps = 0;
 
 function formatDurationShort(totalSeconds: number): string {
   const sec = Math.max(0, Math.round(totalSeconds));
@@ -306,11 +309,14 @@ export async function openProcessingModal(
   state.currentProcessingAbortController = controller;
   state.cancelProcessingCallback = onCancel || null;
 
-  // Reset live ETA trackers
+  // Reset live ETA & performance telemetry trackers
   processingStartTimeMs = performance.now();
   encodingPhaseStartMs = 0;
   encodingStartPercent = 0;
   smoothedEtaSec = null;
+  telemetryLastFrameCount = 0;
+  telemetryLastFrameTime = 0;
+  telemetrySmoothedFps = 0;
 
   if (dom.progressTitle) dom.progressTitle.textContent = title;
   if (dom.progressBarIndicator) dom.progressBarIndicator.style.width = '1%';
@@ -318,6 +324,11 @@ export async function openProcessingModal(
   if (dom.progressPercent) dom.progressPercent.textContent = '1%';
   if (dom.progressCancelBtn) dom.progressCancelBtn.textContent = cancelBtnText;
   if (dom.progressCancelContainer) dom.progressCancelContainer.classList.toggle('hidden', !cancellable);
+  if (dom.progressStageBadge) dom.progressStageBadge.textContent = 'PREP';
+  if (dom.progressFrameStat) dom.progressFrameStat.textContent = '-- / --';
+  if (dom.progressFpsStat) dom.progressFpsStat.textContent = '~0 FPS';
+  if (dom.progressRamStat) dom.progressRamStat.textContent = '-- MB';
+  if (dom.progressEtaStat) dom.progressEtaStat.textContent = '--';
   
   if (dom.progressIndicator) {
       dom.progressIndicator.classList.remove('hidden');
@@ -385,12 +396,69 @@ export function updateProcessingProgress(percent: number, message: string) {
   if (dom.progressBarIndicator) dom.progressBarIndicator.style.width = `${safePercent}%`;
   if (dom.progressPercent) dom.progressPercent.textContent = `${safePercent}%`;
 
-  if (message && dom.progressText) {
-    let displayMessage = message;
-    const now = performance.now();
+  if (message) {
+    const lower = message.toLowerCase();
 
-    // Compute live Elapsed & Remaining ETA during active encoding (>10% and <96%)
-    if (processingStartTimeMs > 0 && percent > 10 && percent < 96) {
+    // 1. Stage classification
+    let stage = 'PROCESSING';
+    if (lower.includes('audio') || lower.includes('mixing') || lower.includes('ducking') || lower.includes('mastering')) {
+      stage = 'AUDIO MIX';
+    } else if (lower.includes('image') || lower.includes('prescal') || lower.includes('asset') || lower.includes('texture')) {
+      stage = 'IMG OPT';
+    } else if (lower.includes('frame') || lower.includes('visuals') || lower.includes('encode') || lower.includes('segment')) {
+      stage = 'ENCODING';
+    } else if (lower.includes('concat') || lower.includes('stitch') || lower.includes('demux') || lower.includes('mux')) {
+      stage = 'MUXING';
+    } else if (lower.includes('finalize') || lower.includes('cleaning') || lower.includes('complete') || lower.includes('done')) {
+      stage = 'FINALIZING';
+    }
+    if (dom.progressStageBadge) {
+      dom.progressStageBadge.textContent = stage;
+    }
+
+    // 2. Parse Frame count & calculate live Throughput FPS
+    const frameMatch = message.match(/Frame\s+(\d+)\s*(?:of|\/)\s*(\d+)/i) || message.match(/\[(\d+)%\].*?(\d+)\/(\d+)/i);
+    const now = performance.now();
+    if (frameMatch) {
+      const cur = parseInt(frameMatch[1], 10);
+      const tot = parseInt(frameMatch[2], 10);
+      if (dom.progressFrameStat) {
+        dom.progressFrameStat.textContent = `${cur} / ${tot}`;
+      }
+      if (telemetryLastFrameTime > 0 && cur > telemetryLastFrameCount) {
+        const deltaFrames = cur - telemetryLastFrameCount;
+        const deltaSec = (now - telemetryLastFrameTime) / 1000;
+        if (deltaSec >= 0.15) {
+          const instantFps = deltaFrames / deltaSec;
+          telemetrySmoothedFps = telemetrySmoothedFps === 0 ? instantFps : (telemetrySmoothedFps * 0.72 + instantFps * 0.28);
+          if (dom.progressFpsStat) {
+            dom.progressFpsStat.textContent = `~${telemetrySmoothedFps.toFixed(1)} FPS`;
+          }
+          telemetryLastFrameCount = cur;
+          telemetryLastFrameTime = now;
+        }
+      } else if (telemetryLastFrameTime === 0) {
+        telemetryLastFrameCount = cur;
+        telemetryLastFrameTime = now;
+      }
+    } else if (stage === 'AUDIO MIX' && dom.progressFrameStat) {
+      dom.progressFrameStat.textContent = 'Audio Bus';
+    } else if (stage === 'IMG OPT' && dom.progressFrameStat) {
+      dom.progressFrameStat.textContent = 'Textures';
+    }
+
+    // 3. Live RAM / Heap footprint
+    const heapUsed = (performance as any)?.memory?.usedJSHeapSize;
+    if (heapUsed) {
+      const mb = Math.round(heapUsed / (1024 * 1024));
+      if (dom.progressRamStat) dom.progressRamStat.textContent = `${mb} MB`;
+    } else if (dom.progressRamStat) {
+      const estMb = percent < 10 ? 95 : (120 + Math.min(85, Math.round(percent * 0.65)));
+      dom.progressRamStat.textContent = `~${estMb} MB`;
+    }
+
+    // 4. Compute live Elapsed & Remaining ETA
+    if (processingStartTimeMs > 0 && percent > 5 && percent < 98) {
       if (encodingPhaseStartMs === 0 || percent < encodingStartPercent) {
         encodingPhaseStartMs = now;
         encodingStartPercent = percent;
@@ -399,23 +467,31 @@ export function updateProcessingProgress(percent: number, message: string) {
         const elapsedEncodingSec = (now - encodingPhaseStartMs) / 1000;
         const pctDelta = percent - encodingStartPercent;
 
-        if (elapsedEncodingSec > 1.0 && pctDelta > 1.0) {
+        if (elapsedEncodingSec > 0.8 && pctDelta > 0.8) {
           const ratePerSec = pctDelta / elapsedEncodingSec;
-          const remainingPct = Math.max(0, 97 - percent);
+          const remainingPct = Math.max(0, 99 - percent);
           const rawEtaSec = remainingPct / ratePerSec;
 
           smoothedEtaSec =
             smoothedEtaSec === null
               ? rawEtaSec
-              : smoothedEtaSec * 0.78 + rawEtaSec * 0.22;
-
-          const totalElapsedSec = (now - processingStartTimeMs) / 1000;
-          displayMessage = `${message}  •  Elapsed ${formatShortEta(totalElapsedSec)}  •  ETA ~${formatShortEta(smoothedEtaSec)}`;
+              : smoothedEtaSec * 0.76 + rawEtaSec * 0.24;
         }
       }
     }
 
-    dom.progressText.textContent = displayMessage;
+    if (dom.progressEtaStat) {
+      if (smoothedEtaSec !== null && smoothedEtaSec > 0) {
+        dom.progressEtaStat.textContent = `~${formatShortEta(smoothedEtaSec)}`;
+      } else if (processingStartTimeMs > 0) {
+        const totalElapsedSec = (now - processingStartTimeMs) / 1000;
+        dom.progressEtaStat.textContent = `${formatShortEta(totalElapsedSec)}...`;
+      }
+    }
+
+    if (dom.progressText) {
+      dom.progressText.textContent = message;
+    }
   }
 
   if (message && message !== lastLogMessage) {

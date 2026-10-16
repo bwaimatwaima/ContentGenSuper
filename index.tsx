@@ -57,6 +57,8 @@ import {
   mountInspectorPositionGlyphs,
   mountInspectorSpeedChips,
   mountPlayerStageOverlays,
+  mountExportStudioCard,
+  initStudioCommandPalette,
 } from './src/director-workspace';
 
 // Auto-recover from stale dynamic chunk hash mismatches on new deployments
@@ -1650,6 +1652,9 @@ function registerEventListeners() {
 
     // Player Stage Composition Overlays (Rule of Thirds, Crosshair, Safe Zones)
     mountPlayerStageOverlays();
+
+    // Studio UI Command Palette (Ctrl+K / Cmd+K)
+    initStudioCommandPalette();
 
     // Flush pending changes before unload to prevent data loss
     const flushPendingAutosaves = () => {

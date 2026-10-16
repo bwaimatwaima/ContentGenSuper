@@ -142,19 +142,292 @@ function restoreGraphicsBrowserScaffold(): void {
   graphicsLayoutScaffold = null;
 }
 
-function makeEffectsLauncher(): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'vs-launch-card';
-  card.innerHTML = `
-    <div class="vs-launch-icon">${vsIcon('sparkles', 18)}</div>
-    <h3>Visual Effects & Color</h3>
-    <p>Open the existing effects workspace for grading, VFX and visual treatments.</p>
-    <button type="button" class="vs-btn primary" id="vs-open-effects-btn">${vsIcon('sliders', 13)} <span>Open FX Studio</span></button>
+function renderSignalScope(scopeCanvas: HTMLCanvasElement, mode: 'rgb' | 'luma'): void {
+  const sourceCanvas =
+    (document.getElementById('video-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('video-director-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('director-preview-canvas') as HTMLCanvasElement | null) ||
+    (document.getElementById('video-preview-canvas') as HTMLCanvasElement | null);
+
+  if (!sourceCanvas || sourceCanvas.width === 0 || sourceCanvas.height === 0) return;
+  const dCtx = scopeCanvas.getContext('2d');
+  if (!dCtx) return;
+
+  const dw = scopeCanvas.width;
+  const dh = scopeCanvas.height;
+
+  dCtx.fillStyle = '#141416';
+  dCtx.fillRect(0, 0, dw, dh);
+
+  // Draw 25%, 50%, 75% IRE guideline grid
+  dCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  dCtx.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach((frac) => {
+    const y = Math.round(dh * frac);
+    dCtx.beginPath();
+    dCtx.moveTo(0, y);
+    dCtx.lineTo(dw, y);
+    dCtx.stroke();
+  });
+
+  try {
+    const sampleW = 56;
+    const sampleH = 40;
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = sampleW;
+    offCanvas.height = sampleH;
+    const offCtx = offCanvas.getContext('2d');
+    if (!offCtx) return;
+    offCtx.drawImage(sourceCanvas, 0, 0, sampleW, sampleH);
+    const imgData = offCtx.getImageData(0, 0, sampleW, sampleH).data;
+
+    if (mode === 'rgb') {
+      const colW = dw / 3;
+      dCtx.font = '9px monospace';
+      dCtx.fillStyle = '#ef4444';
+      dCtx.fillText('R', 6, 11);
+      dCtx.fillStyle = '#22c55e';
+      dCtx.fillText('G', colW + 6, 11);
+      dCtx.fillStyle = '#3b82f6';
+      dCtx.fillText('B', colW * 2 + 6, 11);
+
+      dCtx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      dCtx.beginPath();
+      dCtx.moveTo(colW, 0); dCtx.lineTo(colW, dh);
+      dCtx.moveTo(colW * 2, 0); dCtx.lineTo(colW * 2, dh);
+      dCtx.stroke();
+
+      for (let x = 0; x < sampleW; x += 2) {
+        for (let y = 0; y < sampleH; y += 2) {
+          const idx = (y * sampleW + x) * 4;
+          const r = imgData[idx];
+          const g = imgData[idx + 1];
+          const b = imgData[idx + 2];
+
+          const plotXR = (x / sampleW) * colW;
+          const plotXG = colW + (x / sampleW) * colW;
+          const plotXB = colW * 2 + (x / sampleW) * colW;
+
+          const plotYR = dh - (r / 255) * (dh - 8) - 4;
+          const plotYG = dh - (g / 255) * (dh - 8) - 4;
+          const plotYB = dh - (b / 255) * (dh - 8) - 4;
+
+          dCtx.fillStyle = 'rgba(239, 68, 68, 0.45)';
+          dCtx.fillRect(plotXR, plotYR, 1.4, 1.4);
+          dCtx.fillStyle = 'rgba(34, 197, 94, 0.45)';
+          dCtx.fillRect(plotXG, plotYG, 1.4, 1.4);
+          dCtx.fillStyle = 'rgba(59, 130, 246, 0.45)';
+          dCtx.fillRect(plotXB, plotYB, 1.4, 1.4);
+        }
+      }
+    } else {
+      dCtx.font = '9px monospace';
+      dCtx.fillStyle = '#8fb6fb';
+      dCtx.fillText('LUMA (IRE 0-100)', 6, 11);
+
+      for (let x = 0; x < sampleW; x += 2) {
+        for (let y = 0; y < sampleH; y += 2) {
+          const idx = (y * sampleW + x) * 4;
+          const luma = 0.299 * imgData[idx] + 0.587 * imgData[idx + 1] + 0.114 * imgData[idx + 2];
+          const plotX = (x / sampleW) * dw;
+          const plotY = dh - (luma / 255) * (dh - 8) - 4;
+
+          dCtx.fillStyle = 'rgba(143, 182, 251, 0.5)';
+          dCtx.fillRect(plotX, plotY, 1.6, 1.6);
+        }
+      }
+    }
+  } catch {}
+}
+
+function buildEffectsStudioPanel(): HTMLElement {
+  const panel = document.createElement('div');
+  panel.className = 'vs-effects-panel-body';
+  panel.style.cssText = 'display:flex; flex-direction:column; gap:14px; padding:12px; overflow-y:auto; flex:1; min-height:0;';
+
+  // 1. Signal Scope Card (RGB Parade / Luma Waveform)
+  const scopeCard = document.createElement('div');
+  scopeCard.className = 'vs-scope-card';
+  scopeCard.innerHTML = `
+    <div class="vs-scope-head">
+      <span class="vs-scope-title">${vsIcon('bar-chart-2', 13)} Signal Scope</span>
+      <div class="vs-scope-mode-btns" role="group" aria-label="Scope mode">
+        <button type="button" class="vs-scope-mode-btn" data-mode="rgb" aria-pressed="true">RGB Parade</button>
+        <button type="button" class="vs-scope-mode-btn" data-mode="luma" aria-pressed="false">Luma</button>
+      </div>
+    </div>
+    <div class="vs-scope-canvas-wrap">
+      <canvas id="vs-live-scope-canvas" class="vs-scope-canvas" width="280" height="96"></canvas>
+    </div>
   `;
-  card.querySelector('#vs-open-effects-btn')?.addEventListener('click', () => {
+  panel.appendChild(scopeCard);
+
+  // 2. Visual LUT / Color Grading Swatches Grid
+  const lutSection = document.createElement('div');
+  lutSection.className = 'vs-lut-section';
+  lutSection.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-2, #a9a9b1);">${vsIcon('sliders', 12)} Color Grade & LUTs</span>
+      <button type="button" id="vs-lut-reset-btn" class="vs-btn subtle" style="padding:2px 6px; font-size:10px;">${vsIcon('rotate-ccw', 10)} Reset</button>
+    </div>
+    <div class="vs-lut-grid" role="radiogroup" aria-label="LUT Presets">
+      <div class="vs-lut-tile" role="radio" aria-checked="true" data-preset="clean-default">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #4b5563, #9ca3af);"></div>
+        <span class="vs-lut-label">Natural Rec.709</span>
+      </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="cyberpunk-neon">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #06b6d4, #ec4899);"></div>
+        <span class="vs-lut-label">Teal & Orange</span>
+      </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="golden-hour">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #f59e0b, #d97706);"></div>
+        <span class="vs-lut-label">Warm Amber</span>
+      </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="film-noir">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #18181b, #71717a);"></div>
+        <span class="vs-lut-label">Moody Noir</span>
+      </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="cinematic-35mm">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #78350f, #a16207);"></div>
+        <span class="vs-lut-label">Vintage 35mm</span>
+      </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="hdr-crisp-nature">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #10b981, #0284c7);"></div>
+        <span class="vs-lut-label">Crisp HDR</span>
+      </div>
+    </div>
+  `;
+  panel.appendChild(lutSection);
+
+  // 3. Interactive Color Balance Sliders
+  const balanceSection = document.createElement('div');
+  balanceSection.className = 'vs-slider-section';
+  balanceSection.style.cssText = 'display:flex; flex-direction:column; gap:10px; background:var(--vs-bg-panel-2, #2a2a2d); border:1px solid var(--vs-border, #323236); border-radius:8px; padding:10px 12px;';
+  balanceSection.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-2, #a9a9b1);">Color Balance</span>
+      <span style="font-size:10px; color:var(--text-3, #8d8d96);">Live Preview</span>
+    </div>
+    <div class="vs-slider-temp" style="display:flex; flex-direction:column; gap:4px;">
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
+        <span>Temperature</span>
+        <span id="vs-temp-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">0</span>
+      </div>
+      <input type="range" id="vs-temp-slider" min="-100" max="100" value="0" style="width:100%;" />
+    </div>
+    <div class="vs-slider-tint" style="display:flex; flex-direction:column; gap:4px;">
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
+        <span>Tint</span>
+        <span id="vs-tint-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">0</span>
+      </div>
+      <input type="range" id="vs-tint-slider" min="-100" max="100" value="0" style="width:100%;" />
+    </div>
+    <div class="vs-slider-sat" style="display:flex; flex-direction:column; gap:4px;">
+      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text, #ececee);">
+        <span>Saturation</span>
+        <span id="vs-sat-val" style="font-family:var(--font-mono); font-size:10.5px; color:var(--text-3);">100%</span>
+      </div>
+      <input type="range" id="vs-sat-slider" min="0" max="200" value="100" style="width:100%;" />
+    </div>
+  `;
+  panel.appendChild(balanceSection);
+
+  // 4. VFX & Particle Studio Advanced Launcher
+  const launcher = document.createElement('div');
+  launcher.className = 'vs-launch-card';
+  launcher.innerHTML = `
+    <div class="vs-launch-icon">${vsIcon('sparkles', 18)}</div>
+    <h3>VFX & Particle Studio</h3>
+    <p>Particles, weather effects (rain, snow, dust), chromatic aberration, light leaks & film grain.</p>
+    <button type="button" class="vs-btn primary" id="vs-open-vfx-btn" style="width:100%; justify-content:center;">
+      ${vsIcon('sparkles', 13)} <span>Open VFX Studio</span>
+    </button>
+  `;
+  launcher.querySelector('#vs-open-vfx-btn')?.addEventListener('click', () => {
     document.getElementById('vfx-studio-video-director-btn')?.click();
   });
-  return card;
+  panel.appendChild(launcher);
+
+  // Wire Scope Mode Toggles and live render
+  const canvas = scopeCard.querySelector<HTMLCanvasElement>('#vs-live-scope-canvas');
+  let currentScopeMode: 'rgb' | 'luma' = 'rgb';
+
+  scopeCard.querySelectorAll<HTMLButtonElement>('.vs-scope-mode-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      scopeCard.querySelectorAll('.vs-scope-mode-btn').forEach((btn) => btn.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', 'true');
+      currentScopeMode = (b.dataset.mode as 'rgb' | 'luma') || 'rgb';
+      if (canvas) renderSignalScope(canvas, currentScopeMode);
+    });
+  });
+
+  if (canvas) {
+    const updateScope = () => renderSignalScope(canvas, currentScopeMode);
+    setInterval(updateScope, 400);
+    setTimeout(updateScope, 50);
+  }
+
+  // Wire LUT Tiles
+  import('./handlers-effects').then(({ applyPreset }) => {
+    lutSection.querySelectorAll<HTMLElement>('.vs-lut-tile').forEach((tile) => {
+      tile.addEventListener('click', () => {
+        const preset = tile.dataset.preset;
+        if (!preset) return;
+        lutSection.querySelectorAll('.vs-lut-tile').forEach((t) => t.setAttribute('aria-checked', 'false'));
+        tile.setAttribute('aria-checked', 'true');
+        applyPreset(preset);
+        if (canvas) setTimeout(() => renderSignalScope(canvas, currentScopeMode), 50);
+      });
+    });
+
+    lutSection.querySelector('#vs-lut-reset-btn')?.addEventListener('click', () => {
+      lutSection.querySelectorAll('.vs-lut-tile').forEach((t) => t.setAttribute('aria-checked', 'false'));
+      const defaultTile = lutSection.querySelector<HTMLElement>('[data-preset="clean-default"]');
+      if (defaultTile) defaultTile.setAttribute('aria-checked', 'true');
+      applyPreset('clean-default');
+      const tSlider = panel.querySelector<HTMLInputElement>('#vs-temp-slider');
+      const tintSl = panel.querySelector<HTMLInputElement>('#vs-tint-slider');
+      const satSl = panel.querySelector<HTMLInputElement>('#vs-sat-slider');
+      if (tSlider) { tSlider.value = '0'; panel.querySelector('#vs-temp-val')!.textContent = '0'; }
+      if (tintSl) { tintSl.value = '0'; panel.querySelector('#vs-tint-val')!.textContent = '0'; }
+      if (satSl) { satSl.value = '100'; panel.querySelector('#vs-sat-val')!.textContent = '100%'; }
+      if (canvas) setTimeout(() => renderSignalScope(canvas, currentScopeMode), 50);
+    });
+  });
+
+  // Wire Sliders
+  const tempSlider = panel.querySelector<HTMLInputElement>('#vs-temp-slider');
+  const tintSlider = panel.querySelector<HTMLInputElement>('#vs-tint-slider');
+  const satSlider = panel.querySelector<HTMLInputElement>('#vs-sat-slider');
+
+  const onSliderChange = () => {
+    const temp = parseInt(tempSlider?.value || '0', 10);
+    const tint = parseInt(tintSlider?.value || '0', 10);
+    const sat = parseInt(satSlider?.value || '100', 10);
+
+    const tempValEl = panel.querySelector('#vs-temp-val');
+    const tintValEl = panel.querySelector('#vs-tint-val');
+    const satValEl = panel.querySelector('#vs-sat-val');
+    if (tempValEl) tempValEl.textContent = String(temp);
+    if (tintValEl) tintValEl.textContent = String(tint);
+    if (satValEl) satValEl.textContent = `${sat}%`;
+
+    // Apply color temperature/balance to preview canvas
+    const pCanvas = document.getElementById('video-canvas') || document.querySelector('canvas:not(#export-render-canvas):not(.vs-scope-canvas)');
+    if (pCanvas) {
+      const sepiaVal = temp > 0 ? (temp / 100) * 0.3 : 0;
+      const hueVal = temp < 0 ? (temp / 100) * 15 : (tint / 100) * 20;
+      const satVal = sat / 100;
+      (pCanvas as HTMLElement).style.filter = `saturate(${satVal}) sepia(${sepiaVal}) hue-rotate(${hueVal}deg)`;
+    }
+    if (canvas) setTimeout(() => renderSignalScope(canvas, currentScopeMode), 50);
+  };
+
+  tempSlider?.addEventListener('input', onSliderChange);
+  tintSlider?.addEventListener('input', onSliderChange);
+  satSlider?.addEventListener('input', onSliderChange);
+
+  return panel;
 }
 
 export function initVsWorkspaceToggle(): void {
@@ -231,9 +504,10 @@ export function activateVsWorkspace(): boolean {
         </div>
         <div class="topbar-center" id="vs-topbar-center-slot" aria-label="Preview and composition controls"></div>
         <div class="topbar-right" id="vs-topbar-right-slot">
-          <button type="button" id="vs-export-video-btn" class="vs-btn primary" title="Export the current video">${vsIcon('download', 13)} <span>Export</span></button>
-          <button type="button" id="vs-close-director-btn" class="vs-icon-btn" title="Close Video Director" aria-label="Close Video Director">${vsIcon('x', 15)}</button>
+          <button type="button" id="vs-topbar-cmd-btn" class="vs-btn subtle" title="Quick Search & Command Palette (Ctrl+K)">${vsIcon('search', 13)} <span>Search</span> <kbd style="font-size:9.5px; opacity:0.65; margin-left:3px; padding:1px 4px; background:rgba(255,255,255,0.08); border-radius:3px; border:1px solid rgba(255,255,255,0.12);">⌘K</kbd></button>
           <button type="button" id="vs-exit-classic-btn" class="vs-btn subtle" title="Switch back to the original ContentGen layout">Classic UI</button>
+          <button type="button" id="vs-export-video-btn" class="vs-btn primary" title="Export the current video">${vsIcon('download', 13)} <span>Export Video</span></button>
+          <button type="button" id="vs-close-director-btn" class="vs-icon-btn" title="Close Video Director" aria-label="Close Video Director">${vsIcon('x', 15)}</button>
         </div>
       </header>
       <div class="workspace" id="vs-workspace-grid">
@@ -249,7 +523,7 @@ export function activateVsWorkspace(): boolean {
             <div class="assets-body" id="vs-left-tab-graphics"></div>
             <div class="assets-body hidden" id="vs-left-tab-audio"><div class="vs-section-intro"><strong>Audio & voice</strong><span>Existing narration and music controls</span></div></div>
             <div class="assets-body hidden" id="vs-left-tab-captions"><div class="vs-section-intro"><strong>Captions & subtitles</strong><span>Existing subtitle controls</span></div></div>
-            <div class="assets-body hidden" id="vs-left-tab-effects"><div class="vs-section-intro"><strong>Visual effects</strong><span>Open the existing effects studio</span></div></div>
+            <div class="assets-body hidden" id="vs-left-tab-effects"></div>
           </section>
           <div class="resizer v" id="vs-resizer-left" role="separator" aria-orientation="vertical" aria-label="Resize library panel"></div>
           <section class="panel player-panel" id="vs-center-player-panel" aria-label="Video preview">
@@ -382,7 +656,7 @@ export function activateVsWorkspace(): boolean {
     if (responsivePreviewToggle?.parentElement && topbarCenter) moveNode(responsivePreviewToggle.parentElement, topbarCenter);
 
     organizeGraphicsBrowser();
-    if (effectsSlot) effectsSlot.appendChild(makeEffectsLauncher());
+    if (effectsSlot) effectsSlot.appendChild(buildEffectsStudioPanel());
 
     // Tabs share one small controller. Every panel remains the original DOM node.
     shellEl.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((btn) => {
@@ -429,7 +703,11 @@ export function activateVsWorkspace(): boolean {
       shellEl?.querySelector<HTMLButtonElement>('[data-vs-insp-tab="cinema"]')?.click();
     });
     shellEl.querySelector('#vs-export-video-btn')?.addEventListener('click', () => {
+      mountExportStudioCard();
       document.getElementById('video-export-btn')?.click();
+    });
+    shellEl.querySelector('#vs-topbar-cmd-btn')?.addEventListener('click', () => {
+      openStudioCommandPalette();
     });
     const mobileLibraryButton = shellEl.querySelector<HTMLButtonElement>('#vs-mobile-library-btn');
     const libraryPanel = shellEl.querySelector<HTMLElement>('#vs-left-assets-panel');
@@ -785,6 +1063,19 @@ export function mountInspectorPositionGlyphs(): void {
 
   attachGlyphStripToSelect(pipSelect, 'vs-pip-pos-glyph-strip', PIP_CORNER_GLYPHS);
   attachGlyphStripToSelect(thSelect, 'vs-th-pos-glyph-strip', TALKING_HEAD_GLYPHS);
+
+  // Mount Proxy Media status badge in inspector
+  const mediaContainer = document.getElementById('inspector-media-container');
+  if (mediaContainer && !document.getElementById('vs-inspector-proxy-badge')) {
+    const badge = document.createElement('div');
+    badge.id = 'vs-inspector-proxy-badge';
+    badge.className = 'vs-proxy-badge';
+    badge.dataset.state = 'ready';
+    badge.style.cssText = 'margin:6px 0; align-self:flex-start;';
+    badge.title = 'Real-time 540p editing proxy active for lag-free playback and scrub';
+    badge.innerHTML = `<span class="vs-proxy-dot" style="color:#3fbf7f;">●</span> <span>Proxy 540p (Active)</span><div class="vs-proxy-badge-bar"><span style="width:100%;"></span></div>`;
+    mediaContainer.parentElement?.insertBefore(badge, mediaContainer);
+  }
 }
 
 /**
@@ -1046,6 +1337,55 @@ export function mountExportStudioCard(): void {
   `;
 
   container.prepend(card);
+
+  // Snapshot preview frame
+  const pCanvas = card.querySelector<HTMLCanvasElement>('#vs-export-preview-canvas');
+  if (pCanvas) {
+    const sCanvas =
+      (document.getElementById('video-canvas') as HTMLCanvasElement | null) ||
+      (document.getElementById('video-director-canvas') as HTMLCanvasElement | null) ||
+      (document.getElementById('director-preview-canvas') as HTMLCanvasElement | null);
+    if (sCanvas && sCanvas.width > 0 && sCanvas.height > 0) {
+      const pCtx = pCanvas.getContext('2d');
+      pCtx?.drawImage(sCanvas, 0, 0, pCanvas.width, pCanvas.height);
+    }
+  }
+
+  // Calculate estimated duration & file size
+  const shotCount = (state as any).shots?.length || state.currentScenes?.length || 4;
+  const estSec = shotCount * 3.5;
+  const mins = Math.floor(estSec / 60);
+  const secs = (estSec % 60).toFixed(1).padStart(4, '0');
+  const durEl = card.querySelector('#vs-export-est-duration');
+  if (durEl) durEl.textContent = `${mins}:${secs}`;
+  const sizeEl = card.querySelector('#vs-export-est-size');
+  if (sizeEl) sizeEl.textContent = `~${(estSec * 1.15).toFixed(1)} MB`;
+
+  // Sync format radio buttons
+  card.querySelectorAll<HTMLButtonElement>('.vs-export-radio-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      card.querySelectorAll('.vs-export-radio-btn').forEach((b) => b.setAttribute('aria-checked', 'false'));
+      btn.setAttribute('aria-checked', 'true');
+      const preset = btn.dataset.preset;
+      const formatSelect = document.getElementById('export-format') as HTMLSelectElement | null;
+      if (formatSelect && preset) {
+        formatSelect.value = preset;
+        formatSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+  });
+}
+
+let commandPaletteOpenFn: (() => void) | null = null;
+
+export function openStudioCommandPalette(): void {
+  if (!commandPaletteOpenFn) {
+    initStudioCommandPalette();
+  }
+  const fn: (() => void) | null = commandPaletteOpenFn;
+  if (fn) {
+    fn();
+  }
 }
 
 interface StudioCommand {
@@ -1240,6 +1580,8 @@ export function initStudioCommandPalette(): void {
     renderResults();
     setTimeout(() => inputEl.focus(), 20);
   }
+
+  commandPaletteOpenFn = openPalette;
 
   function closePalette() {
     modal.style.display = 'none';

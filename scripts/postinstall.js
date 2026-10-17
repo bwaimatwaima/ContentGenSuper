@@ -21,7 +21,7 @@ try {
           if (content.includes("predefinedAcl: publicUpload ? 'publicRead' : 'projectPrivate'")) {
             const patched = content.replace(/predefinedAcl:\s*publicUpload\s*\?\s*['"]publicRead['"]\s*:\s*['"]projectPrivate['"]/g, 'predefinedAcl: undefined');
             fs.writeFileSync(f, patched, 'utf8');
-            console.log(`[Postinstall] Patched UBLA support in ${f}`);
+            console.log('[Postinstall] Applied Remotion CloudRun storage patch.');
           }
         }
       }

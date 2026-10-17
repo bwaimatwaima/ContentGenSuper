@@ -12,6 +12,7 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isSignedIn() && (
+        request.auth.uid == 'RqynWxsBSTX7DUlheLVdckDXq3g2' ||
         request.auth.token.email == 'bwaimatwaima@gmail.com' ||
         request.auth.token.email == 'BwaimaTwaima@gmail.com' ||
         request.auth.token.email == 'youngpastor808@gmail.com' ||
@@ -31,9 +32,8 @@ service cloud.firestore {
 
     // Users Collection & User Settings Subcollections
     match /users/{userId} {
-      allow get: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
-      allow list: if isSignedIn() && (isSuperAdmin() || (resource.data != null && (resource.data.email == request.auth.token.email || resource.data.uid == request.auth.uid)));
-      allow create: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
       allow delete: if isSignedIn() && isSuperAdmin();
 

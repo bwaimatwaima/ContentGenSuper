@@ -9,13 +9,14 @@ import { showStatus, renderResults } from './ui';
 import { renderTimelineEditor } from './ui-renderers';
 import { saveVersion } from './handlers-project';
 import { timelineState } from './state-timeline';
-import { updateVideoContext } from './videoController';
+import { updateVideoContext, applyTransitionToClip } from './videoController';
 import { drawVideoFrame, getShotFilterCss } from './videoRenderer';
-import { presetToKeyframes } from './utils';
+import { presetToKeyframes, getTransitionIcon, getTransitionLabel } from './utils';
 import type { CameraKeyframesConfig } from './types';
 import { openMapStudioModal } from './map-studio';
 import { removeSecondaryMedia } from './memoryManager';
 import { mountInspectorPositionGlyphs, mountInspectorSpeedChips } from './director-workspace';
+import { focusTransitionForClip } from './transitions-studio-panel';
 
 export let activeShotId: string | null = null;
 
@@ -712,6 +713,35 @@ export function openInspectorForShot(shotId?: string) {
 
     // Highlight target shot card in storyboard grid
     highlightShotCard(target.shot.id);
+
+    // Outgoing Shot Transition UI synchronization
+    const transSelect = document.getElementById('inspector-transition-select') as HTMLSelectElement | null;
+    const transBadge = document.getElementById('inspector-transition-status-badge') as HTMLElement | null;
+    const transSpeedLabel = document.getElementById('inspector-transition-speed-label') as HTMLElement | null;
+
+    const currentShotIdx = allShots.findIndex(item => item.shot.id === target.shot.id);
+    const isLastShot = currentShotIdx >= 0 && currentShotIdx === allShots.length - 1;
+
+    const matchingTimelineClip = timelineState.clips?.find((c: any) => c.id === target.shot.id);
+    const shotTrans = matchingTimelineClip?.transitionToNext || target.shot.transitionToNext || target.shot.transition || 'cut';
+
+    if (transSelect) {
+        transSelect.value = shotTrans;
+        transSelect.disabled = isLastShot;
+        transSelect.title = isLastShot ? 'The final shot in the sequence does not have an outgoing transition.' : 'Select transition to next shot';
+    }
+    if (transBadge) {
+        if (isLastShot) {
+            transBadge.textContent = 'End of Timeline';
+            transBadge.style.color = 'var(--text-3, #71717a)';
+        } else {
+            transBadge.textContent = `${getTransitionIcon(shotTrans)} ${getTransitionLabel(shotTrans)}`;
+            transBadge.style.color = 'var(--accent-text, #818cf8)';
+        }
+    }
+    if (transSpeedLabel) {
+        transSpeedLabel.textContent = `${timelineState.transitionSpeed || 1.0}s`;
+    }
 
     // Refresh visual position glyphs and speed preset chips
     mountInspectorPositionGlyphs();
@@ -1829,6 +1859,31 @@ export function initInspectorHandlers() {
             saveVersion(false);
             if (dom.resultsContainer) renderResults(state.currentScenes);
             showStatus(isSolo ? 'Solo audio enabled: Master voiceover will mute on this shot.' : 'Solo audio disabled.', false, 2500);
+        });
+    }
+
+    // Outgoing Shot Transition Select
+    const inspTransSelect = document.getElementById('inspector-transition-select') as HTMLSelectElement | null;
+    if (inspTransSelect) {
+        inspTransSelect.addEventListener('change', () => {
+            if (!activeShotId) return;
+            const newTrans = inspTransSelect.value;
+            applyTransitionToClip(activeShotId, newTrans, false);
+            const badge = document.getElementById('inspector-transition-status-badge');
+            if (badge) {
+                badge.textContent = `${getTransitionIcon(newTrans)} ${getTransitionLabel(newTrans)}`;
+            }
+        });
+    }
+
+    // Open in Transitions Panel Button
+    const inspOpenTransBtn = document.getElementById('inspector-open-transitions-panel-btn');
+    if (inspOpenTransBtn) {
+        inspOpenTransBtn.addEventListener('click', () => {
+            if (!activeShotId) return;
+            const allShots = getAllStoryboardShots();
+            const idx = allShots.findIndex(item => item.shot.id === activeShotId);
+            focusTransitionForClip(activeShotId, Math.max(0, idx));
         });
     }
 }

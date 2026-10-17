@@ -14,6 +14,7 @@ import * as dom from './dom';
 import * as ui from './ui';
 import * as utils from './utils';
 import { videoRenderContext, setVideoRenderContext, drawVideoFrame } from './videoRenderer';
+export { drawVideoFrame } from './videoRenderer';
 import { fetchAndPopulateVoices } from './audioPipeline';
 import { sliceAudioBuffer, spliceAudioBuffer } from './audioBufferUtils';
 import { invalidateSpectrumCache } from './graphics-engine';

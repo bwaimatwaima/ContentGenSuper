@@ -8,8 +8,9 @@ import { state } from './state';
 import { vsIcon } from './ui-icons';
 import * as ui from './ui';
 import * as utils from './utils';
-import { applyTransitionToClip, randomizeAllTransitions, updateVideoContext, drawVideoFrame } from './videoController';
-import { dom } from './dom';
+import { applyTransitionToClip, randomizeAllTransitions, updateVideoContext } from './videoController';
+import { drawVideoFrame } from './videoRenderer';
+import * as dom from './dom';
 
 export interface TransitionSpec {
   id: string;

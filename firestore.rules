@@ -10,6 +10,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isSuperAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'bwaimatwaima@gmail.com' ||
+        request.auth.token.email == 'BwaimaTwaima@gmail.com' ||
+        request.auth.token.email == 'youngpastor808@gmail.com' ||
+        request.auth.token.email == 'YoungPastor808@gmail.com' ||
+        (request.auth.token.email != null && request.auth.token.email.lower() in ['bwaimatwaima@gmail.com', 'youngpastor808@gmail.com'])
+      );
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 256;
     }
@@ -19,42 +29,71 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Users Collection
+    // Users Collection & User Settings Subcollections
     match /users/{userId} {
-      allow get, list: if isSignedIn() && (isOwner(userId) || (request.auth.token.email != null && request.auth.token.email.toLowerCase() == 'bwaimatwaima@gmail.com'));
-      allow create, update: if isSignedIn() && isOwner(userId);
-      allow delete: if false;
+      allow get: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      allow list: if isSignedIn() && (isSuperAdmin() || (resource.data != null && (resource.data.email == request.auth.token.email || resource.data.uid == request.auth.uid)));
+      allow create: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      allow update: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      allow delete: if isSignedIn() && isSuperAdmin();
+
+      match /{subcollection=**} {
+        allow read, write: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      }
+    }
+
+    // Pre-approved Emails & Deleted/Banned User Tracking
+    match /approvedEmails/{email} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /deletedUsers/{email} {
+      allow read: if isSignedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Global and Public Settings (Public config, maintenance, ads)
+    match /settings/{settingDoc} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
     }
 
     // Credit Ledger Transactions
     match /creditLedger/{ledgerId} {
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow get, list: if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow update, delete: if false;
+      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isSuperAdmin());
+      allow get, list: if isSignedIn() && (resource.data.uid == request.auth.uid || isSuperAdmin());
+      allow update, delete: if isSuperAdmin();
     }
 
-    // Daily Usage Metrics
-    match /usage/{userId}/daily/{dayKey} {
-      allow get, list, create, update: if isSignedIn() && isOwner(userId);
-      allow delete: if false;
+    // Usage Tracking
+    match /usage/{userId} {
+      allow read, write: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      match /{allChildren=**} {
+        allow read, write: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+      }
     }
 
-    // Projects Collection
+    // Video Projects, Storyboard Scenes & Shots
     match /projects/{projectId} {
-      allow get, list, create, update: if isSignedIn();
-      allow delete: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
 
-    // Scenes & Shots
     match /scenes/{sceneId} {
-      allow get, list, create, update, delete: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
 
     match /shots/{shotId} {
-      allow get, list, create, update, delete: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
 
-    // Test Probe
+    // Academy Curriculum & Lessons
+    match /academy_courses/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
+    // Connection Health Test Probe
     match /test/{docId} {
       allow read: if isValidId(docId);
       allow write: if false;

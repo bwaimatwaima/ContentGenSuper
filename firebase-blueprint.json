@@ -7,11 +7,79 @@
       "properties": {
         "email": { "type": "string" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["user", "admin", "owner"] },
-        "status": { "type": "string", "enum": ["active", "pending", "banned"] },
+        "role": { "type": "string", "enum": ["user", "admin", "owner", "reseller", "manager"] },
+        "status": { "type": "string", "enum": ["active", "approved", "pending", "banned"] },
+        "credits": { "type": "number" },
         "createdAt": { "type": "string" }
       },
       "required": ["email", "role", "status"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Global application or ad configuration.",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "EmailRecord": {
+      "title": "EmailRecord",
+      "description": "Approved or deleted email tracking record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" }
+      }
+    },
+    "CreditLedger": {
+      "title": "CreditLedger",
+      "description": "Credit ledger transaction entry.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "amount": { "type": "number" },
+        "reason": { "type": "string" }
+      },
+      "required": ["uid", "amount"]
+    },
+    "UsageRecord": {
+      "title": "UsageRecord",
+      "description": "Daily usage statistics record.",
+      "type": "object",
+      "properties": {
+        "renderMinutes": { "type": "number" }
+      }
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Video project document.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" }
+      }
+    },
+    "Scene": {
+      "title": "Scene",
+      "description": "Scene storyboard entity.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" }
+      }
+    },
+    "Shot": {
+      "title": "Shot",
+      "description": "Shot entity with frame metadata.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" }
+      }
+    },
+    "AcademyCourse": {
+      "title": "AcademyCourse",
+      "description": "Academy curriculum or lessons record.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" }
+      }
     },
     "TestProbe": {
       "title": "TestProbe",
@@ -28,6 +96,60 @@
         "$ref": "#/entities/User"
       },
       "description": "User profiles collection."
+    },
+    "approvedEmails/{email}": {
+      "schema": {
+        "$ref": "#/entities/EmailRecord"
+      },
+      "description": "Pre-approved user emails."
+    },
+    "deletedUsers/{email}": {
+      "schema": {
+        "$ref": "#/entities/EmailRecord"
+      },
+      "description": "Banned or removed user email tracking."
+    },
+    "settings/{settingDoc}": {
+      "schema": {
+        "$ref": "#/entities/Setting"
+      },
+      "description": "System settings and public configuration."
+    },
+    "creditLedger/{ledgerId}": {
+      "schema": {
+        "$ref": "#/entities/CreditLedger"
+      },
+      "description": "Credit deduction audit ledger."
+    },
+    "usage/{userId}/daily/{dayKey}": {
+      "schema": {
+        "$ref": "#/entities/UsageRecord"
+      },
+      "description": "Daily usage tracking."
+    },
+    "projects/{projectId}": {
+      "schema": {
+        "$ref": "#/entities/Project"
+      },
+      "description": "User video projects."
+    },
+    "scenes/{sceneId}": {
+      "schema": {
+        "$ref": "#/entities/Scene"
+      },
+      "description": "Video scenes."
+    },
+    "shots/{shotId}": {
+      "schema": {
+        "$ref": "#/entities/Shot"
+      },
+      "description": "Video storyboard shots."
+    },
+    "academy_courses/{docId}": {
+      "schema": {
+        "$ref": "#/entities/AcademyCourse"
+      },
+      "description": "Academy curriculum documentation."
     },
     "test/{docId}": {
       "schema": {

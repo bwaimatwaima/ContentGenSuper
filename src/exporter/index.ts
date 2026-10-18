@@ -420,14 +420,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     // startup and scheduling overhead to ordinary exports. Use the established
     // full-mix path for short projects, retain chunking for long projects, and
     // force chunking at 8 minutes to bound full-duration PCM memory.
-    const CHUNKED_AUDIO_PREFERRED_MIN_SEC = 240;
-    const CHUNKED_AUDIO_REQUIRED_MIN_SEC = 480;
-    const useChunkedAudio =
-        format !== 'mp4-ffmpeg' &&
-        !useLongElectronSegmentedPipeline &&
-        hasAnyAudioSources &&
-        (exportDuration >= CHUNKED_AUDIO_REQUIRED_MIN_SEC ||
-            (isChunkedAudioExportEnabled() && exportDuration >= CHUNKED_AUDIO_PREFERRED_MIN_SEC));
+    const useChunkedAudio = false;
 
     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
 
@@ -474,40 +467,8 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
         }
 
         if (!mixedBuffer) {
-        const CHUNK_LIMIT_SECONDS = 120;
-        const totalOutSamples = Math.ceil(exportDuration * TARGET_SAMPLE_RATE);
-        const outBuffer = audioCtx.createBuffer(2, totalOutSamples, TARGET_SAMPLE_RATE);
-        const outLeft = outBuffer.getChannelData(0);
-        const outRight = outBuffer.getChannelData(1);
-        let outOffset = 0;
-        
-        const silences = timelineState.globalSilences || [];
-        const splitPoints = [0];
-        let currentPos = CHUNK_LIMIT_SECONDS;
-        while (currentPos < exportDuration) {
-            let bestSplit = currentPos;
-            let minDiff = Infinity;
-            for (const s of silences) {
-                const mid = (s.start + s.end) / 2;
-                const diff = Math.abs(mid - currentPos);
-                if (diff < minDiff && diff < 15) {
-                    minDiff = diff;
-                    bestSplit = mid;
-                }
-            }
-            splitPoints.push(bestSplit);
-            currentPos = bestSplit + CHUNK_LIMIT_SECONDS;
-        }
-        if (splitPoints[splitPoints.length - 1] < exportDuration) {
-            splitPoints.push(exportDuration);
-        }
-
-        for (let segIdx = 0; segIdx < splitPoints.length - 1; segIdx++) {
-            const segStart = splitPoints[segIdx];
-            const segEnd = splitPoints[segIdx + 1];
-            const segDur = segEnd - segStart;
-            const segSamples = Math.ceil(segDur * TARGET_SAMPLE_RATE);
-            const offlineCtx = new OfflineAudioContext(2, segSamples, TARGET_SAMPLE_RATE);
+            const totalOutSamples = Math.ceil(exportDuration * TARGET_SAMPLE_RATE);
+            const offlineCtx = new OfflineAudioContext(2, totalOutSamples, TARGET_SAMPLE_RATE);
 
             // 1. Master Output Bus
             const masterBus = offlineCtx.createGain();
@@ -547,23 +508,31 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
                 gainNode.gain.setValueAtTime(baseVolume, 0);
 
                 for (const b of speechBlocks) {
-                    const start = Math.max(0, b.start) - segStart;
-                    const end = Math.min(exportDuration, b.end) - segStart;
-                    
-                    if (end < 0 || start > segDur) continue;
+                    const start = Math.max(0, b.start);
+                    const end = Math.min(exportDuration, b.end);
+                    if (end <= start) continue;
 
                     const rampDownStart = Math.max(0, start - RAMP);
                     gainNode.gain.setValueAtTime(baseVolume, rampDownStart);
-                    gainNode.gain.linearRampToValueAtTime(DUCK_VOL, Math.max(0, start));
+                    gainNode.gain.linearRampToValueAtTime(DUCK_VOL, start);
 
-                    gainNode.gain.setValueAtTime(DUCK_VOL, Math.max(0, end));
+                    gainNode.gain.setValueAtTime(DUCK_VOL, end);
 
-                    const rampUpEnd = Math.min(segDur, end + RAMP);
+                    const rampUpEnd = Math.min(exportDuration, end + RAMP);
                     gainNode.gain.linearRampToValueAtTime(baseVolume, rampUpEnd);
                 }
             };
 
-            const mixInNative = async (targetBus: GainNode, buffer: AudioBuffer, startTime: number, loop: boolean = false, volumeParamSetup?: (gainNode: GainNode) => void, bufferOffset: number = 0, bufferDuration?: number, playbackRate: number = 1.0) => {
+            const mixInNative = async (
+                targetBus: GainNode,
+                buffer: AudioBuffer,
+                startTime: number,
+                loop: boolean = false,
+                volumeParamSetup?: (gainNode: GainNode) => void,
+                bufferOffset: number = 0,
+                bufferDuration?: number,
+                playbackRate: number = 1.0
+            ) => {
                 let resampled = buffer;
                 if (buffer.sampleRate !== TARGET_SAMPLE_RATE) {
                     resampled = await utils.resampleAudioBuffer(buffer, TARGET_SAMPLE_RATE);
@@ -574,31 +543,23 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
                 if (playbackRate !== 1.0) {
                     source.playbackRate.value = playbackRate;
                 }
-                
+
                 const gainNode = offlineCtx.createGain();
                 if (volumeParamSetup) {
                     volumeParamSetup(gainNode);
                 } else {
                     gainNode.gain.value = 1.0;
                 }
-                
+
                 source.connect(gainNode);
                 gainNode.connect(targetBus);
-                
-                let actualStart = startTime - segStart;
-                let actualOffset = bufferOffset;
-                let actualDuration = bufferDuration;
 
-                if (actualStart < 0) {
-                    actualOffset += Math.abs(actualStart) * playbackRate;
-                    if (actualDuration !== undefined) {
-                        actualDuration -= Math.abs(actualStart) * playbackRate;
-                    }
-                    actualStart = 0;
-                }
+                const actualStart = Math.max(0, startTime);
+                const actualOffset = bufferOffset;
+                const actualDuration = bufferDuration;
 
                 if (actualDuration !== undefined && actualDuration <= 0) return;
-                if (actualStart > segDur) return;
+                if (actualStart > exportDuration) return;
 
                 if (actualDuration !== undefined) {
                     source.start(actualStart, actualOffset, actualDuration);
@@ -682,8 +643,8 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
                                 if (shouldDuck) {
                                     applyDucking(g, clipVol, 0.25);
                                 } else {
-                                    const startInCtx = offset - segStart;
-                                    const endInCtx = offset + clip.duration - segStart;
+                                    const startInCtx = offset;
+                                    const endInCtx = offset + clip.duration;
                                     g.gain.setValueAtTime(0, Math.max(0, startInCtx));
                                     g.gain.linearRampToValueAtTime(clipVol, Math.max(0, startInCtx + effectiveFadeIn));
                                     if (effectiveFadeOut > 0) {
@@ -717,35 +678,13 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
 
             // 5. 55Hz Cinematic Drone Audio (procedurally synthesized)
             if (state.cinematicDroneAudio) {
-                const segDur = segEnd - segStart;
-                const droneBuffer = await generateCinematicDroneBuffer(segDur, TARGET_SAMPLE_RATE, 0.45);
+                const droneBuffer = await generateCinematicDroneBuffer(exportDuration, TARGET_SAMPLE_RATE, 0.45);
                 await mixInNative(bgmBus, droneBuffer, 0, false, (gainNode: GainNode) => {
                     gainNode.gain.setValueAtTime(0.22, 0);
                 });
             }
 
-            const rendered = await offlineCtx.startRendering();
-            
-            // Stream rendered PCM segment directly into outBuffer channels to eliminate OOM
-            const renderedSamples = rendered.length;
-            const writeCount = Math.min(renderedSamples, totalOutSamples - outOffset);
-            if (writeCount > 0) {
-                const left = rendered.getChannelData(0);
-                outLeft.set(left.subarray(0, writeCount), outOffset);
-                if (rendered.numberOfChannels > 1) {
-                    const right = rendered.getChannelData(1);
-                    outRight.set(right.subarray(0, writeCount), outOffset);
-                } else {
-                    outRight.set(left.subarray(0, writeCount), outOffset);
-                }
-            }
-            outOffset += writeCount;
-
-            // Yield to event loop so rendered segment and offlineCtx can be freed from memory
-            await yieldToMain();
-        }
-
-        mixedBuffer = outBuffer;
+            mixedBuffer = await offlineCtx.startRendering();
             try {
                 const wavBlob = audioBufferToWavBlob(mixedBuffer);
                 await assetStorage.storeAsset(wavBlob, 'audio', undefined, mixKey);

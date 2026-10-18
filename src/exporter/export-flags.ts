@@ -14,7 +14,7 @@ export interface ExportFeatureFlags {
 
 const DEFAULT_FLAGS: ExportFeatureFlags = {
   useSequentialVideoDecoder: true, // Keep enabled pending a video-heavy A/B benchmark.
-  useChunkedAudioMix: true,        // Used for longer exports; shorter exports use the full-mix path.
+  useChunkedAudioMix: false,       // Disabled: Single-pass continuous audio mix prevents audio dropouts & improves export speed.
   useWsolaPitchStretch: true,      // video-studio WSOLA pitch-preserving time stretch
   useMidFrameSeeking: true,        // video-studio (frame + 0.5) / fps mid-frame timestamp seek
   enableExportProfiler: Boolean((import.meta as any).env?.DEV),

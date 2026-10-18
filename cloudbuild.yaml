@@ -1,38 +1,19 @@
 steps:
-  # Build the container image (supports both ContentGenSuper-main subfolder and root repository context)
+  # Build the container image from repository root
   - name: 'gcr.io/cloud-builders/docker'
-    entrypoint: 'bash'
     args:
-      - '-c'
-      - |
-        if [ -d "ContentGenSuper-main" ]; then
-          echo "[Cloud Build] Detected ContentGenSuper-main directory context."
-          if [ ! -f "ContentGenSuper-main/Dockerfile" ] && [ -f "Dockerfile" ]; then
-            echo "[Cloud Build] Syncing Dockerfile into ContentGenSuper-main..."
-            cp Dockerfile ContentGenSuper-main/
-            [ -f ".dockerignore" ] && cp .dockerignore ContentGenSuper-main/ || true
-          fi
-          docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f ContentGenSuper-main/Dockerfile ContentGenSuper-main
-        elif [ -f "Dockerfile" ]; then
-          echo "[Cloud Build] Detected Dockerfile in root workspace context."
-          docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f Dockerfile .
-        else
-          echo "[Cloud Build] Searching for Dockerfile in workspace..."
-          DF_PATH=$$(find . -name "Dockerfile" -not -path "*/node_modules/*" | head -n 1)
-          if [ -n "$$DF_PATH" ]; then
-            DF_DIR=$$(dirname "$$DF_PATH")
-            echo "[Cloud Build] Building with Dockerfile at: $$DF_PATH from context: $$DF_DIR"
-            docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f "$$DF_PATH" "$$DF_DIR"
-          else
-            echo "[Cloud Build ERROR] Dockerfile could not be found in workspace!"
-            ls -la
-            exit 1
-          fi
-        fi
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+      - '.'
 
   # Push image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest']
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
 
   # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -42,7 +23,7 @@ steps:
       - 'deploy'
       - '${_SERVICE_NAME}'
       - '--image'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
       - '--region'
       - '${_REGION}'
       - '--platform'
@@ -65,7 +46,9 @@ steps:
 
 substitutions:
   _REGION: 'us-central1'
+  _REPO_NAME: 'app-repo'
   _SERVICE_NAME: 'contentgenhyper'
   _PORT: '8080'
   _MEMORY: '4Gi'
   _CPU: '2'
+  COMMIT_SHA: 'manual'

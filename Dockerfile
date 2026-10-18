@@ -24,11 +24,13 @@ ENV CI=true \
     DOCKER_BUILD=true \
     NODE_ENV=development
 
-# Copy package manifests first to maximize Docker layer caching
+# Copy root and Remotion package manifests to leverage Docker layer caching
 COPY package.json package-lock.json ./
+COPY remotion/package.json remotion/package-lock.json ./remotion/
+COPY scripts/postinstall.js ./scripts/postinstall.js
 
-# Install all dependencies (including devDependencies needed for build)
-RUN npm ci --no-audit --no-fund
+# Install root and Remotion dependencies
+RUN npm ci --no-audit --no-fund && npm --prefix remotion ci --no-audit --no-fund
 
 # Copy application source code
 COPY . .

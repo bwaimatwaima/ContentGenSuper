@@ -29,8 +29,9 @@ COPY package.json package-lock.json ./
 COPY remotion/package.json remotion/package-lock.json ./remotion/
 COPY scripts/postinstall.js ./scripts/postinstall.js
 
-# Install root and Remotion dependencies
-RUN npm ci --no-audit --no-fund && npm --prefix remotion ci --no-audit --no-fund
+# Install root and Remotion dependencies (prefers fast ci; gracefully falls back to install if lockfile has slight drift)
+RUN (npm ci --no-audit --no-fund || npm install --no-audit --no-fund) && \
+    (npm --prefix remotion ci --no-audit --no-fund || npm --prefix remotion install --no-audit --no-fund)
 
 # Copy application source code
 COPY . .

@@ -25,6 +25,17 @@ function resolveFirestoreDatabaseId(): string {
 export const FIRESTORE_DATABASE_ID = resolveFirestoreDatabaseId();
 const db = getFirestore(FIRESTORE_DATABASE_ID);
 
+const SUPER_ADMIN_EMAILS = [
+    'youngpastor808@gmail.com',
+    'bwaimatwaima@gmail.com',
+    'bwaima100@gmail.com'
+];
+
+function isSuperAdminEmail(email?: string | null): boolean {
+    if (!email) return false;
+    return SUPER_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
 async function deductCreditsHelper(uid: string, amount: number, reason: string, isPersonalKey: boolean = false) {
     if (amount <= 0) return { success: true, spent: 0 };
     
@@ -236,9 +247,8 @@ export const deleteUserByAdmin = onCall(async (request) => {
     }
 
     // 2. Enforce admin or owner authorization
-    const ownerEmail = "bwaimatwaima@gmail.com";
     const callerEmail = (request.auth.token.email || "").toLowerCase().trim();
-    let isAuthorized = callerEmail === ownerEmail;
+    let isAuthorized = isSuperAdminEmail(callerEmail);
     if (!isAuthorized && request.auth.uid) {
         try {
             const callerDoc = await db.collection('users').doc(request.auth.uid).get();
@@ -345,9 +355,8 @@ export const syncAuthUsersToFirestore = onCall(async (request) => {
         throw new HttpsError("unauthenticated", "You must be signed in.");
     }
 
-    const ownerEmail = "bwaimatwaima@gmail.com";
     const callerEmail = (request.auth.token.email || "").toLowerCase().trim();
-    let isAuthorized = callerEmail === ownerEmail;
+    let isAuthorized = isSuperAdminEmail(callerEmail);
     if (!isAuthorized && request.auth.uid) {
         try {
             const callerDoc = await db.collection('users').doc(request.auth.uid).get();
@@ -404,7 +413,7 @@ export const syncAuthUsersToFirestore = onCall(async (request) => {
                         }
                     });
 
-                    const isSuperAdmin = email === "bwaimatwaima@gmail.com" || email === "bwaima100@gmail.com";
+                    const isSuperAdmin = isSuperAdminEmail(email);
                     const newDocData: any = {
                         email,
                         displayName: userRecord.displayName || existingData?.displayName || email.split('@')[0],
@@ -559,8 +568,7 @@ export const setUserRole = onCall(async (request) => {
     }
 
     const callerEmail = request.auth.token.email ? request.auth.token.email.toLowerCase().trim() : "";
-    const allowedSuperAdmins = ["bwaimatwaima@gmail.com", "bwaima100@gmail.com"];
-    const isSuperAdmin = allowedSuperAdmins.includes(callerEmail);
+    const isSuperAdmin = isSuperAdminEmail(callerEmail);
 
     // Determine caller role from token claim or Firestore
     let callerRole = request.auth.token.role || "";

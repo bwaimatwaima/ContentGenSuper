@@ -1,7 +1,34 @@
 steps:
-  # Build the container image
+  # Build the container image (supports both ContentGenSuper-main subfolder and root repository context)
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'Dockerfile', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest', '.']
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ -d "ContentGenSuper-main" ]; then
+          echo "[Cloud Build] Detected ContentGenSuper-main directory context."
+          if [ ! -f "ContentGenSuper-main/Dockerfile" ] && [ -f "Dockerfile" ]; then
+            echo "[Cloud Build] Syncing Dockerfile into ContentGenSuper-main..."
+            cp Dockerfile ContentGenSuper-main/
+            [ -f ".dockerignore" ] && cp .dockerignore ContentGenSuper-main/ || true
+          fi
+          docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f ContentGenSuper-main/Dockerfile ContentGenSuper-main
+        elif [ -f "Dockerfile" ]; then
+          echo "[Cloud Build] Detected Dockerfile in root workspace context."
+          docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f Dockerfile .
+        else
+          echo "[Cloud Build] Searching for Dockerfile in workspace..."
+          DF_PATH=$$(find . -name "Dockerfile" -not -path "*/node_modules/*" | head -n 1)
+          if [ -n "$$DF_PATH" ]; then
+            DF_DIR=$$(dirname "$$DF_PATH")
+            echo "[Cloud Build] Building with Dockerfile at: $$DF_PATH from context: $$DF_DIR"
+            docker build -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/app-repo/${_SERVICE_NAME}:latest -f "$$DF_PATH" "$$DF_DIR"
+          else
+            echo "[Cloud Build ERROR] Dockerfile could not be found in workspace!"
+            ls -la
+            exit 1
+          fi
+        fi
 
   # Push image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -23,7 +50,6 @@ steps:
       - '--allow-unauthenticated'
       - '--memory'
       - '${_MEMORY}'
-      - '--cpu'
       - '${_CPU}'
       - '--timeout'
       - '3600'
@@ -38,7 +64,7 @@ steps:
       - ''
 
 substitutions:
-  _REGION: 'europe-west1'
+  _REGION: 'us-central1'
   _SERVICE_NAME: 'contentgenhyper'
   _PORT: '8080'
   _MEMORY: '4Gi'

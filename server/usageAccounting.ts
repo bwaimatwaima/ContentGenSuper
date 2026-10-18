@@ -15,7 +15,9 @@ export function calculateChargeableMinutes(job: CloudJob): number {
       : 0) ||
     10;
 
-  return Math.max(1, Math.ceil(durationSec / 60));
+  const baseMinutes = Math.max(1, Math.ceil(durationSec / 60));
+  const multiplier = job.provider === 'in-memory' ? 2 : 1;
+  return baseMinutes * multiplier;
 }
 
 /**

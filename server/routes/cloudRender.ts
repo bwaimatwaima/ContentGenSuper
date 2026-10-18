@@ -67,7 +67,9 @@ const router = express.Router();
  * Standardized owner/admin email list matching src/auth/session.ts
  */
 const SUPER_ADMIN_EMAILS = [
-  'bwaimatwaima@gmail.com'
+  'youngpastor808@gmail.com',
+  'bwaimatwaima@gmail.com',
+  'bwaima100@gmail.com'
 ];
 
 function isOwnerOrAdminEmail(email?: string | null, emailVerified?: boolean): boolean {
@@ -1415,8 +1417,18 @@ router.post(['/dispatch', '/cloud-render/dispatch'], async (req, res) => {
       aspectRatio = '16:9',
       totalDurationSec = 10,
       forceInMemory = false,
-      provider = 'auto'
+      provider = 'auto',
+      chargedMinutes = 0
     } = requestData;
+    const preChargedMinutes = Number(chargedMinutes) > 0 ? Math.ceil(Number(chargedMinutes)) : undefined;
+
+    const effectiveSec = Number(totalDurationSec || inputProps?.totalDurationSec || 10);
+    const quotaCheck = await checkUserQuota(effectiveUserId, effectiveSec);
+    if (!quotaCheck.ok) {
+      return res.status(403).json({
+        error: `Insufficient cloud render quota. Required: ${quotaCheck.required} min, Remaining: ${quotaCheck.remaining} min (Quota: ${quotaCheck.quota} min). Please contact an admin to increase your quota.`
+      });
+    }
 
     const jobId = `cr_${Date.now()}_${randomBytes(4).toString('hex')}`;
     const awsCfg = getAwsConfig();
@@ -1447,6 +1459,7 @@ router.post(['/dispatch', '/cloud-render/dispatch'], async (req, res) => {
         status: 'queued',
         progress: 0,
         provider: 'in-memory',
+        chargedMinutes: preChargedMinutes,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         inMemoryOptions: { inputProps: standardInputProps, fps, resolution, durationInFrames }
@@ -1487,6 +1500,7 @@ router.post(['/dispatch', '/cloud-render/dispatch'], async (req, res) => {
         progress: 2,
         provider: 'gcp-cloudrun',
         webhookSecret,
+        chargedMinutes: preChargedMinutes,
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
@@ -1711,6 +1725,7 @@ router.post(['/dispatch', '/cloud-render/dispatch'], async (req, res) => {
         functionName: awsCfg.functionName!,
         region: awsCfg.region,
         serveUrl: awsCfg.serveUrl!,
+        chargedMinutes: preChargedMinutes,
       });
 
       return res.json({
@@ -1738,6 +1753,7 @@ router.post(['/dispatch', '/cloud-render/dispatch'], async (req, res) => {
       status: 'queued',
       progress: 0,
       provider: 'in-memory',
+      chargedMinutes: preChargedMinutes,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       inMemoryOptions: { inputProps: standardInputProps, fps, resolution, durationInFrames }

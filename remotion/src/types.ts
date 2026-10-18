@@ -15,6 +15,7 @@ export interface SubtitleCue {
   text: string;
   start: number; // in seconds
   end: number;   // in seconds
+  [key: string]: any;
 }
 
 export interface TimelineClipProp {
@@ -98,6 +99,11 @@ export interface VideoEffectsConfig {
   dustParticles?: number;
   dustParticlesSize?: number;
   dustParticlesCount?: number;
+  hdrBalance?: number;
+  clarity?: number;
+  vibrance?: number;
+  sharpening?: number;
+  [key: string]: any;
 }
 
 export interface SubtitleStyleConfig {

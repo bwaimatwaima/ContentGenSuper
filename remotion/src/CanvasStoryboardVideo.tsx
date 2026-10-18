@@ -41,16 +41,24 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
         }))
       : [];
 
+    const startTime = Number(c.startTime || 0);
+    const endTime = Number(c.endTime || startTime + (Number(c.duration) || 5));
+    const camMove = c.cameraMovement || c.camera_movement || EDITORIAL_CAMERA_CYCLE[index % EDITORIAL_CAMERA_CYCLE.length];
+
     return {
+      ...c,
       id: c.id || `clip-${index}`,
       url: c.imageUrl || c.videoUrl || c.url || '',
+      imageUrl: c.imageUrl || (c.type === 'image' ? c.url : undefined),
+      videoUrl: c.videoUrl || (c.type === 'video' ? c.url : undefined),
+      hasVideo: Boolean(c.videoUrl || c.hasVideo || c.type === 'video'),
+      hasImage: Boolean(c.imageUrl || c.hasImage || c.type === 'image'),
       type: c.type || (c.videoUrl ? 'video' : 'image'),
-      startTime: Number(c.startTime || 0),
-      endTime: Number(c.endTime || (c.startTime || 0) + 5),
-      cameraMovement:
-        c.cameraMovement ||
-        c.camera_movement ||
-        EDITORIAL_CAMERA_CYCLE[index % EDITORIAL_CAMERA_CYCLE.length],
+      startTime,
+      endTime,
+      duration: endTime - startTime,
+      cameraMovement: camMove,
+      camera_movement: camMove,
       cameraKeyframes: c.cameraKeyframes,
       depthUrl: c.depthUrl,
       parallax: c.parallax,

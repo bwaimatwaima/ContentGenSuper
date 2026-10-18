@@ -140,8 +140,8 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   const timeInClip = timelineFrame / fps;
   const clipDur = Math.max(0.001, durationInFrames / fps);
   const pipCard = isPipOverlay ? computePipCard({
-    cw: width,
-    ch: height,
+    cw: vw,
+    ch: vh,
     timeInClip,
     clipDur,
     pipPosition: clip.pipPosition,

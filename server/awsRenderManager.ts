@@ -889,6 +889,7 @@ export interface EnqueueAwsRenderOptions {
   region: AwsRegion;
 
   serveUrl: string;
+  chargedMinutes?: number;
 }
 
 export async function enqueueAwsRender(
@@ -933,6 +934,7 @@ export async function enqueueAwsRender(
     functionName: options.functionName,
     region: options.region,
     renderConfig,
+    ...(options.chargedMinutes ? { chargedMinutes: options.chargedMinutes, chargedUserId: options.userId } : {}),
     createdAt: existing?.createdAt || Date.now(),
     updatedAt: Date.now(),
   };

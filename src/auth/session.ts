@@ -31,11 +31,13 @@ export function setUserDocUnsubscribe(fn: (() => void) | null) {
 
 export const OWNER_EMAILS = [
     'youngpastor808@gmail.com',
-    'bwaimatwaima@gmail.com'
+    'bwaimatwaima@gmail.com',
+    'bwaima100@gmail.com'
 ];
 export const SUPER_ADMIN_EMAILS = [
     'youngpastor808@gmail.com',
-    'bwaimatwaima@gmail.com'
+    'bwaimatwaima@gmail.com',
+    'bwaima100@gmail.com'
 ];
 export const SUPER_ADMIN_EMAIL = 'youngpastor808@gmail.com';
 export const ORIGINAL_OWNER_EMAIL = 'youngpastor808@gmail.com';

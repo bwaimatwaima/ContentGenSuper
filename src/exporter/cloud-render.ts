@@ -951,6 +951,7 @@ export async function handleCloudRenderExport() {
             resolution,
             aspectRatio: state.aspectRatio || '16:9',
             codec: 'h264',
+            chargedMinutes: minutesDeducted ? minutesToDeduct : 0,
             inputProps: {
                 title: dom.videoExportFilenameInput?.value.trim() || 'AI Studio Video',
                 aspectRatio: state.aspectRatio || '16:9',

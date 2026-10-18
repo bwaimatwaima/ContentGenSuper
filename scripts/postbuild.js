@@ -26,23 +26,17 @@ for (const file of requiredFiles) {
 const files = fs.readdirSync(distDir);
 console.log(`[Postbuild] Build artifacts verified (${files.length} items in dist: ${files.join(', ')})`);
 
-// Unconditionally mirror 'dist' to 'build' and fallback directories as physical copies (no symlinks)
-const targetDirs = ['build', 'dist-electron'];
-for (const dirName of targetDirs) {
-  const targetDir = path.join(rootDir, dirName);
+// Only mirror dist to dist-electron if explicitly enabled during desktop Electron packaging
+if (process.env.MIRROR_DIST_ELECTRON === 'true') {
+  const targetDir = path.join(rootDir, 'dist-electron');
   try {
     if (fs.existsSync(targetDir)) {
-      const stats = fs.lstatSync(targetDir);
-      if (stats.isSymbolicLink() || stats.isFile()) {
-        fs.unlinkSync(targetDir);
-      } else {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-      }
+      fs.rmSync(targetDir, { recursive: true, force: true });
     }
     fs.cpSync(distDir, targetDir, { recursive: true });
-    console.log(`[Postbuild] Physical mirror created: ${dirName} -> dist`);
+    console.log('[Postbuild] Mirrored dist -> dist-electron for desktop packaging.');
   } catch (err) {
-    console.warn(`[Postbuild] Could not mirror to ${dirName}:`, err.message);
+    console.warn('[Postbuild] Could not mirror to dist-electron:', err.message);
   }
 }
 

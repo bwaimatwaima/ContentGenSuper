@@ -13,12 +13,27 @@ service cloud.firestore {
     function isSuperAdmin() {
       return isSignedIn() && (
         request.auth.uid == 'RqynWxsBSTX7DUlheLVdckDXq3g2' ||
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'owner' ||
         request.auth.token.email == 'bwaimatwaima@gmail.com' ||
         request.auth.token.email == 'BwaimaTwaima@gmail.com' ||
         request.auth.token.email == 'youngpastor808@gmail.com' ||
         request.auth.token.email == 'YoungPastor808@gmail.com' ||
-        (request.auth.token.email != null && request.auth.token.email.lower() in ['bwaimatwaima@gmail.com', 'youngpastor808@gmail.com'])
+        request.auth.token.email == 'bwaima100@gmail.com' ||
+        (request.auth.token.email != null && request.auth.token.email.lower() in [
+          'bwaimatwaima@gmail.com',
+          'youngpastor808@gmail.com',
+          'bwaima100@gmail.com'
+        ]) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'owner'])
       );
+    }
+
+    function isReseller() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'reseller';
     }
 
     function isValidId(id) {
@@ -30,11 +45,44 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Users Collection & User Settings Subcollections
+    // Users Collection & User Settings Subcollections (Bug 5 Fix)
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isOwner(userId) || isSuperAdmin());
+
+      // Users creating their own profile cannot self-assign admin/owner or excessive credits
+      allow create: if isSignedIn() && (
+        isSuperAdmin() ||
+        (isReseller() && (!('role' in request.resource.data) || request.resource.data.role == 'user')) ||
+        (isOwner(userId)
+          && (!('role' in request.resource.data) || request.resource.data.role == 'user')
+          && (!('credits' in request.resource.data) || request.resource.data.credits <= 10000)
+          && (!('renderMinutesQuota' in request.resource.data) || request.resource.data.renderMinutesQuota <= 300))
+      );
+
+      // Regular users cannot escalate role/status/quota or increase their own credits
+      allow update: if isSignedIn() && (
+        isSuperAdmin() ||
+        (isReseller()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'credits', 'renderMinutesQuota', 'maxApprovedUsers'])
+          && request.resource.data.get('role', 'user') == 'user') ||
+        (isOwner(userId)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role',
+            'status',
+            'renderMinutesQuota',
+            'maxApprovedUsers',
+            'allowImageGeneration',
+            'allowAudioGeneration',
+            'allowVideoGeneration',
+            'allowCookieAuth'
+          ])
+          && (!('credits' in request.resource.data) || request.resource.data.credits <= resource.data.get('credits', 0))
+          && (!('renderMinutesUsed' in request.resource.data) || (
+            request.resource.data.renderMinutesUsed >= 0 &&
+            request.resource.data.renderMinutesUsed - resource.data.get('renderMinutesUsed', 0) <= 240
+          )))
+      );
+
       allow delete: if isSignedIn() && isSuperAdmin();
 
       match /{subcollection=**} {
@@ -45,7 +93,7 @@ service cloud.firestore {
     // Pre-approved Emails & Deleted/Banned User Tracking
     match /approvedEmails/{email} {
       allow read: if isSignedIn();
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin() || isReseller();
     }
 
     match /deletedUsers/{email} {
@@ -53,9 +101,9 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
-    // Global and Public Settings (Public config, maintenance, ads)
+    // Global and Public Settings (Bug 3 Fix: Only public_config and ads are public; system_config is admin-only)
     match /settings/{settingDoc} {
-      allow read: if true;
+      allow read: if settingDoc != 'system_config' || isSuperAdmin();
       allow write: if isSuperAdmin();
     }
 

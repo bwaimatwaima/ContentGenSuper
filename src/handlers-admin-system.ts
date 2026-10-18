@@ -802,9 +802,10 @@ export function setupAdminSystemTabHandlers() {
                 const dl = document.getElementById('admin-openai-model-list');
                 if (dl) {
                     dl.innerHTML = data.models.map((m: any) => {
-                        const safeId = escapeHtml(String(m?.id ?? ''));
-                        return `<option value="${safeId}">${safeId}</option>`;
-                    }).join('');
+                        const rawId = typeof m === 'string' ? m : (m?.id || m?.name || '');
+                        const safeId = escapeHtml(String(rawId).trim());
+                        return safeId ? `<option value="${safeId}">${safeId}</option>` : '';
+                    }).filter(Boolean).join('');
                 }
                 showFeedback(adminSystemKeysMsg, `Fetched ${data.models.length} models from gateway!`, 'success');
             } else {

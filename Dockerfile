@@ -48,11 +48,13 @@ WORKDIR /app
 
 # Install essential runtime utilities:
 # - ffmpeg: required for audio extraction, waveform analysis, and video export
+# - chromium: required for Headless Canvas Worker, HyperFrame rasterizer, and Remotion renderer
 # - ca-certificates: required for secure TLS/HTTPS connections to AI APIs & Cloud Storage
 # - curl: required for Docker and orchestrator health check probes
 # - fonts-freefont-ttf: system fonts for canvas subtitle and text rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    chromium \
     ca-certificates \
     curl \
     fonts-freefont-ttf \
@@ -60,8 +62,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Runtime environment configuration
 ENV NODE_ENV=production \
-    PORT=3000 \
-    DOCKER_BUILD=true
+    PORT=8080 \
+    DOCKER_BUILD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    REMOTION_CHROME_EXECUTABLE=/usr/bin/chromium
 
 # Create a non-privileged user and group for security
 RUN groupadd -g 1001 nodejs && \
@@ -76,6 +80,10 @@ COPY --from=builder --chown=appuser:nodejs /app/node_modules ./node_modules
 # Copy built distribution artifacts
 COPY --from=builder --chown=appuser:nodejs /app/dist ./dist
 
+# Copy Remotion composition sources & shared src modules for runtime fallback bundling
+COPY --from=builder --chown=appuser:nodejs /app/remotion ./remotion
+COPY --from=builder --chown=appuser:nodejs /app/src/pip-layout.ts ./src/pip-layout.ts
+
 # Copy public static assets and resources
 COPY --from=builder --chown=appuser:nodejs /app/public ./public
 COPY --from=builder --chown=appuser:nodejs /app/resources ./resources
@@ -89,7 +97,7 @@ EXPOSE 8080
 
 # Health check probe against Express /api/health endpoint
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://127.0.0.1:${PORT:-3000}/api/health || exit 1
+    CMD curl -f http://127.0.0.1:${PORT:-8080}/api/health || exit 1
 
 # Start the full-stack server
 CMD ["node", "dist/server.js"]

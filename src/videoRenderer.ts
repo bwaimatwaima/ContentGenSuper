@@ -353,28 +353,116 @@ export let videoRenderContext: {
 let blurCanvas: HTMLCanvasElement | null = null;
 let blurCtx: CanvasRenderingContext2D | null = null;
 let transitionOffscreenCanvas: HTMLCanvasElement | null = null;
-const videoFrameBufferCache = new WeakMap<HTMLVideoElement, HTMLCanvasElement>();
+const videoFrameBufferCache = new WeakMap<HTMLVideoElement, { canvas: HTMLCanvasElement; lastTime: number }>();
+const pendingPlaySet = new WeakSet<HTMLVideoElement>();
+const lastScrubSeekMs = new WeakMap<HTMLVideoElement, number>();
+let previouslyActiveVideos = new Set<HTMLVideoElement>();
 
-function captureVideoFrameBuffer(video: HTMLVideoElement, fallbackW = 1280, fallbackH = 720): HTMLCanvasElement | HTMLVideoElement {
-  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-    let buf = videoFrameBufferCache.get(video);
-    if (!buf) {
-      buf = document.createElement('canvas');
-      videoFrameBufferCache.set(video, buf);
+function captureVideoFrameBuffer(
+  video: HTMLVideoElement,
+  targetW = 426,
+  targetH = 240
+): HTMLCanvasElement | HTMLVideoElement {
+  const w = Math.max(2, Math.round(targetW));
+  const h = Math.max(2, Math.round(targetH));
+  const cached = videoFrameBufferCache.get(video);
+
+  // If the video is mid-seek or not ready, return the last good cached frame
+  if (video.readyState < 2 || video.seeking || video.videoWidth === 0 || video.videoHeight === 0) {
+    return cached ? cached.canvas : video;
+  }
+
+  let entry = cached;
+  if (!entry) {
+    const canvas = document.createElement('canvas');
+    entry = { canvas, lastTime: -1 };
+    videoFrameBufferCache.set(video, entry);
+  }
+
+  const sizeChanged = entry.canvas.width !== w || entry.canvas.height !== h;
+  const timeChanged = Math.abs(entry.lastTime - video.currentTime) > 0.004;
+
+  // Only blit from <video> when the decoded frame timestamp or preview size actually changed
+  if (sizeChanged || timeChanged) {
+    if (sizeChanged) {
+      entry.canvas.width = w;
+      entry.canvas.height = h;
     }
-    const vw = video.videoWidth || fallbackW;
-    const vh = video.videoHeight || fallbackH;
-    if (buf.width !== vw || buf.height !== vh) {
-      buf.width = vw;
-      buf.height = vh;
-    }
-    const bctx = buf.getContext('2d');
+    const bctx = entry.canvas.getContext('2d', { alpha: false });
     if (bctx) {
-      bctx.drawImage(video, 0, 0, vw, vh);
-      return buf;
+      bctx.drawImage(video, 0, 0, w, h);
+      entry.lastTime = video.currentTime;
     }
   }
-  return videoFrameBufferCache.get(video) || video;
+  return entry.canvas;
+}
+
+export function syncVideoElementForPreview(
+  video: HTMLVideoElement,
+  targetTime: number,
+  rate: number,
+  shouldMute: boolean,
+  targetVolume: number,
+  isOutOfClip: boolean,
+  targetCanvas?: HTMLCanvasElement | OffscreenCanvas
+) {
+  const safeTarget = Math.max(0, targetTime);
+
+  // Only mutate playbackRate / muted / volume when they actually change
+  if (Math.abs(video.playbackRate - rate) > 0.01) {
+    video.playbackRate = rate;
+  }
+  if ((video as any).preservesPitch !== true) {
+    (video as any).preservesPitch = true;
+  }
+
+  if (targetCanvas || state.isExporting || isOutOfClip) {
+    if (!video.paused && !pendingPlaySet.has(video)) {
+      try { video.pause(); } catch {}
+    }
+    if (!video.muted) video.muted = true;
+    if (!state.isExporting && !isOutOfClip && !video.seeking && Math.abs(video.currentTime - safeTarget) > 0.05) {
+      video.currentTime = safeTarget;
+    }
+    return;
+  }
+
+  if (video.muted !== shouldMute) {
+    video.muted = shouldMute;
+  }
+  const clampedVol = Math.max(0, Math.min(1, targetVolume));
+  if (Math.abs(video.volume - clampedVol) > 0.01) {
+    video.volume = clampedVol;
+  }
+
+  if (state.isVideoPlaying) {
+    // Never cancel an in-flight seek or pending play() promise
+    if (video.paused && !pendingPlaySet.has(video)) {
+      if (!video.seeking && Math.abs(video.currentTime - safeTarget) > 0.12) {
+        video.currentTime = safeTarget;
+      }
+      if (video.readyState >= 2) {
+        pendingPlaySet.add(video);
+        video.play()
+          .catch(() => {})
+          .finally(() => pendingPlaySet.delete(video));
+      }
+    } else if (!video.paused && !video.seeking && Math.abs(video.currentTime - safeTarget) > 0.35) {
+      // Only resync during active playback if drift exceeds 350ms
+      video.currentTime = safeTarget;
+    }
+  } else {
+    if (!video.paused && !pendingPlaySet.has(video)) {
+      try { video.pause(); } catch {}
+    }
+    // Throttle paused/scrubbing seeks to ~22 seeks/sec and never interrupt an active seek
+    const nowMs = performance.now();
+    const lastMs = lastScrubSeekMs.get(video) || 0;
+    if (!video.seeking && nowMs - lastMs >= 45 && Math.abs(video.currentTime - safeTarget) > 0.04) {
+      lastScrubSeekMs.set(video, nowMs);
+      video.currentTime = safeTarget;
+    }
+  }
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -476,6 +564,20 @@ export function preloadUpcomingClips(currentTime: number, lookahead = 5) {
       const img = clip.image;
       if (img && typeof (img as any).decode === 'function') {
         (img as any).decode().catch(() => {});
+      }
+      // Pre-warm upcoming video clip 1.5s before it cuts on screen
+      const vid = clip.videoElement;
+      if (
+        vid &&
+        clipStart > currentTime &&
+        clipStart - currentTime <= 1.5 &&
+        vid.paused &&
+        !vid.seeking
+      ) {
+        const startOffset = clip.videoStartOffset || 0;
+        if (Math.abs(vid.currentTime - startOffset) > 0.1) {
+          try { vid.currentTime = startOffset; } catch {}
+        }
       }
     }
     if (!isAbs) cumTime += clip.duration;
@@ -1029,6 +1131,37 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
   }
 }
 
+export function syncPreviewVideoElement(
+  vid: HTMLVideoElement,
+  targetClipTimeSec: number,
+  isPlaying: boolean,
+  playbackRate = 1,
+  shouldMute = true
+) {
+  const safeTarget = Math.max(0, targetClipTimeSec);
+  if (vid.muted !== shouldMute) vid.muted = shouldMute;
+  if (Math.abs(vid.playbackRate - playbackRate) > 0.01) {
+    vid.playbackRate = playbackRate;
+  }
+
+  if (isPlaying) {
+    // Let the hardware decoder play forward naturally; only re-seek if drift > 150ms
+    const drift = Math.abs(vid.currentTime - safeTarget);
+    if (drift > 0.15 && !vid.seeking) {
+      vid.currentTime = safeTarget;
+    }
+    if (vid.paused && vid.readyState >= 2) {
+      vid.play().catch(() => {});
+    }
+  } else {
+    if (!vid.paused) vid.pause();
+    // When paused/scrubbing, only seek if moved by at least 1 frame (33ms) and not already mid-seek
+    if (Math.abs(vid.currentTime - safeTarget) > 0.033 && !vid.seeking) {
+      vid.currentTime = safeTarget;
+    }
+  }
+}
+
 function syncTalkingHeadVideo(video: HTMLVideoElement, time: number, clip: any, targetCanvas?: HTMLCanvasElement | OffscreenCanvas, activeVideos?: Set<HTMLVideoElement>) {
   if (!video) return;
   if (activeVideos) activeVideos.add(video);
@@ -1066,31 +1199,15 @@ function syncTalkingHeadVideo(video: HTMLVideoElement, time: number, clip: any, 
     targetVol *= 0.25;
   }
 
-  if (targetCanvas || state.isExporting) {
-    // When exporting or rendering to an offscreen buffer, exporter.ts handles async seek synchronization.
-    // Do NOT synchronously mutate currentTime here to avoid putting the video into an un-decoded seeking state.
-    if (!video.paused) {
-      try { video.pause(); } catch (e) { }
-    }
-    video.muted = true;
-    return;
-  } else if (state.isVideoPlaying) {
-    if (video.paused) {
-      video.currentTime = targetTime;
-      video.play().catch(e => console.warn(e));
-    } else if (Math.abs(video.currentTime - targetTime) > 0.3) {
-      video.currentTime = targetTime;
-    }
-    video.muted = !useOriginalAudio;
-    video.volume = Math.max(0, Math.min(1, targetVol));
-  } else {
-    if (!video.paused) {
-      try { video.pause(); } catch (e) { }
-    }
-    if (!state.isExporting && Math.abs(video.currentTime - targetTime) > 0.05) {
-      video.currentTime = targetTime;
-    }
-  }
+  syncVideoElementForPreview(
+    video,
+    targetTime,
+    1,
+    !useOriginalAudio,
+    targetVol,
+    false,
+    targetCanvas
+  );
 }
 
 function drawTalkingHeadPiP(
@@ -1876,13 +1993,15 @@ function drawVideoFrameImpl(
   providedCtx?: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | any | null,
   options?: { backgroundOnly?: boolean }
 ) {
-  const now = performance.now();
-  if (lastFrameTime > 0) {
-    const frameTime = now - lastFrameTime;
-    totalFrames++;
-    if (frameTime > 33 && !targetCanvas) frameSkipCount++;
+  if (!targetCanvas && !state.isExporting) {
+    const now = performance.now();
+    if (lastFrameTime > 0) {
+      const frameTime = now - lastFrameTime;
+      totalFrames++;
+      if (frameTime > 33) frameSkipCount++;
+    }
+    lastFrameTime = now;
   }
-  lastFrameTime = now;
 
   if (!videoRenderContext || videoRenderContext.clips.length === 0) return;
 
@@ -2027,20 +2146,6 @@ function drawVideoFrameImpl(
 
     const showBgBlur = !lite && state.enableBackgroundBlur !== false && timelineState.videoEffects.enableBackgroundBlur !== false;
     if (showBgBlur && (dX > 0 || dY > 0)) {
-      // Blur cost scales with pixel count, and a full-canvas `filter: blur()`
-      // pass (previously done directly at up to 1.2x canvas resolution, every
-      // frame) is one of the most expensive things Canvas2D can do — especially
-      // with a <video> source, which many browsers snapshot to a temp bitmap
-      // before they can filter it at all. Uploaded clips hit this constantly
-      // because they rarely match the project's aspect ratio (unlike generated
-      // images, which are produced pre-fitted and mostly skip this branch).
-      //
-      // Fix: downsample first, blur+darken the tiny copy (cheap — small radius
-      // over a fraction of the pixels), then scale the already-soft result
-      // back up with a plain, filter-free blit. The upscale's own bilinear
-      // interpolation supplies the final softness, so no second filter pass at
-      // full resolution is needed. Visually indistinguishable at this blur
-      // radius; the expensive filter step now runs over ~100x fewer pixels.
       const bw = Math.max(1, Math.round(cvW * 0.12));
       const bh = Math.max(1, Math.round(cvH * 0.12));
       const surf = getBlurSurface(bw, bh);
@@ -2048,24 +2153,27 @@ function drawVideoFrameImpl(
         surf.ctx.setTransform(1, 0, 0, 1, 0, 0);
         surf.ctx.globalCompositeOperation = 'source-over';
         surf.ctx.globalAlpha = 1;
-        // Scale the blur radius down with the surface so the relative amount
-        // of blur matches what the full-resolution version looked like.
-        surf.ctx.filter = shotFilterCss !== 'none' ? `blur(3px) brightness(0.65) ${shotFilterCss}` : 'blur(3px) brightness(0.65)';
-        surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
-        surf.ctx.filter = 'none';
+        // Avoid expensive CSS filter readbacks on <video> during low-res preview
+        const useFastPreviewBlur = !targetCanvas && !state.isExporting && (isVideo || cvH <= 540);
+        if (useFastPreviewBlur) {
+          surf.ctx.filter = 'none';
+          surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
+          surf.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+          surf.ctx.fillRect(0, 0, bw, bh);
+        } else {
+          surf.ctx.filter = shotFilterCss !== 'none' ? `blur(3px) brightness(0.65) ${shotFilterCss}` : 'blur(3px) brightness(0.65)';
+          surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
+          surf.ctx.filter = 'none';
+        }
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.imageSmoothingEnabled = true;
-        (ctx as any).imageSmoothingQuality = 'high';
+        (ctx as any).imageSmoothingQuality = (!targetCanvas && !state.isExporting && cvH <= 360) ? 'low' : 'high';
         ctx.drawImage(surf.canvas, 0, 0, bw, bh, 0, 0, cvW, cvH);
         ctx.restore();
       } else {
-        // Fallback if an offscreen context couldn't be created for some reason.
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.filter = shotFilterCss !== 'none' ? `blur(22px) brightness(0.65) ${shotFilterCss}` : 'blur(22px) brightness(0.65)';
-        ctx.drawImage(media, 0, 0, mediaW, mediaH, -cvW * 0.1, -cvH * 0.1, cvW * 1.2, cvH * 1.2);
-        ctx.restore();
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, cvW, cvH);
       }
     } else {
       ctx.fillStyle = 'black';
@@ -2078,11 +2186,12 @@ function drawVideoFrameImpl(
         const activeClip = associatedClip || cur;
         const clipStart = activeClip?.startTime;
         const clipEnd = activeClip?.endTime;
-        const isOutOfClip = typeof clipStart === 'number' && typeof clipEnd === 'number' && (time < clipStart || time >= clipEnd);
+        const transLeadIn = activeClip === nxt ? (cur?._transitionDuration || 0.5) : 0;
+        const isOutOfClip = typeof clipStart === 'number' && typeof clipEnd === 'number' && (time < clipStart - transLeadIn || time >= clipEnd);
         const isMasterVideo = (video === state.uploadedVideoElement) ||
-                              (activeClip && activeClip.talkingHeadVideoElement === video) ||
-                              (activeClip && !activeClip._videoObjectURL && state.uploadedVideoElement === video) ||
-                              (activeClip && activeClip._videoObjectURL && state.uploadedVideoElement && activeClip._videoObjectURL === state.uploadedVideoElement.src);
+                             (activeClip && activeClip.talkingHeadVideoElement === video) ||
+                             (activeClip && !activeClip._videoObjectURL && state.uploadedVideoElement === video) ||
+                             (activeClip && activeClip._videoObjectURL && state.uploadedVideoElement && activeClip._videoObjectURL === state.uploadedVideoElement.src);
         const clip = activeClip || timelineState.clips.find(c => c.talkingHeadVideoElement === video || c.videoElement === video);
         const useOriginalAudio = clip?.useOriginalAudio || clip?.soloAudio || false;
         let targetVol = (clip as any)?.volume !== undefined ? (clip as any).volume : 1.0;
@@ -2090,14 +2199,21 @@ function drawVideoFrameImpl(
             targetVol *= 0.25;
         }
 
+        const effectiveClipDur = Math.max(
+          0.001,
+          (isAbs && activeClip && isNum(activeClip.endTime) && isNum(activeClip.startTime))
+            ? (activeClip.endTime - activeClip.startTime)
+            : clipDuration
+        );
+
         const fadeIn = (clip as any)?.fadeIn || 0;
         const fadeOut = (clip as any)?.fadeOut || 0;
-        const tIn = progress * clipDuration;
-        if (fadeIn > 0 && tIn < fadeIn) {
-            targetVol *= (tIn / fadeIn);
+        const clipElapsed = progress * effectiveClipDur;
+        if (fadeIn > 0 && clipElapsed < fadeIn) {
+            targetVol *= (clipElapsed / fadeIn);
         }
-        if (fadeOut > 0 && tIn > clipDuration - fadeOut) {
-            targetVol *= ((clipDuration - tIn) / fadeOut);
+        if (fadeOut > 0 && clipElapsed > effectiveClipDur - fadeOut) {
+            targetVol *= ((effectiveClipDur - clipElapsed) / fadeOut);
         }
 
         if (video.readyState < 2 && !(video as any)._hasFrameListener) {
@@ -2116,56 +2232,31 @@ function drawVideoFrameImpl(
             video.addEventListener('canplay', onFrameReady, { once: true });
         }
         const rate = (clip as any)?.playbackRate && !(clip as any)?.wordTimestamps?.length ? (clip as any).playbackRate : 1;
-        video.playbackRate = rate;
-        (video as any).preservesPitch = true; // Chromium default; keep voice natural
 
         const effectiveOffset = (isMasterVideo && (!videoStartOffset || videoStartOffset === 0))
             ? (activeClip?.startTime || 0)
             : (videoStartOffset || 0);
 
-        let targetTime = effectiveOffset + (progress * clipDuration * rate);
+        let targetTime = effectiveOffset + (progress * effectiveClipDur * rate);
         if (video.duration && targetTime > video.duration) {
             targetTime = Math.min(video.duration - 0.03, targetTime % video.duration || video.duration - 0.03);
         }
-        
-        // Optimize setting currentTime
-        if (targetCanvas || state.isExporting || isOutOfClip) {
-            if (!video.paused) {
-                try { video.pause(); } catch (e) { }
-            }
-            video.muted = true;
-            if (!state.isExporting && !isOutOfClip && Math.abs(video.currentTime - targetTime) > 0.05) {
-                video.currentTime = targetTime;
-            }
-        } else if (state.isVideoPlaying) {
-             if (video.paused) {
-                 if (!state.isExporting && Math.abs(video.currentTime - targetTime) > 0.05) {
-                     video.currentTime = targetTime;
-                 }
-                 video.muted = !useOriginalAudio;
-                 video.play().catch(e => console.warn(e));
-             } else if (Math.abs(video.currentTime - targetTime) > 0.3) {
-                 // Resync if drifting significantly
-                 video.currentTime = targetTime;
-                 video.muted = !useOriginalAudio;
-             }
-             video.muted = !useOriginalAudio;
-             video.volume = Math.max(0, Math.min(1, targetVol * alpha));
-        } else {
-             if (!video.paused) {
-                 try { video.pause(); } catch (e) { }
-             }
-             // In paused mode or scrubbing, sync time closely
-             if (!state.isExporting && Math.abs(video.currentTime - targetTime) > 0.05) {
-                 video.currentTime = targetTime;
-             }
-        }
+
+        syncVideoElementForPreview(
+          video,
+          targetTime,
+          rate,
+          !useOriginalAudio,
+          targetVol * alpha,
+          isOutOfClip,
+          targetCanvas
+        );
 
         const rotate = (clip as any)?.rotate || 0;
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        if (shotFilterCss !== 'none') {
+        if (shotFilterCss !== 'none' && (targetCanvas || state.isExporting || cvH >= 520)) {
           ctx.filter = shotFilterCss;
         }
         if (state.cameraShakeHandheld) {
@@ -2177,8 +2268,11 @@ function drawVideoFrameImpl(
           ctx.rotate(driftRot);
           ctx.translate(-(dX + dW / 2) + driftX, -(dY + dH / 2) + driftY);
         }
-        const safeSource = state.isExporting ? video : captureVideoFrameBuffer(video, mediaW, mediaH);
-        drawRotated(ctx, safeSource, 0, 0, mediaW, mediaH, dX, dY, dW, dH, rotate);
+        // Only use fallback buffer at preview resolution (dW x dH), never full 1080p/4K source size!
+        const safeSource = state.isExporting ? video : captureVideoFrameBuffer(video, dW, dH);
+        const srcW = safeSource instanceof HTMLCanvasElement ? safeSource.width : mediaW;
+        const srcH = safeSource instanceof HTMLCanvasElement ? safeSource.height : mediaH;
+        drawRotated(ctx, safeSource, 0, 0, srcW, srcH, dX, dY, dW, dH, rotate);
         ctx.filter = 'none';
         if (shotFilter !== 'none') {
           applyShotOverlays(ctx, shotFilter, shotFilterIntensity, dX, dY, dW, dH, time);
@@ -2803,35 +2897,19 @@ function drawVideoFrameImpl(
     drawGuestWatermark(ctx, cvW, cvH);
   }
 
-  // Ensure any video element NOT active on this frame is immediately silenced and paused
-  if (state.isVideoPlaying && !targetCanvas && !state.isExporting) {
-    if (timelineState.clips) {
-      for (const c of timelineState.clips) {
-        if (c.videoElement && !activeVideosThisFrame.has(c.videoElement)) {
-          c.videoElement.muted = true;
-          if (!c.videoElement.paused) {
-            try { c.videoElement.pause(); } catch (e) {}
-          }
-        }
-        if (c.talkingHeadVideoElement && !activeVideosThisFrame.has(c.talkingHeadVideoElement)) {
-          c.talkingHeadVideoElement.muted = true;
-          if (!c.talkingHeadVideoElement.paused) {
-            try { c.talkingHeadVideoElement.pause(); } catch (e) {}
-          }
-        }
-        if (c.secondaryVideoElement && !activeVideosThisFrame.has(c.secondaryVideoElement)) {
-          c.secondaryVideoElement.muted = true;
-          if (!c.secondaryVideoElement.paused) {
-            try { c.secondaryVideoElement.pause(); } catch (e) {}
-          }
+  // Pause only the videos that were active on the previous frame and are no longer active now (O(1) instead of O(N clips))
+  if (!targetCanvas && !state.isExporting) {
+    for (const v of previouslyActiveVideos) {
+      if (!activeVideosThisFrame.has(v)) {
+        v.muted = true;
+        if (!v.paused && !pendingPlaySet.has(v)) {
+          try { v.pause(); } catch {}
         }
       }
     }
-    if (state.uploadedVideoElement && !activeVideosThisFrame.has(state.uploadedVideoElement)) {
-      state.uploadedVideoElement.muted = true;
-      if (!state.uploadedVideoElement.paused) {
-        try { state.uploadedVideoElement.pause(); } catch (e) {}
-      }
+    previouslyActiveVideos = activeVideosThisFrame;
+    if (state.isVideoPlaying) {
+      preloadUpcomingClips(time, 2.0);
     }
   }
 }

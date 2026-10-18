@@ -72,6 +72,28 @@ export function deriveDuration(startTime: number, endTime: number): number {
 }
 
 /**
+ * Calculates a shot's frame boundaries using cumulative boundaries anchored to the audio track:
+ *   const startFrame = Math.round(shot.startTime * fps);
+ *   const endFrame = Math.round(shot.endTime * fps);
+ *   const durationInFrames = Math.max(1, endFrame - startFrame);
+ * This eliminates the ±0.5 frame per-shot rounding error that accumulates over 200+ shots
+ * (2 to 3.5 seconds of drift over 8-10 minutes) and guarantees zero cumulative drift.
+ */
+export function calculateShotFrames(
+  shot: { startTime: number; endTime?: number; duration?: number },
+  fps: number
+): { startFrame: number; endFrame: number; durationInFrames: number } {
+  const startSec = Number.isFinite(shot.startTime) ? shot.startTime : 0;
+  const endSec = Number.isFinite(shot.endTime)
+    ? (shot.endTime as number)
+    : startSec + (Number.isFinite(shot.duration) ? (shot.duration as number) : 0);
+  const startFrame = Math.round(startSec * fps);
+  const endFrame = Math.round(endSec * fps);
+  const durationInFrames = Math.max(1, endFrame - startFrame);
+  return { startFrame, endFrame, durationInFrames };
+}
+
+/**
  * Sets canonical clip timing enforcing: duration = endTime - startTime.
  */
 export function setClipTiming(

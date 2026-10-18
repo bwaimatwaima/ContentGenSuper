@@ -9,12 +9,20 @@ import * as utils from '../utils';
 import { videoRenderContext } from '../videoRenderer';
 import { Output, Mp4OutputFormat, StreamTarget, EncodedVideoPacketSource, EncodedAudioPacketSource, EncodedPacket } from 'mediabunny';
 import { selectSupportedAudioCodec, selectSupportedVideoCodec, calculateBitrate } from './codecs';
-import { drawExportFrameCached, syncVideosForExportTime, yieldToMain } from './frames';
+import {
+    drawExportFrameCached,
+    syncVideosForExportTime,
+    yieldToMain,
+    findClipAtExportTime,
+    prepareFrameImageWindow,
+    restoreExportImageWindow
+} from './frames';
 import { electronService, syncTaskbarProgress } from './electron-bridge';
 import { generateCinematicDroneBuffer } from '../cinematicDrone';
 import { audioSynthesizer } from '../audioSynthesizer';
 import { assetStorage } from '../assetStorage';
 import { validateBeforeExport } from '../timing/timeline-timing';
+import { audioBufferToWavBlob } from '../utils-core';
 import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
 import { getExportFlags } from './export-flags';
 
@@ -117,7 +125,8 @@ export function calculateSafeTimelineSegments(
         const isLastClip = i === clips.length - 1;
 
         if (accumulatedSec >= targetSegmentSec || isLastClip) {
-            const segEndSec = isLastClip ? totalDurationSec : (clip.startTime + clipDur);
+            const clipEnd = Number.isFinite(clip.endTime) && clip.endTime > (clip.startTime ?? 0) ? clip.endTime : ((clip.startTime ?? 0) + clipDur);
+            const segEndSec = isLastClip ? totalDurationSec : clipEnd;
             const segDur = segEndSec - currentSegStartSec;
             const startFrame = Math.round(currentSegStartSec * fps);
             const endFrame = Math.round(segEndSec * fps);
@@ -633,6 +642,11 @@ export async function encodeSingleSegmentToFile(
             const globalTime = segment.startSec + (localFrameIdx / fps);
             const segmentTimestampUs = Math.round(localFrameIdx * (1_000_000 / fps));
 
+            const isAbs = timelineState.mode === 'audio_locked';
+            const match = findClipAtExportTime(globalTime, isAbs);
+            const currentShotIndex = match?.clipIndex ?? 0;
+            await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
+
             await syncVideosForExportTime(globalTime, fps, height);
             await drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any);
 
@@ -774,7 +788,32 @@ export async function exportWithSegmentedPipeline(
     const sessionPrefix = `cg_seg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const segmentPaths: string[] = [];
 
+    let masterAudioPath: string | null = null;
     try {
+        if (hasSegmentAudioSources()) {
+            onProgress(5, "Pre-mixing continuous master audio track...");
+            const masterAudioBuf = await mixSegmentAudio(0, totalDurationSec, 48000);
+            if (masterAudioBuf && masterAudioBuf.duration > 0.05) {
+                const wavBlob = audioBufferToWavBlob(masterAudioBuf);
+                const audioFileName = `${sessionPrefix}_master_audio.wav`;
+                if (isElectron) {
+                    masterAudioPath = await invoke.call(electron, 'path-join', tempDir, audioFileName);
+                    const wavBuf = await wavBlob.arrayBuffer();
+                    await invoke.call(electron, 'write-file-direct', { filePath: masterAudioPath, data: wavBuf });
+                } else {
+                    const formData = new FormData();
+                    formData.append('file', wavBlob, audioFileName);
+                    const isHttpOrHttps = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+                    const backendHttp = isHttpOrHttps ? window.location.origin : 'http://127.0.0.1:3000';
+                    const upRes = await fetch(`${backendHttp}/api/upload-audio`, {
+                        method: 'POST',
+                        body: formData
+                    }).then(r => r.json());
+                    masterAudioPath = upRes.path || null;
+                }
+            }
+        }
+
         for (let i = 0; i < segments.length; i++) {
             if (!state.isVideoProductionRunning) throw new Error("Export cancelled by user.");
 
@@ -821,6 +860,8 @@ export async function exportWithSegmentedPipeline(
             const concatRes = await invoke.call(electron, 'ffmpeg-concat-segments', {
                 segmentPaths,
                 outputPath: finalOutputPath,
+                masterAudioPath,
+                fps,
                 fastStart
             });
 
@@ -834,7 +875,9 @@ export async function exportWithSegmentedPipeline(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     segmentPaths,
-                    outputPath: finalOutputPath
+                    outputPath: finalOutputPath,
+                    masterAudioPath,
+                    fps
                 })
             });
             if (!res.ok) {
@@ -850,6 +893,11 @@ export async function exportWithSegmentedPipeline(
                 }
             } catch {}
         }
+        if (masterAudioPath) {
+            try {
+                if (isElectron) await invoke.call(electron, 'delete-file', { filePath: masterAudioPath });
+            } catch {}
+        }
 
         onProgress(100, "Export complete!");
         syncTaskbarProgress(100);
@@ -860,8 +908,14 @@ export async function exportWithSegmentedPipeline(
                 if (isElectron) await invoke.call(electron, 'delete-file', { filePath: p });
             } catch {}
         }
+        if (masterAudioPath) {
+            try {
+                if (isElectron) await invoke.call(electron, 'delete-file', { filePath: masterAudioPath });
+            } catch {}
+        }
         throw err;
     } finally {
+        restoreExportImageWindow(videoRenderContext?.clips || timelineState.clips || []);
         clearSegmentAudioCaches();
     }
 }

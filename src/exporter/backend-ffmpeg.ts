@@ -10,7 +10,14 @@ import * as dom from '../dom';
 import { videoRenderContext } from '../videoRenderer';
 import { calculateBitrate } from './codecs';
 import { getExportDeviceProfile } from './device-profile';
-import { drawExportFrameCached, syncVideosForExportTime } from './frames';
+import {
+    drawExportFrameCached,
+    syncVideosForExportTime,
+    findClipAtExportTime,
+    prepareFrameImageWindow,
+    restoreExportImageWindow,
+    clearStaticFrameCache
+} from './frames';
 
 
 export async function cleanVideoMetadataWithServer(blob: Blob, onProgress?: (msg: string) => void): Promise<Blob> {
@@ -220,9 +227,22 @@ export async function exportWithFFmpeg(
             if (streamError) throw streamError;
         }
 
-        const time = frameIndex / fps;
-        await syncVideosForExportTime(time, fps, height);
-        await drawExportFrameCached(time, exportCanvas as any, exportCtx as any);
+        // Strict frame-stepped deterministic clock: During export, never use
+        // performance.now(), requestAnimationFrame deltas, or <audio>.currentTime
+        // to decide which image is on screen. Always compute timeline time strictly
+        // from the frame counter:
+        const currentTimeSec = frameIndex / fps;
+
+        // Preload only a sliding window of [currentShotIndex - 1, currentShotIndex + 3] images,
+        // disposing older ImageBitmap / HTMLImageElement references so memory doesn't spike at minute 5-10.
+        // Explicitly await activeImage.decode() before advancing the frame:
+        const isAbs = timelineState.mode === 'audio_locked';
+        const match = findClipAtExportTime(currentTimeSec, isAbs);
+        const currentShotIndex = match?.clipIndex ?? 0;
+        await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
+
+        await syncVideosForExportTime(currentTimeSec, fps, height);
+        await drawExportFrameCached(currentTimeSec, exportCanvas as any, exportCtx as any);
 
         const imageData = exportCtx.getImageData(0, 0, width, height);
 
@@ -309,6 +329,8 @@ export async function exportWithFFmpeg(
         }
     }
     } finally {
+        restoreExportImageWindow(videoRenderContext?.clips || timelineState.clips || []);
+        clearStaticFrameCache();
         if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
             ws.close();
         }

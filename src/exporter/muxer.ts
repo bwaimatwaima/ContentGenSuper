@@ -8,7 +8,14 @@ import * as ui from '../ui';
 import { videoRenderContext } from '../videoRenderer';
 import { EncodedVideoPacketSource, EncodedAudioPacketSource, EncodedPacket } from 'mediabunny';
 import { selectSupportedAudioCodec } from './codecs';
-import { drawExportFrameCached, syncVideosForExportTime, yieldToMain } from './frames';
+import {
+    drawExportFrameCached,
+    syncVideosForExportTime,
+    yieldToMain,
+    findClipAtExportTime,
+    prepareFrameImageWindow,
+    restoreExportImageWindow
+} from './frames';
 import { startExportStage, endExportStage, resetExportProfiler, logExportProfiler } from './export-profiler';
 import { disposeExportFrameSource, resetVideoSyncTelemetry, getVideoSyncTelemetry } from './video-frame-source';
 import { getExportFlags } from './export-flags';
@@ -189,15 +196,20 @@ export async function encodeToMuxer(
                     await pendingVideoAdd;
                 }
 
-                const time = videoFrameIndex / fps;
+                const currentTimeSec = videoFrameIndex / fps;
                 const timestampUs = Math.round(videoFrameIndex * (1_000_000 / fps));
 
+                const isAbs = timelineState.mode === 'audio_locked';
+                const match = findClipAtExportTime(currentTimeSec, isAbs);
+                const currentShotIndex = match?.clipIndex ?? 0;
+                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
+
                 startExportStage('video-sync');
-                await syncVideosForExportTime(time, fps, height);
+                await syncVideosForExportTime(currentTimeSec, fps, height);
                 endExportStage('video-sync');
 
                 startExportStage('frame-render');
-                await drawExportFrameCached(time, exportCanvas as any, exportCtx as any);
+                await drawExportFrameCached(currentTimeSec, exportCanvas as any, exportCtx as any);
                 endExportStage('frame-render');
                 
                 let frame: VideoFrame | null = null;
@@ -308,6 +320,7 @@ export async function encodeToMuxer(
         logExportProfiler();
         ui.showStatus(`Exported via ${encoderCodec} (${hardwareAcceleration === 'prefer-hardware' ? 'GPU' : 'CPU'})`, false, 4000);
     } finally {
+        restoreExportImageWindow(videoRenderContext?.clips || timelineState.clips || []);
         if (videoEncoder && videoEncoder.state !== 'closed') videoEncoder.close();
         if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
         await disposeExportFrameSource(timelineState.clips);

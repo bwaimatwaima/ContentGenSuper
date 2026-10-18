@@ -397,6 +397,8 @@ export function setupFFmpegWS(wss: WebSocketServer, ffmpegPathStr: string) {
                             ] : []),
                             '-c:v', selectedEncoder,
                             ...getEncoderArgs(selectedEncoder, bitrate),
+                            '-r', String(fps),
+                            '-fps_mode', 'cfr',
                             ...(hasAudio && audioPath ? ['-c:a', 'aac', '-b:a', '128k'] : []),
                             '-vf', 'format=yuv420p',
                             actualOutputPath,

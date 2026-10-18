@@ -18,7 +18,13 @@ import { state } from './state';
 import { timelineState } from './state-timeline';
 import { drawVideoFrame, setVideoRenderContext, type TimelineClip } from './videoRenderer';
 import { updateVideoContext } from './videoContextBridge';
-import { syncVideosForExportTime, drawExportFrameCached } from './exporter/frames';
+import {
+  syncVideosForExportTime,
+  drawExportFrameCached,
+  findClipAtExportTime,
+  prepareFrameImageWindow,
+  restoreExportImageWindow,
+} from './exporter/frames';
 import { setVideoCanvasForExport } from './dom';
 import { prepareExportOptimizedImages, clearExportOptimizedImages } from './exporter/image-prescaler';
 import { disposeExportFrameSource } from './exporter/video-frame-source';
@@ -296,6 +302,11 @@ async function renderFrame(time: number): Promise<void> {
   }
 
   try {
+    const isAbs = timelineState.mode === 'audio_locked';
+    const match = findClipAtExportTime(time, isAbs);
+    const currentShotIndex = match?.clipIndex ?? 0;
+    await prepareFrameImageWindow(currentShotIndex, timelineState.clips || []);
+
     // Exact same execution pipeline as local browser export:
     // 1. syncVideosForExportTime() seeks all video clips, talking head, B-roll, and overlays to exact target time
     // 2. drawExportFrameCached() uses static bitmap caching and calls drawVideoFrame()
@@ -308,6 +319,9 @@ async function renderFrame(time: number): Promise<void> {
 }
 
 function cleanup(): void {
+  try {
+    restoreExportImageWindow(timelineState.clips || []);
+  } catch (e) {}
   try {
     clearExportOptimizedImages(timelineState.clips);
   } catch (e) {}

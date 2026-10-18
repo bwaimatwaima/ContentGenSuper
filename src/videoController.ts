@@ -197,13 +197,14 @@ let isResyncing = false;
  * Automatically reconciles the master audio buffer and video clips after any edit
  * to guarantee that zero synchronization drift occurs during playback, scrubbing, or exports.
  */
-export function resyncTimeline(options: { notify?: boolean; reason?: string } = {}): ResyncTimelineResult {
+export function resyncTimeline(options: { notify?: boolean; reason?: string; skipContextUpdate?: boolean } = {}): ResyncTimelineResult {
   if (isResyncing) {
     return { driftBefore: 0, driftAfter: 0, fixedGaps: 0, adjustedClips: 0, audioDuration: 0, visualDuration: 0 };
   }
   isResyncing = true;
   try {
     const minDuration = 0.05;
+    const isLocked = timelineState.mode === 'audio_locked';
     const audioDur = timelineState.masterAudioBuffer?.duration;
     const hasAudio = typeof audioDur === 'number' && Number.isFinite(audioDur) && audioDur > 0;
     const targetAudioDur = hasAudio ? audioDur : undefined;
@@ -221,31 +222,33 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string } = 
 
     ensureClipIds();
 
-    // Sort existing clips by startTime
-    let sorted = [...timelineState.clips].sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+    // Separate main sequential clips from floating PiP overlay clips so PiP clips never shift main track timing
+    const allClips = [...timelineState.clips];
+    const pipClips = allClips.filter(c => c && c.displayMode === 'pip_overlay');
+    let sorted = allClips
+      .filter(c => c && c.displayMode !== 'pip_overlay')
+      .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+
     const currentVisualEnd = sorted[sorted.length - 1]?.endTime ?? 0;
     const driftBefore = targetAudioDur !== undefined ? currentVisualEnd - targetAudioDur : 0;
 
     let fixedGaps = 0;
     let adjustedClips = 0;
 
-    // Filter out any corrupt or near-zero duration clips (< 0.03s)
-    const validClips: TimelineClip[] = [];
-    for (const c of sorted) {
-      if (!c) continue;
+    // Filter out corrupt or zero-length clips (< 0.03s)
+    sorted = sorted.filter(c => {
       const dur = typeof c.duration === 'number' ? c.duration : (c.endTime ?? 0) - (c.startTime ?? 0);
-      if (dur < 0.03) {
+      if (dur < 0.03 && (c.endTime ?? 0) - (c.startTime ?? 0) < 0.03) {
         if (c._videoObjectURL) { try { URL.revokeObjectURL(c._videoObjectURL); } catch {} }
         adjustedClips++;
-        continue;
+        return false;
       }
-      validClips.push(c);
-    }
-    sorted = validClips;
+      return true;
+    });
 
     if (sorted.length === 0) {
-      timelineState.setClips([]);
-      updateVideoContext();
+      timelineState.setClips(pipClips);
+      if (!options.skipContextUpdate) updateVideoContext();
       return {
         driftBefore,
         driftAfter: 0,
@@ -262,60 +265,104 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string } = 
       fixedGaps++;
       adjustedClips++;
     }
-    sorted[0].duration = Math.max(minDuration, sorted[0].duration || minDuration);
+    sorted[0].duration = Math.max(minDuration, sorted[0].duration || ((sorted[0].endTime ?? minDuration) - sorted[0].startTime));
     sorted[0].endTime = sorted[0].startTime + sorted[0].duration;
 
-    // 2. Reconcile sequential continuity across all adjacent clips (eliminate all micro-gaps and overlaps)
-    for (let i = 1; i < sorted.length; i++) {
+    // 2. Reconcile sequential continuity WITHOUT crushing overlapped shots into 0.05s flashes
+    // or shifting the entire remaining timeline off its audio anchors!
+    let i = 1;
+    while (i < sorted.length) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
       const expectedStart = prev.endTime;
 
-      if (Math.abs((cur.startTime ?? 0) - expectedStart) > 0.0001) {
-        cur.startTime = expectedStart;
+      if (isLocked && cur.startTime < expectedStart - 0.001) {
+        // OVERLAP DETECTED in audio_locked mode (e.g. `prev` stretched too far over subsequent shots).
+        // Find the next valid anchor shot `k` whose endTime is safely beyond `expectedStart`
+        // and distribute the time proportionally instead of crushing shots into 50ms flashes!
+        let k = i;
+        while (k < sorted.length && (sorted[k].endTime ?? 0) <= expectedStart + minDuration * (k - i + 1)) {
+          k++;
+        }
+        const windowStart = prev.startTime;
+        const windowEnd = k < sorted.length
+          ? Math.max(expectedStart + (k - i + 1) * 0.5, sorted[k].startTime)
+          : (targetAudioDur ?? Math.max(expectedStart + (k - i) * 2.0, sorted[sorted.length - 1].endTime));
+
+        // Re-distribute [windowStart, windowEnd] proportionally across [prev, ...sorted[i..k-1]]
+        const group = sorted.slice(i - 1, k);
+        const weights = group.map(c => Math.max(1, (c.text || '').trim().split(/\s+/).filter(Boolean).length || 5));
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        const availSpan = Math.max(group.length * minDuration, windowEnd - windowStart);
+
+        let cursor = windowStart;
+        for (let g = 0; g < group.length; g++) {
+          const item = group[g];
+          const share = g === group.length - 1
+            ? Math.max(minDuration, windowEnd - cursor)
+            : Math.max(minDuration, (weights[g] / totalWeight) * availSpan);
+          item.startTime = cursor;
+          item.duration = share;
+          item.endTime = cursor + share;
+          cursor = item.endTime;
+          adjustedClips++;
+        }
         fixedGaps++;
-        adjustedClips++;
+        i = k;
+        continue;
       }
 
-      cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
-      cur.endTime = cur.startTime + cur.duration;
+      if (Math.abs((cur.startTime ?? 0) - expectedStart) > 0.0001) {
+        if (isLocked && cur.endTime > expectedStart + minDuration) {
+          // Anchor endTime to audio in audio_locked mode so downstream clips never drift!
+          cur.startTime = expectedStart;
+          cur.duration = cur.endTime - cur.startTime;
+        } else {
+          cur.startTime = expectedStart;
+          cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
+          cur.endTime = cur.startTime + cur.duration;
+        }
+        fixedGaps++;
+        adjustedClips++;
+      } else {
+        cur.duration = Math.max(minDuration, (cur.endTime ?? (cur.startTime + minDuration)) - cur.startTime);
+        cur.endTime = cur.startTime + cur.duration;
+      }
+      i++;
     }
 
     // 3. Reconcile with Master Audio Buffer (if present)
-    if (targetAudioDur !== undefined) {
-      // If clips extend past audio duration, prune any clips starting beyond targetAudioDur - 0.03s
-      const inBoundsClips: TimelineClip[] = [];
-      for (let i = 0; i < sorted.length; i++) {
-        const c = sorted[i];
-        if (i > 0 && c.startTime >= targetAudioDur - 0.03) {
-          if (c._videoObjectURL) { try { URL.revokeObjectURL(c._videoObjectURL); } catch {} }
-          adjustedClips++;
-          continue;
+    if (targetAudioDur !== undefined && sorted.length > 0) {
+      const lastEnd = sorted[sorted.length - 1].endTime;
+      if (lastEnd > targetAudioDur + 0.05) {
+        // Compress tail proportionally if clips overshot master audio instead of deleting shots
+        const scale = targetAudioDur / lastEnd;
+        let cursor = 0;
+        for (let j = 0; j < sorted.length; j++) {
+          const c = sorted[j];
+          const scaledDur = j === sorted.length - 1
+            ? Math.max(minDuration, targetAudioDur - cursor)
+            : Math.max(minDuration, c.duration * scale);
+          c.startTime = cursor;
+          c.duration = scaledDur;
+          c.endTime = cursor + scaledDur;
+          cursor = c.endTime;
         }
-        inBoundsClips.push(c);
-      }
-      sorted = inBoundsClips;
-
-      // Adjust the final clip to end precisely at targetAudioDur
-      const lastClip = sorted[sorted.length - 1];
-      if (lastClip) {
-        const prevEnd = sorted.length > 1 ? sorted[sorted.length - 2].endTime : 0;
-        if (targetAudioDur > prevEnd + minDuration) {
-          if (Math.abs(lastClip.endTime - targetAudioDur) > 0.0001) {
-            lastClip.endTime = targetAudioDur;
-            lastClip.duration = Math.max(minDuration, lastClip.endTime - lastClip.startTime);
-            adjustedClips++;
-          }
-        } else {
-          lastClip.endTime = Math.max(lastClip.startTime + minDuration, targetAudioDur);
+        adjustedClips++;
+      } else {
+        const lastClip = sorted[sorted.length - 1];
+        if (Math.abs(lastClip.endTime - targetAudioDur) > 0.001 && targetAudioDur > lastClip.startTime + minDuration) {
+          lastClip.endTime = targetAudioDur;
           lastClip.duration = lastClip.endTime - lastClip.startTime;
+          adjustedClips++;
         }
       }
       timelineState.bumpClipsVersion();
     }
 
-    // 4. Validate and sanitize videoStartOffset for talking-head / A-roll synchronization
-    for (const c of sorted) {
+    // 4. Validate and sanitize videoStartOffset
+    const mergedClips = [...sorted, ...pipClips];
+    for (const c of mergedClips) {
       if (c.videoStartOffset === undefined || !Number.isFinite(c.videoStartOffset) || c.videoStartOffset < 0) {
         c.videoStartOffset = 0;
       }
@@ -326,52 +373,28 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string } = 
       }
     }
 
-    // 5. Reconcile Audio Splits
-    if (timelineState.audioSplits && timelineState.audioSplits.length > 0 && targetAudioDur !== undefined) {
-      const cleanSplits = Array.from(new Set(
-        timelineState.audioSplits
-          .filter(s => Number.isFinite(s) && s > 0.05 && s < targetAudioDur - 0.05)
-          .map(s => Math.round(s * 1000) / 1000)
-      )).sort((a, b) => a - b);
-      if (cleanSplits.length !== timelineState.audioSplits.length) {
-        timelineState.setAudioSplits(cleanSplits);
+    // 5. Save reconciled clips into timelineState
+    timelineState.setClips(mergedClips, false);
+
+    // 6. Only re-slice word timestamps and invalidate caches when clips actually changed
+    if (adjustedClips > 0 || fixedGaps > 0 || options.reason === 'user-action') {
+      if (timelineState.globalWordTimestamps && timelineState.globalWordTimestamps.length > 0) {
+        refreshPerClipWordTimestamps();
       }
+      try { SubtitleEngine.clearBitmapCache(); } catch {}
     }
 
-    // 6. Save reconciled clips into timelineState
-    timelineState.setClips(sorted, false);
-
-    // 7. Refresh word timestamps
-    if (timelineState.globalWordTimestamps && timelineState.globalWordTimestamps.length > 0) {
-      if (targetAudioDur !== undefined) {
-        const cleanedWords = timelineState.globalWordTimestamps
-          .filter((w: any) => w && Number.isFinite(w.start) && w.start < targetAudioDur)
-          .map((w: any) => ({
-            ...w,
-            start: Math.max(0, Math.min(targetAudioDur, w.start)),
-            end: Math.max(0.01, Math.min(targetAudioDur, w.end))
-          }));
-        timelineState.setGlobalWordTimestamps(cleanedWords);
-      }
-      refreshPerClipWordTimestamps();
+    if (!options.skipContextUpdate) {
+      updateVideoContext(true);
     }
-
-    // 8. Invalidate render/subtitle caches
-    try { SubtitleEngine.clearBitmapCache(); } catch {}
-    try { invalidateSpectrumCache(); } catch {}
-
-    // 9. Full render context update
-    updateVideoContext(true);
 
     const finalVisualEnd = sorted[sorted.length - 1]?.endTime ?? 0;
     const driftAfter = targetAudioDur !== undefined ? finalVisualEnd - targetAudioDur : 0;
 
-    // 10. Clamp playhead if it was beyond the new total duration
     if (videoRenderContext && state.videoPauseTime > videoRenderContext.totalDuration) {
       state.videoPauseTime = Math.max(0, videoRenderContext.totalDuration);
     }
 
-    // 11. UI notification if requested
     if (options.notify) {
       ui.renderTimelineEditor();
       if (!state.isVideoPlaying && videoRenderContext) {
@@ -404,92 +427,20 @@ export function handleResyncTimeline() {
   resyncTimeline({ notify: true, reason: 'user-action' });
 }
 
-export function normalizeTimeline(totalDuration?: number) {
+export function normalizeTimeline(totalDuration?: number, skipContextUpdate = false) {
   const audioDur = totalDuration ?? timelineState.masterAudioBuffer?.duration;
   const isLocked = timelineState.mode === 'audio_locked';
-  
-  let audioBufferSilences = null;
-  if (isLocked && timelineState.masterAudioBuffer) {
-      audioBufferSilences = timelineState.globalSilences ?? utils.detectSilences(timelineState.masterAudioBuffer);
-      if (typeof timelineState.setGlobalSilences === 'function') {
-          timelineState.setGlobalSilences(audioBufferSilences);
-      } else {
-          (timelineState as any).globalSilences = audioBufferSilences;
-      }
+
+  if (isLocked && timelineState.masterAudioBuffer && !timelineState.globalSilences) {
+    const silences = utils.detectSilences(timelineState.masterAudioBuffer);
+    if (typeof timelineState.setGlobalSilences === 'function') {
+      timelineState.setGlobalSilences(silences);
+    } else {
+      (timelineState as any).globalSilences = silences;
+    }
   }
 
-  const minDuration = 0.05;
-
-  if (isLocked) {
-    const limit = isNum(audioDur) ? audioDur : undefined;
-    if (timelineState.clips.length > 0) {
-      const sorted = getSortedTimeline();
-      const first = findClipById(sorted[0].id);
-      if (first) {
-        first.startTime = 0;
-      }
-    }
-    for (const c of timelineState.clips as TimelineClip[]) {
-      if (!isNum(c.startTime)) c.startTime = 0;
-      let end = isNum(c.endTime) ? c.endTime : c.startTime + (isNum(c.duration) ? c.duration : 2);
-
-      if (isNum(limit)) {
-        c.startTime = Math.max(0, Math.min(c.startTime, limit));
-        end = Math.max(c.startTime + minDuration, Math.min(end, limit));
-      } else {
-        end = Math.max(c.startTime + minDuration, end);
-      }
-      c.endTime = end;
-      c.duration = c.endTime - c.startTime;
-    }
-
-    if (isNum(audioDur) && timelineState.clips.length > 0) {
-        const sorted = getSortedTimeline();
-        const first = findClipById(sorted[0].id);
-        if (first) {
-            first.startTime = 0;
-            first.endTime = Math.max(minDuration, Math.min(first.endTime, audioDur));
-            first.duration = first.endTime - first.startTime;
-        }
-        for (let i = 0; i < sorted.length - 1; i++) {
-            const a = findClipById(sorted[i].id);
-            const b = findClipById(sorted[i + 1].id);
-            if (!a || !b) continue;
-            a.endTime = Math.min(a.endTime, audioDur);
-            a.endTime = Math.max(a.startTime + minDuration, a.endTime);
-            a.duration = a.endTime - a.startTime;
-            if (b.startTime < a.endTime) {
-                if (audioBufferSilences && audioBufferSilences.length > 0) {
-                    const candidate = audioBufferSilences.find(
-                        (s: any) => s && s.end >= a.endTime - 0.15 && s.start <= b.endTime + 1.5 && s.start >= a.startTime
-                    );
-                    if (candidate && candidate.start > a.startTime + minDuration * 2) {
-                        b.startTime = Math.min(
-                            candidate.start,
-                            Math.max(b.startTime + minDuration, Math.min(b.endTime, audioDur))
-                        );
-                    } else {
-                        b.startTime = a.endTime;
-                    }
-                } else {
-                    b.startTime = a.endTime;
-                }
-                b.startTime = Math.max(0, Math.min(b.startTime, audioDur));
-                b.endTime = Math.max(b.startTime + minDuration, Math.min(b.endTime, audioDur));
-                b.duration = b.endTime - b.startTime;
-            }
-        }
-        const last = findClipById(sorted[sorted.length - 1].id);
-        if (last) {
-            last.endTime = Math.max(last.startTime + minDuration, Math.min(last.endTime, audioDur));
-            last.duration = last.endTime - last.startTime;
-        }
-    }
-    timelineState.bumpClipsVersion();
-  }
-
-  // Run full reconciliation to guarantee zero gaps, zero overlaps, and zero sync drift
-  resyncTimeline({ notify: false, reason: 'normalizeTimeline' });
+  resyncTimeline({ notify: false, reason: 'normalizeTimeline', skipContextUpdate });
 }
 
 export function refreshPerClipWordTimestamps() {

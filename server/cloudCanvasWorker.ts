@@ -213,9 +213,9 @@ async function renderChunk(
             console.warn(`[Chunk ${chunkIndex}] CDP session initialization fallback:`, cdpErr);
         }
 
-        // Video-only, no audio — audio is muxed once, globally, after concat.
+        // Video-only, no audio — audio is muxed once, globally, after concat with strict constant frame rate.
         const ffmpegArgs = ['-y', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-r', String(fps), '-i', 'pipe:0',
-            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20', chunkOutputPath];
+            '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'veryfast', '-crf', '20', '-r', String(fps), '-fps_mode', 'cfr', chunkOutputPath];
         const ffmpegProc = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'inherit', 'pipe'] });
         let ffmpegError = '';
         ffmpegProc.stderr.on('data', (d: Buffer) => { ffmpegError += d.toString(); });

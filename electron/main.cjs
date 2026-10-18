@@ -687,7 +687,7 @@ function resolveLocalFfmpegPath() {
   return 'ffmpeg';
 }
 
-ipcMain.handle('ffmpeg-concat-segments', async (event, { segmentPaths, outputPath } = {}) => {
+ipcMain.handle('ffmpeg-concat-segments', async (event, { segmentPaths, outputPath, masterAudioPath, fps = 30 } = {}) => {
   try {
     if (!segmentPaths || !Array.isArray(segmentPaths) || segmentPaths.length === 0) {
       throw new Error('segmentPaths must be a non-empty array of file paths.');
@@ -707,17 +707,29 @@ ipcMain.handle('ffmpeg-concat-segments', async (event, { segmentPaths, outputPat
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
     return new Promise((resolve) => {
+      const hasMasterAudio = masterAudioPath && typeof masterAudioPath === 'string' && fs.existsSync(masterAudioPath);
+
       const args = [
         '-y',
         '-f', 'concat',
         '-safe', '0',
         '-i', manifestPath,
-        '-c', 'copy',
+        ...(hasMasterAudio ? [
+          '-i', masterAudioPath,
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-map', '0:v:0',
+          '-map', '1:a:0',
+          '-shortest',
+        ] : [
+          '-c', 'copy',
+        ]),
         '-movflags', '+faststart',
         outputPath
       ];
 
-      console.log(`[ELECTRON CONCAT] Executing FFmpeg: ${ffmpegExe} with ${segmentPaths.length} segments -> ${outputPath}`);
+      console.log(`[ELECTRON CONCAT] Executing FFmpeg: ${ffmpegExe} with ${segmentPaths.length} segments (hasMasterAudio=${hasMasterAudio}) -> ${outputPath}`);
       const proc = spawn(ffmpegExe, args, { stdio: ['ignore', 'ignore', 'pipe'] });
       let stderr = '';
 

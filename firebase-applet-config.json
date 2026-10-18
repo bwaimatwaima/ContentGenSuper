@@ -1,12 +1,12 @@
 {
-  "projectId": "paidproject-505110",
-  "appId": "1:92772856742:web:86531a63ac2180d9f3d567",
-  "apiKey": "AIzaSyAo9nWEkz0FAoIO51OP83ByfyUrhPTZorQ",
-  "authDomain": "paidproject-505110.firebaseapp.com",
-  "firestoreDatabaseId": "contentgensuper",
-  "storageBucket": "paidproject-505110.firebasestorage.app",
-  "messagingSenderId": "92772856742",
+  "projectId": "reflected-augury-483d0",
+  "appId": "1:158669469356:web:8481ce7f083e71642c9109",
+  "apiKey": "AIzaSyCx10hZ-fjaKBVL6-jJ8IOT0TFJLEDOYMo",
+  "authDomain": "reflected-augury-483d0.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-remixcontentgena-2fa8238d-00e8-4e28-acc2-391cd15cac39",
+  "storageBucket": "reflected-augury-483d0.firebasestorage.app",
+  "messagingSenderId": "158669469356",
   "measurementId": "",
-  "oAuthClientId": "92772856742-448o3f96q18h563303f7e9b9iodbjhc9.apps.googleusercontent.com",
+  "oAuthClientId": "158669469356-2ln712akp8qeep4kggeu80jdb9rcb9ru.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

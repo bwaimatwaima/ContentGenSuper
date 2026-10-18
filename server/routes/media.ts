@@ -209,6 +209,7 @@ router.post('/clean-metadata-path', backendAuthGuard, async (req, res) => {
 router.post('/ffmpeg-concat-segments', backendAuthGuard, async (req, res) => {
     const segmentPaths = req.body?.segmentPaths;
     const requestedOutputPath = req.body?.outputPath;
+    const masterAudioPath = req.body?.masterAudioPath;
 
     if (!segmentPaths || !Array.isArray(segmentPaths) || segmentPaths.length === 0) {
         return res.status(400).json({ error: 'segmentPaths array required.' });
@@ -223,12 +224,24 @@ router.post('/ffmpeg-concat-segments', backendAuthGuard, async (req, res) => {
 
         await fs.promises.mkdir(path.dirname(finalOutputPath), { recursive: true });
 
+        const hasMasterAudio = masterAudioPath && typeof masterAudioPath === 'string' && fs.existsSync(masterAudioPath);
+
         const args = [
             '-y',
             '-f', 'concat',
             '-safe', '0',
             '-i', manifestPath,
-            '-c', 'copy',
+            ...(hasMasterAudio ? [
+                '-i', masterAudioPath,
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-shortest',
+            ] : [
+                '-c', 'copy',
+            ]),
             '-movflags', '+faststart',
             finalOutputPath
         ];

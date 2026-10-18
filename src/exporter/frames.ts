@@ -39,6 +39,162 @@ export function resetExportClipCursor() {
     _activeClipCursor = 0;
 }
 
+let _lastActiveShotIndex = -1;
+
+/**
+ * Sliding window image preloader and decoder for frame-stepped deterministic export.
+ * Preloads and decodes only [currentShotIndex - 1, currentShotIndex + 3] images.
+ * Explicitly awaits activeImage.decode() for the active shot before advancing the frame.
+ * Disposes older ImageBitmap and HTMLImageElement references (< currentShotIndex - 1)
+ * so memory doesn't spike at minute 5-10.
+ */
+export async function prepareFrameImageWindow(
+    currentShotIndex: number,
+    clips: any[]
+): Promise<void> {
+    if (!clips || clips.length === 0 || currentShotIndex < 0 || currentShotIndex >= clips.length) {
+        return;
+    }
+
+    const windowStart = Math.max(0, currentShotIndex - 1);
+    const windowEnd = Math.min(clips.length - 1, currentShotIndex + 3);
+
+    // 1. Dispose older ImageBitmap / HTMLImageElement references (< windowStart) to prevent memory spikes
+    if (currentShotIndex !== _lastActiveShotIndex) {
+        _lastActiveShotIndex = currentShotIndex;
+
+        for (let i = 0; i < windowStart; i++) {
+            const clip = clips[i];
+            if (!clip) continue;
+
+            // Dispose older ImageBitmap / Canvas
+            if (clip._exportOptimizedImage) {
+                try {
+                    const bmp = clip._exportOptimizedImage;
+                    if (typeof (bmp as any).close === 'function') {
+                        (bmp as any).close();
+                    } else if (bmp instanceof HTMLCanvasElement) {
+                        bmp.width = 0;
+                        bmp.height = 0;
+                    }
+                } catch {}
+                delete clip._exportOptimizedImage;
+            }
+
+            // Release older decoded HTMLImageElement raster memory
+            if (clip.image && !clip._exportImageUnloaded) {
+                clip._cachedExportSrc = clip._cachedExportSrc || clip.image.src || clip._imageObjectURL || clip.imageUrl;
+                try {
+                    clip.image.src = '';
+                } catch {}
+                clip._exportImageUnloaded = true;
+            }
+
+            if (clip.backgroundPlate && !clip._exportPlateUnloaded) {
+                clip._cachedPlateSrc = clip._cachedPlateSrc || clip.backgroundPlate.src;
+                try {
+                    clip.backgroundPlate.src = '';
+                } catch {}
+                clip._exportPlateUnloaded = true;
+            }
+
+            // Evict static cache entries for older clips
+            const clipId = clip.id;
+            if (clipId) {
+                for (const k of Array.from(_staticFrameCache.keys())) {
+                    if (k === clipId || k.startsWith(`${clipId}-`)) {
+                        const entry = _staticFrameCache.get(k);
+                        if (entry?.bitmap instanceof HTMLCanvasElement) {
+                            entry.bitmap.width = 0;
+                            entry.bitmap.height = 0;
+                        }
+                        _staticFrameCache.delete(k);
+                    }
+                }
+                for (const k of Array.from(_staticCompositeCache.keys())) {
+                    if (k.startsWith(`${clipId}-`)) {
+                        const entry = _staticCompositeCache.get(k);
+                        if (entry?.bitmap instanceof HTMLCanvasElement) {
+                            entry.bitmap.width = 0;
+                            entry.bitmap.height = 0;
+                        }
+                        _staticCompositeCache.delete(k);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Preload only the sliding window [currentShotIndex - 1, currentShotIndex + 3]
+    for (let i = windowStart; i <= windowEnd; i++) {
+        const clip = clips[i];
+        if (!clip) continue;
+
+        if (clip._exportImageUnloaded && clip._cachedExportSrc) {
+            const img = new Image();
+            img.src = clip._cachedExportSrc;
+            clip.image = img;
+            delete clip._exportImageUnloaded;
+        }
+
+        if (clip._exportPlateUnloaded && clip._cachedPlateSrc) {
+            const plate = new Image();
+            plate.src = clip._cachedPlateSrc;
+            clip.backgroundPlate = plate;
+            delete clip._exportPlateUnloaded;
+        }
+
+        // Asynchronously pre-decode upcoming shots in the sliding window
+        if (i > currentShotIndex) {
+            if (clip.image && typeof clip.image.decode === 'function') {
+                clip.image.decode().catch(() => {});
+            }
+            if (clip.backgroundPlate && typeof clip.backgroundPlate.decode === 'function') {
+                clip.backgroundPlate.decode().catch(() => {});
+            }
+        }
+    }
+
+    // 3. Explicitly await activeImage.decode() for currentShotIndex before advancing the frame
+    const activeClip = clips[currentShotIndex];
+    if (activeClip) {
+        const activeImage: any = activeClip._exportOptimizedImage || activeClip.image || activeClip.backgroundPlate;
+        if (activeImage && typeof activeImage.decode === 'function') {
+            try {
+                await activeImage.decode();
+            } catch {
+                // Safe ignore if already decoded or animated texture
+            }
+        }
+        if (activeClip.backgroundPlate && typeof activeClip.backgroundPlate.decode === 'function') {
+            try {
+                await activeClip.backgroundPlate.decode();
+            } catch {}
+        }
+    }
+}
+
+export function restoreExportImageWindow(clips: any[]): void {
+    _lastActiveShotIndex = -1;
+    if (!clips || !Array.isArray(clips)) return;
+    for (const clip of clips) {
+        if (clip._exportImageUnloaded && clip._cachedExportSrc) {
+            const img = new Image();
+            img.src = clip._cachedExportSrc;
+            clip.image = img;
+            delete clip._exportImageUnloaded;
+            delete clip._cachedExportSrc;
+        }
+        if (clip._exportPlateUnloaded && clip._cachedPlateSrc) {
+            const plate = new Image();
+            plate.src = clip._cachedPlateSrc;
+            clip.backgroundPlate = plate;
+            delete clip._exportPlateUnloaded;
+            delete clip._cachedPlateSrc;
+        }
+    }
+}
+
 export function clearStaticFrameCache() {
     for (const entry of _staticFrameCache.values()) {
         if (entry.bitmap instanceof HTMLCanvasElement) {
@@ -56,6 +212,7 @@ export function clearStaticFrameCache() {
     }
     _staticCompositeCache.clear();
     resetExportClipCursor();
+    _lastActiveShotIndex = -1;
     try { getOrCreateExportFrameSource().dispose().catch(() => {}); } catch {}
 }
 

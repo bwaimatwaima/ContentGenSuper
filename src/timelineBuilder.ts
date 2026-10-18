@@ -424,6 +424,7 @@ export function alignShotsCanonical(
     startWordIdx: number;
     endWordIdx: number;
     startTime: number;
+    endTime?: number;
     confidence: number;
     textMatchConfidence: number;
     timingReliability: number;
@@ -543,10 +544,15 @@ export function alignShotsCanonical(
       measuredReliability = Math.max(0.15, Math.min(0.88, Number(measuredReliability.toFixed(2))));
 
       if (tokens.length === 0 || islandCursor >= islandTokenEnd) {
+        // ✅ FIX: Give un-matched shots a guaranteed natural duration (min 1.5s or proportional slot)
+        const safeFallbackDur = Math.max(1.5, expectedSlotDuration > 0 ? expectedSlotDuration : 2.5);
+        const calculatedEnd = proportionStart + safeFallbackDur;
+
         shotResults[s] = {
           startWordIdx: -1,
           endWordIdx: -1,
           startTime: proportionStart,
+          endTime: calculatedEnd, // Track explicit end so it never collapses!
           confidence: 0.1,
           textMatchConfidence: 0.1,
           timingReliability: measuredReliability,
@@ -555,6 +561,7 @@ export function alignShotsCanonical(
           totalTokens: tokens.length,
           status: measuredReliability >= ALIGNMENT_THRESHOLDS.BLOCK ? 'island_bounded' : 'fallback',
         };
+        islandCursor = Math.min(islandTokenEnd, islandCursor + 2);
         continue;
       }
 
@@ -693,20 +700,26 @@ export function alignShotsCanonical(
     Math.max(0, totalAudioDuration - MIN_GAP)
   );
 
-  // Construct CanonicalShotRange array where duration = endTime - startTime
+  // Construct CanonicalShotRange array with strict minimum readability floor (1.2s)
   const canonicalRanges: CanonicalShotRange[] = [];
   for (let i = 0; i < shots.length; i++) {
     const start = monotonicStarts[i];
-    const nextStart = i + 1 < shots.length ? monotonicStarts[i + 1] : totalAudioDuration;
-    const end = Math.min(totalAudioDuration, Math.max(start + MIN_GAP, nextStart));
-    const range = shotResults[i];
+    let nextStart = i + 1 < shots.length ? monotonicStarts[i + 1] : totalAudioDuration;
+    
+    // ✅ FIX: Prevent shot collapse. Every shot must have at least 1.2 seconds of display time 
+    // unless bounded strictly by an authoritative acoustic word end.
+    let end = Math.max(start + 1.2, nextStart);
+    if (end > totalAudioDuration && i === shots.length - 1) {
+      end = totalAudioDuration;
+    }
 
+    const range = shotResults[i];
     const isUnresolved = (range?.startWordIdx === -1 || range?.startWordIdx === undefined);
     const startWord = isUnresolved ? -1 : range.startWordIdx;
     const endWord = isUnresolved ? -1 : Math.max(startWord, range.endWordIdx ?? startWord);
     const matchedWordCount = isUnresolved ? 0 : Math.max(1, endWord - startWord + 1);
 
-    const textConf = range?.textMatchConfidence ?? range?.confidence ?? 0.0;
+    const textConf = range?.textMatchConfidence ?? (range as any)?.alignmentConfidence ?? range?.confidence ?? 0.0;
     const timingRel = range?.timingReliability ?? (range?.status === 'fallback' ? 0.2 : 0.85);
     const provenance = range?.timingProvenance ?? (range?.status === 'fallback' ? 'synthetic_fallback' : 'acoustic_word');
 
@@ -722,7 +735,7 @@ export function alignShotsCanonical(
       endWordIndex: endWord,
       startTime: start,
       endTime: end,
-      duration: end - start,
+      duration: Math.max(1.2, end - start), // Enforce absolute minimum duration floor
       alignmentConfidence: textConf,
       textMatchConfidence: textConf,
       timingReliability: timingRel,

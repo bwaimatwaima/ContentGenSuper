@@ -1,7 +1,7 @@
 {
   "name": "contentgen-ai",
   "private": true,
-  "version": "1.3.7",
+  "version": "1.0.0",
   "description": "ContentGen AI - AI Storyboard and Video Generation",
   "author": "Jones Mbuso",
   "type": "module",

@@ -329,11 +329,14 @@ export async function generateImageForShot(btn: HTMLButtonElement, isBulkCall: b
         if (charactersToInject.length > 0) {
             // Avoid duplicate injection if character appearance is already present
             const missingFromPrompt = charactersToInject.filter(p => {
-                const anchor = (p.appearance_anchor || '').trim();
+                const anchor = utils.cleanAnchorText(p.appearance_anchor || '');
                 return !anchor || !sceneDescription.includes(anchor);
             });
             if (missingFromPrompt.length > 0) {
-                const consistencyText = missingFromPrompt.map(p => `${p.name} (${p.appearance_anchor})`).join(', ');
+                const consistencyText = missingFromPrompt.map(p => {
+                    const cleanAnchor = utils.cleanAnchorText(p.appearance_anchor || '');
+                    return cleanAnchor ? `${p.name} (${cleanAnchor})` : p.name;
+                }).join(', ');
                 sceneDescription = `Featuring: ${consistencyText}. ${sceneDescription}`;
             }
         }

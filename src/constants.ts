@@ -61,8 +61,8 @@ export const APP_STATE_STORE = 'app_state'; // New store for current project
 export const NARRATION_CACHE_STORE = 'narration_cache'; // For caching generated audio
 export const TRANSCRIPT_CACHE_STORE = 'transcript_cache'; // For caching deepgram outputs
 export const PROJECT_VERSION = 3; // Current version of the project data structure
-export const APP_VERSION = '1.3.7';
-export const APP_VERSION_DISPLAY = 'Pro V1.3.7';
+export const APP_VERSION = '1.0.0';
+export const APP_VERSION_DISPLAY = 'Super V1.0';
 
 export const styleDescriptionsMap: { [key: string]: string } = {
     'Moody Cinematic Drama style. Digital Matte Painting, Film Still style. Denis Villeneuve (Blade Runner 2049) and Tarkovsky (Stalker) aesthetic. Soft diffused lighting, medium-low contrast, atmospheric haze and fog. Subtle film grain texture, desaturated blue-grey and teal palette, muted skin tones. Observational, psychological tension atmosphere. Cinematic mood, desaturated palette, soft lighting, atmospheric haze, realistic textures, story-driven composition. [scene]': 'Look: Moody Cinematic Drama with a Villeneuve/Tarkovsky aesthetic. Best For: Atmospheric, psychological, and visually stunning story-driven compositions.',

@@ -414,6 +414,30 @@ export function buildCharacterRegex(char: CharacterProfile, allProfiles?: Charac
 }
 
 /**
+ * Cleans character appearance anchors by removing negative constraints ("Never:...")
+ * and any nested parentheticals to keep anchors compact, clean, and uncorrupted.
+ */
+export function cleanAnchorText(anchor: string): string {
+    if (!anchor || typeof anchor !== 'string') return '';
+    let cleaned = anchor.replace(/\s*Never:[\s\S]*/i, '').trim();
+    cleaned = cleaned.replace(/\s*\([^)]*\)/g, '').trim();
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    return cleaned;
+}
+
+/**
+ * Checks if a given character index in a string falls inside parenthetical brackets (...).
+ */
+export function isInsideParentheses(str: string, matchIndex: number): boolean {
+    let depth = 0;
+    for (let i = 0; i < matchIndex; i++) {
+        if (str[i] === '(') depth++;
+        else if (str[i] === ')') depth = Math.max(0, depth - 1);
+    }
+    return depth > 0;
+}
+
+/**
  * Injects character appearance anchors into a prompt wherever the character's name or alias appears.
  * Also checks contextText (e.g. shot narration) if the prompt itself omitted the character's name.
  * Idempotent: will not duplicate if the character anchor is already present.
@@ -429,33 +453,65 @@ export function injectCharacterConsistencyIntoPrompt(promptText: string, context
 
     for (const char of state.characterProfiles) {
         if (!char.name || char.enforce_consistency === false) continue;
-        const anchor = (char.appearance_anchor || char.sheet_prompt || (char as any).description || '').trim();
+        const rawAnchor = (char.appearance_anchor || char.sheet_prompt || (char as any).description || '').trim();
+        const anchor = cleanAnchorText(rawAnchor);
         if (!anchor) continue;
 
-        // Skip if anchor already present in this prompt to avoid duplication
+        // Skip if clean anchor is already present in this prompt to avoid duplication
         if (enriched.includes(anchor)) continue;
+
+        // Skip if character already has an anchor injected e.g. "The Galilean Listener ("
+        const alreadyInjectedRegex = new RegExp(`\\b${escapeRegExp(char.name)}\\s*\\(`, 'i');
+        if (alreadyInjectedRegex.test(enriched)) continue;
 
         const aliases = getCharacterAliases(char, state.characterProfiles);
         if (aliases.length === 0) continue;
 
-        // Match whole-word character name or alias not already immediately followed by (
         const escapedAliases = aliases.map(escapeRegExp).join('|');
-        const namePattern = new RegExp(`\\b(${escapedAliases})\\b(?!\\s*\\()`, 'i');
-        
-        if (namePattern.test(enriched)) {
-            // Replace the first mention in the prompt with: Canonical Name (anchor)
-            // e.g. "Joseph stands on deck" -> "Joseph Bates (elderly sea captain...) stands on deck"
-            enriched = enriched.replace(namePattern, `${char.name} (${anchor})`);
-        } else if (combinedContext && namePattern.test(combinedContext)) {
-            // The prompt itself didn't mention the character by name, but the narration segment does!
-            // e.g. Narration: "Joseph navigated the storm", Prompt: "A ship battling enormous waves"
-            // -> "Featuring Joseph Bates (anchor): A ship battling enormous waves"
-            enriched = `Featuring ${char.name} (${anchor}): ${enriched}`;
-        } else if (char.is_universal && !enriched.includes('Featuring ')) {
-            // Universal protagonist fallback for scenes without any named characters
-            enriched = `Featuring ${char.name} (${anchor}): ${enriched}`;
+        const namePattern = new RegExp(`\\b(${escapedAliases})\\b`, 'gi');
+
+        let match: RegExpExecArray | null;
+        let replaced = false;
+        while ((match = namePattern.exec(enriched)) !== null) {
+            // Ensure match is NOT inside existing parentheses
+            if (isInsideParentheses(enriched, match.index)) {
+                continue;
+            }
+            // Ensure match is NOT immediately followed by (
+            const afterMatch = enriched.slice(match.index + match[0].length);
+            if (/^\s*\(/.test(afterMatch)) {
+                continue;
+            }
+
+            // Perform single replacement at match position
+            const before = enriched.slice(0, match.index);
+            const replacement = `${char.name} (${anchor})`;
+            const after = enriched.slice(match.index + match[0].length);
+            enriched = before + replacement + after;
+            replaced = true;
+            break;
+        }
+
+        if (!replaced) {
+            if (combinedContext) {
+                let contextMatch: RegExpExecArray | null;
+                const contextPattern = new RegExp(`\\b(${escapedAliases})\\b`, 'gi');
+                let foundInContext = false;
+                while ((contextMatch = contextPattern.exec(combinedContext)) !== null) {
+                    if (!isInsideParentheses(combinedContext, contextMatch.index)) {
+                        foundInContext = true;
+                        break;
+                    }
+                }
+                if (foundInContext && !enriched.includes(`Featuring ${char.name}`) && !enriched.includes(`(${anchor})`)) {
+                    enriched = `Featuring ${char.name} (${anchor}): ${enriched}`;
+                }
+            } else if (char.is_universal && !enriched.includes('Featuring ') && !enriched.includes(`(${anchor})`)) {
+                enriched = `Featuring ${char.name} (${anchor}): ${enriched}`;
+            }
         }
     }
+
     return enriched;
 }
 

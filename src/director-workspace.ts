@@ -338,7 +338,9 @@ function buildEffectsStudioPanel(): HTMLElement {
     // Only one scope timer may exist. It is stopped when Studio UI deactivates.
     if (scopeUpdateInterval !== null) window.clearInterval(scopeUpdateInterval);
     const updateScope = () => {
-      if (!canvas.isConnected) return;
+        // Signal-scope sampling performs canvas readback. Do not compete with the
+        // export renderer, and do not spend CPU painting a panel while its tab is hidden.
+        if (state.isExporting || !canvas.isConnected || canvas.closest('.hidden')) return;
       renderSignalScope(canvas, currentScopeMode);
     };
     scopeUpdateInterval = window.setInterval(updateScope, 400);

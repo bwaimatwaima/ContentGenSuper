@@ -11,6 +11,7 @@ import { selectSupportedAudioCodec } from './codecs';
 import { drawExportFrameCached, syncVideosForExportTime, yieldToMain } from './frames';
 import { startExportStage, endExportStage, resetExportProfiler, logExportProfiler } from './export-profiler';
 import { disposeExportFrameSource, resetVideoSyncTelemetry, getVideoSyncTelemetry } from './video-frame-source';
+import { getExportFlags } from './export-flags';
 
 
 export type AudioSegmentProvider = (startTimeSec: number, durationSec: number) => Promise<AudioBuffer | null>;
@@ -239,7 +240,10 @@ export async function encodeToMuxer(
                 if (!currentAudioBuf && audioSegmentProvider) {
                     const currentSec = audioSampleIndex / sampleRate;
                     if (!activeSegmentBuffer || currentSec < activeSegmentStartSec || currentSec >= activeSegmentEndSec) {
-                        const segDur = 15;
+                        const configuredSegmentDuration = Number(getExportFlags().audioSegmentDurationSec) || 30;
+                        // Cap configurability so a stale local setting cannot turn a
+                        // bounded-memory stream into a very large PCM allocation.
+                        const segDur = Math.max(15, Math.min(60, configuredSegmentDuration));
                         activeSegmentStartSec = currentSec;
                         activeSegmentEndSec = currentSec + segDur;
                         activeSegmentBuffer = await audioSegmentProvider(activeSegmentStartSec, segDur);

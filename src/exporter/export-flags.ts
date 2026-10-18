@@ -13,12 +13,14 @@ export interface ExportFeatureFlags {
 }
 
 const DEFAULT_FLAGS: ExportFeatureFlags = {
-  useSequentialVideoDecoder: true, // Graduated Phase 2: Mediabunny CanvasSink sequential decode
-  useChunkedAudioMix: true,        // Graduated Phase 3: 15s bounded PCM chunks (~5.7 MB @ 48kHz)
+  useSequentialVideoDecoder: true, // Keep enabled pending a video-heavy A/B benchmark.
+  useChunkedAudioMix: true,        // Used for longer exports; shorter exports use the full-mix path.
   useWsolaPitchStretch: true,      // video-studio WSOLA pitch-preserving time stretch
   useMidFrameSeeking: true,        // video-studio (frame + 0.5) / fps mid-frame timestamp seek
   enableExportProfiler: Boolean((import.meta as any).env?.DEV),
-  audioSegmentDurationSec: 15,
+  // 30s segments halve OfflineAudioContext startup frequency versus 15s while
+  // keeping each stereo float32 segment near 11.5 MB at 48 kHz.
+  audioSegmentDurationSec: 30,
 };
 
 function parseBoolFlag(val: unknown, fallback: boolean): boolean {

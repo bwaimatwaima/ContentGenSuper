@@ -25,6 +25,7 @@ import { isChunkedAudioExportEnabled } from './audio-chunk-provider';
 import { handleCloudRenderExport } from './cloud-render';
 import { calculateBitrate } from './codecs';
 import { getExportDeviceProfile } from './device-profile';
+import { startExportStage, endExportStage } from './export-profiler';
 import { electronService, syncTaskbarProgress } from './electron-bridge';
 import { deliverOpfsExport, hasOpfsWritableSupport, isStreamingSupported, tryInitOpfsExport, tryInitStreamingExport } from './file-targets';
 import { clearStaticFrameCache, yieldToMain } from './frames';
@@ -415,17 +416,34 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const hasDroneAudio = !!state.cinematicDroneAudio;
     const hasAnyAudioSources = hasMasterAudio || hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
 
+    // Rendering a fresh OfflineAudioContext for every short audio segment adds
+    // startup and scheduling overhead to ordinary exports. Use the established
+    // full-mix path for short projects, retain chunking for long projects, and
+    // force chunking at 8 minutes to bound full-duration PCM memory.
+    const CHUNKED_AUDIO_PREFERRED_MIN_SEC = 240;
+    const CHUNKED_AUDIO_REQUIRED_MIN_SEC = 480;
     const useChunkedAudio =
-        isChunkedAudioExportEnabled() &&
         format !== 'mp4-ffmpeg' &&
         !useLongElectronSegmentedPipeline &&
-        hasAnyAudioSources;
+        hasAnyAudioSources &&
+        (exportDuration >= CHUNKED_AUDIO_REQUIRED_MIN_SEC ||
+            (isChunkedAudioExportEnabled() && exportDuration >= CHUNKED_AUDIO_PREFERRED_MIN_SEC));
 
     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
 
     const audioSegmentProvider = useChunkedAudio
-        ? (startSec: number, durSec: number) =>
-              mixSegmentAudio(startSec, Math.min(exportDuration, startSec + durSec), TARGET_SAMPLE_RATE)
+        ? async (startSec: number, durSec: number) => {
+              startExportStage('audio-mix');
+              try {
+                  return await mixSegmentAudio(
+                      startSec,
+                      Math.min(exportDuration, startSec + durSec),
+                      TARGET_SAMPLE_RATE
+                  );
+              } finally {
+                  endExportStage('audio-mix');
+              }
+          }
         : undefined;
 
     if (shouldBuildFullAudioMix && (audioBuffer || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasOriginalAudio || hasDroneAudio)) {

@@ -1,0 +1,22 @@
+services:
+  contentgen-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: contentgen-ai:latest
+    container_name: contentgen-ai
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

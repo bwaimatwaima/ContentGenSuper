@@ -1159,3 +1159,6 @@ export { handleCloudRenderExport } from './cloud-render';
 export type { SavedCloudRender } from './cloud-render-store';
 export { clearAllStoredCloudRenders, deleteStoredCloudRender, getStoredCloudRenders, saveStoredCloudRenders, upsertStoredCloudRender } from './cloud-render-store';
 export { clearAllCloudRenders, closeCloudRenderHistoryModal, deleteCloudRenderItem, initCloudRenderBackgroundTracker, loadCloudDiagnostics, openCloudRenderHistoryModal, refreshCloudRendersList } from './cloud-render-ui';
+export { detectHardwareTier, getAdaptiveMemoryProfile, getSavedMemoryStrategy, setSavedMemoryStrategy } from './adaptive-memory';
+export type { MemoryStrategyOverride, MemoryTierName, SystemMemoryProfile } from './adaptive-memory';
+

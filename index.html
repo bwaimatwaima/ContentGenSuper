@@ -4550,844 +4550,674 @@
 
     <!-- Admin & Reseller Management Panel Modal -->
     <div id="admin-panel" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-[550] p-2 sm:p-4">
-        <div class="bg-slate-900 border border-purple-500/30 rounded-2xl max-w-6xl w-full h-[92vh] flex flex-col shadow-2xl overflow-hidden relative">
-            <!-- Header Bar -->
-            <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-900/90 shrink-0">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-500/30 flex items-center justify-center text-xl shadow-inner shrink-0">
-                        🛡️
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-[1400px] w-full h-[92vh] flex flex-col shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85)] overflow-hidden relative">
+            
+            <!-- Top Studio Header Bar -->
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-800/90 bg-slate-950/70 shrink-0">
+                <div class="flex items-center gap-3.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600/25 to-indigo-600/20 border border-purple-500/30 flex items-center justify-center text-purple-300 shadow-inner shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
                     </div>
                     <div>
-                        <div class="flex items-center gap-2">
-                            <h3 id="admin-panel-title" class="text-base sm:text-lg font-bold text-white tracking-tight">Admin & System Management Panel</h3>
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                        <div class="flex items-center gap-2.5">
+                            <h3 id="admin-panel-title" class="text-sm sm:text-base font-bold text-white tracking-tight">System Administration & Studio Control</h3>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-950/90 text-emerald-300 border border-emerald-500/30">
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                                Control Center
+                                LIVE
                             </span>
                         </div>
-                        <p class="text-xs text-slate-400">Manage user permissions, platform API credentials, consumption costs, and maintenance mode.</p>
-                    </div>
-                </div>
-                <button id="admin-close-btn" class="text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg p-2 transition text-lg font-bold cursor-pointer" title="Close Admin Panel">✕</button>
-            </div>
-
-            <!-- Admin Navigation Tabs -->
-            <div class="flex items-center gap-2 px-5 py-2.5 border-b border-slate-800 bg-slate-950/40 overflow-x-auto shrink-0 custom-scrollbar">
-                <button id="admin-tab-users-btn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white transition-all flex items-center gap-2 shadow-md cursor-pointer shrink-0">
-                    <span>👥</span>
-                    <span>Users & Resellers</span>
-                </button>
-                <button id="admin-tab-keys-btn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-all flex items-center gap-2 cursor-pointer shrink-0">
-                    <span>🔑</span>
-                    <span>System API Keys & Gateways</span>
-                </button>
-                <button id="admin-tab-credits-btn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-all flex items-center gap-2 cursor-pointer shrink-0">
-                    <span>💎</span>
-                    <span>Dynamic Credit Costs</span>
-                </button>
-                <button id="admin-tab-maintenance-btn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-all flex items-center gap-2 cursor-pointer shrink-0">
-                    <span>🚧</span>
-                    <span>Maintenance & Security</span>
-                </button>
-            </div>
-
-            <!-- TAB 1: USER MANAGEMENT SECTION -->
-            <div id="admin-section-users" class="flex-1 flex flex-col p-4 sm:p-5 space-y-4 overflow-hidden">
-                <!-- Reseller Quota Alert Card -->
-                <div id="admin-quota-card" class="hidden bg-indigo-950/40 border border-indigo-500/40 rounded-xl p-3.5 flex items-center justify-between shrink-0 shadow-sm">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">🎟️</span>
-                        <div>
-                            <h4 class="font-bold text-indigo-200 text-xs">Reseller Rights & Quota Allocation</h4>
-                            <p id="admin-quota-text" class="text-[11px] text-indigo-300/80">You can approve and manage user accounts under your reseller rights.</p>
-                        </div>
+                        <p class="text-[11px] text-slate-400 hidden sm:block">Manage workspace members, inference gateways, credit unit economics, and platform security policies.</p>
                     </div>
                 </div>
 
-                <!-- Add / Register New User Section -->
-                <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-3 shrink-0 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
-                        <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                            <span>✨</span> Provision New Account / Grant Access
-                        </h4>
-                        <span class="text-[10px] text-slate-400">Instantly creates or updates account in cloud directory</span>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                        <div>
-                            <label for="admin-add-user-email" class="block text-xs font-medium text-slate-300 mb-1">Email Address <span class="text-rose-400">*</span></label>
-                            <input type="email" id="admin-add-user-email" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none" placeholder="user@example.com">
-                        </div>
-                        <div>
-                            <label for="admin-add-user-name" class="block text-xs font-medium text-slate-300 mb-1">Display Name</label>
-                            <input type="text" id="admin-add-user-name" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Optional Name">
-                        </div>
-                        <div>
-                            <label for="admin-add-user-role" class="block text-xs font-medium text-slate-300 mb-1">Access Role</label>
-                            <select id="admin-add-user-role" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer">
-                                <option value="user">Standard User</option>
-                                <option value="reseller">Reseller (Has Approval Rights)</option>
-                                <option value="admin">Administrator</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="admin-add-user-status" class="block text-xs font-medium text-slate-300 mb-1">Account Status</label>
-                            <select id="admin-add-user-status" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer">
-                                <option value="approved">Approved</option>
-                                <option value="pending">Pending</option>
-                                <option value="restricted">Restricted</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="banned">Banned</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="admin-add-user-quota-group" class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
-                        <div>
-                            <label for="admin-add-user-credits" class="block text-xs font-medium text-slate-300 mb-1">Starting Credits</label>
-                            <input type="number" id="admin-add-user-credits" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none" value="10000" min="0" step="500">
-                        </div>
-                        <div>
-                            <label for="admin-add-user-quota" class="block text-xs font-medium text-slate-300 mb-1">Reseller Quota (Max Accounts)</label>
-                            <input type="number" id="admin-add-user-quota" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none" value="5" min="1" max="1000">
-                        </div>
-                        <div>
-                            <span class="block text-xs font-medium text-slate-300 mb-1">Image Generation Privilege</span>
-                            <label class="flex items-center gap-2 p-2 bg-slate-900/90 border border-slate-700 rounded-lg cursor-pointer hover:border-slate-600 transition h-[34px]">
-                                <input type="checkbox" id="admin-add-user-image-gen" class="w-4 h-4 text-purple-600 bg-slate-800 border-slate-700 rounded focus:ring-purple-500 focus:ring-2">
-                                <span class="text-xs text-slate-300 select-none">Allow Image Gen (Off by default)</span>
-                            </label>
-                        </div>
-                        <div class="flex items-end">
-                            <button id="admin-add-user-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-purple-900/30 cursor-pointer">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                                Add / Grant Access
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="admin-add-user-msg" class="hidden text-xs p-2 rounded-lg"></div>
-                </div>
-
-                <!-- Users List Table Container -->
-                <div class="flex-1 flex flex-col min-h-0 border border-slate-800 rounded-xl bg-slate-950/70 p-3 space-y-2">
-                    <div class="flex flex-wrap items-center justify-between gap-2 px-1 shrink-0">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-bold text-slate-200">Registered Accounts</span>
-                            <span id="admin-user-count" class="text-[11px] font-mono bg-purple-950/80 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded-full font-bold">0</span>
-                        </div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <button id="admin-test-duplicate-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer" title="Create a temporary dummy duplicate profile to safely test the scanner & consolidation tool">
-                                <span>+ Test Dup</span>
-                            </button>
-                            <button id="admin-clean-duplicates-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-amber-900/40 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Detect and report duplicate Firestore user documents (Safe Scan)">
-                                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                <span>Scan Duplicates</span>
-                            </button>
-                            <button id="admin-sync-auth-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 border border-purple-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer" title="Scan and sync all Firebase Auth users into database">
-                                <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                                <span>Sync Auth Accounts</span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar border border-slate-800 rounded-lg">
-                        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
-                            <thead class="bg-slate-800/90 text-slate-300 sticky top-0 z-10 border-b border-slate-700">
-                                <tr>
-                                    <th class="p-3">User / Email</th>
-                                    <th class="p-3">Role</th>
-                                    <th class="p-3">Reseller Quota</th>
-                                    <th class="p-3">Credits</th>
-                                    <th class="p-3">Cloud Render (Mins)</th>
-                                    <th class="p-3">Image Gen</th>
-                                    <th class="p-3">Audio Gen</th>
-                                    <th class="p-3">Video Gen</th>
-                                    <th class="p-3" title="Allow user to configure and use personal Gemini Web Cookie in settings">Cookie API</th>
-                                    <th class="p-3">Status</th>
-                                    <th class="p-3 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-users-list" class="divide-y divide-slate-800 text-slate-200">
-                                <!-- Populated dynamically -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 2: SYSTEM API KEYS & ENDPOINTS SECTION -->
-            <div id="admin-section-keys" class="hidden flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 custom-scrollbar">
-                <!-- Banner / Intro -->
-                <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 shrink-0">
-                    <div class="flex items-center gap-2.5">
-                        <span class="text-xl">🔑</span>
-                        <div>
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">System-Wide Fallback API Keys & Gateways</h4>
-                            <p class="text-[11px] text-slate-400">These credentials serve as the global fallback for users without personal API keys.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CARD 1: Core AI Inference Engines (Gemini / Vertex AI & OpenAI Gateway) -->
-                <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-4 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-700/50 pb-2.5">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">✨</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Primary Intelligence Engines</h4>
-                                <p class="text-[11px] text-slate-400">Google Gemini / Vertex AI and OpenAI-compatible inference gateways</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <!-- Left: System Gemini / Vertex AI Engine -->
-                        <div class="bg-slate-900/80 p-4 rounded-xl border border-purple-500/30 space-y-3">
-                            <div class="flex items-center justify-between flex-wrap gap-2">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="text-sm">🪐</span>
-                                    <span class="text-xs font-bold text-purple-200">Google Gemini / Vertex AI</span>
-                                </div>
-                                <div class="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-                                    <button type="button" id="admin-sys-gemini-auth-api-btn" class="px-2.5 py-1 text-[11px] font-semibold rounded transition bg-purple-600 text-white shadow-sm cursor-pointer">
-                                        API Key
-                                    </button>
-                                    <button type="button" id="admin-sys-gemini-auth-cookie-btn" class="px-2.5 py-1 text-[11px] font-semibold rounded transition text-slate-400 hover:text-white cursor-pointer">
-                                        Web Cookies
-                                    </button>
-                                    <button type="button" id="admin-sys-gemini-auth-openaigateway-btn" class="px-2.5 py-1 text-[11px] font-semibold rounded transition text-slate-400 hover:text-white cursor-pointer">
-                                        OpenAI Gateway
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- System API Key Input Container -->
-                            <div id="admin-sys-gemini-key-container" class="space-y-2.5">
-                                <div class="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800">
-                                    <button type="button" id="admin-auth-aistudio-tab" class="flex-1 py-1 px-2 text-[11px] font-medium rounded bg-purple-600 text-white transition-colors cursor-pointer">✨ AI Studio</button>
-                                    <button type="button" id="admin-auth-vertex-tab" class="flex-1 py-1 px-2 text-[11px] font-medium rounded text-slate-400 hover:text-white transition-colors cursor-pointer">🏢 Vertex AI</button>
-                                </div>
-
-                                <div id="admin-vertex-fields" class="hidden space-y-2.5 bg-slate-950/80 p-3 rounded-lg border border-slate-800">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-[11px] font-semibold text-slate-300">Vertex Auth Mode</span>
-                                        <div class="flex bg-slate-900 p-0.5 rounded-lg border border-slate-700">
-                                            <button type="button" id="admin-vertex-auth-apikey-btn" class="px-2 py-0.5 text-[10px] font-semibold rounded transition bg-purple-600 text-white cursor-pointer">API Key</button>
-                                            <button type="button" id="admin-vertex-auth-adc-btn" class="px-2 py-0.5 text-[10px] font-semibold rounded transition text-slate-400 hover:text-white cursor-pointer">ADC Default</button>
-                                        </div>
-                                    </div>
-                                    <div id="admin-vertex-adc-info" class="hidden p-2 rounded-lg bg-indigo-950/70 border border-indigo-500/40 text-[10px] text-indigo-200 leading-relaxed">
-                                        🛡️ <strong>Application Default Credentials (ADC):</strong> Vertex AI authenticates automatically via cloud service accounts. No API key required.
-                                    </div>
-                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <div>
-                                            <label for="admin-sys-vertex-project" class="text-[10px] text-slate-400 block mb-0.5">GCP Project ID</label>
-                                            <input type="text" id="admin-sys-vertex-project" class="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none" value="" placeholder="e.g. my-project-id">
-                                        </div>
-                                        <div>
-                                            <label for="admin-sys-vertex-location" class="text-[10px] text-slate-400 block mb-0.5">GCP Region</label>
-                                            <input type="text" id="admin-sys-vertex-location" class="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1.5 text-xs text-white" value="us-central1" placeholder="us-central1">
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div id="admin-sys-vertex-adc-notice" class="hidden p-2.5 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-[11px] text-emerald-200 leading-relaxed">
-                                    <div class="flex items-center gap-1.5 font-semibold text-emerald-300 mb-0.5">
-                                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
-                                        <span>No API Key Required (ADC Active)</span>
-                                    </div>
-                                    <span class="text-[10px] text-emerald-300/80">Application Default Credentials authenticate automatically via the host/Cloud Run service account. All Vertex AI calls use native cloud credentials.</span>
-                                </div>
-
-                                <div id="admin-sys-gemini-key-wrapper">
-                                    <label for="admin-sys-gemini-key" id="admin-sys-gemini-key-label" class="block text-[11px] font-medium text-slate-300 mb-1">System Gemini API Key</label>
-                                    <input type="password" id="admin-sys-gemini-key" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="AIzaSy...">
-                                    <p id="admin-sys-gemini-key-help" class="text-[10px] text-slate-400 mt-1">Default key for storyboards, scripting, and Gemini image generation.</p>
-                                </div>
-
-                                <div>
-                                    <button type="button" id="admin-test-gemini-key-btn" class="w-full bg-slate-800 hover:bg-slate-700 border border-purple-500/40 text-purple-200 font-semibold py-1.5 px-3 text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
-                                        <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                        <span>Test Gemini Connection</span>
-                                    </button>
-                                    <div id="admin-gemini-key-status" class="hidden mt-2 p-2 rounded text-[10px] leading-relaxed break-words"></div>
-                                </div>
-                            </div>
-
-                            <!-- System Web Cookie Input Container -->
-                            <div id="admin-sys-gemini-cookie-container" class="hidden space-y-2.5">
-                                <div>
-                                    <label for="admin-sys-gemini-psid" class="block text-[11px] font-medium text-slate-300 mb-0.5">__Secure-1PSID <span class="text-rose-400 font-bold">*</span></label>
-                                    <input type="password" id="admin-sys-gemini-psid" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="Paste __Secure-1PSID cookie...">
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    <div>
-                                        <label for="admin-sys-gemini-psidts" class="block text-[11px] font-medium text-slate-400 mb-0.5">__Secure-1PSIDTS <span class="text-slate-500">(Optional)</span></label>
-                                        <input type="password" id="admin-sys-gemini-psidts" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="__Secure-1PSIDTS...">
-                                    </div>
-                                    <div>
-                                        <label for="admin-sys-gemini-psidcc" class="block text-[11px] font-medium text-slate-400 mb-0.5">__Secure-1PSIDCC <span class="text-slate-500">(Optional)</span></label>
-                                        <input type="password" id="admin-sys-gemini-psidcc" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="__Secure-1PSIDCC...">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label for="admin-sys-gemini-compass" class="block text-[11px] font-medium text-slate-400 mb-0.5">COMPASS <span class="text-cyan-400">(Optional - Routing Affinity)</span></label>
-                                    <input type="password" id="admin-sys-gemini-compass" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="COMPASS cookie...">
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <div>
-                                        <label for="admin-sys-gemini-sid" class="block text-[11px] font-medium text-slate-400 mb-0.5">SID</label>
-                                        <input type="password" id="admin-sys-gemini-sid" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="SID...">
-                                    </div>
-                                    <div>
-                                        <label for="admin-sys-gemini-hsid" class="block text-[11px] font-medium text-slate-400 mb-0.5">HSID</label>
-                                        <input type="password" id="admin-sys-gemini-hsid" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="HSID...">
-                                    </div>
-                                    <div>
-                                        <label for="admin-sys-gemini-ssid" class="block text-[11px] font-medium text-slate-400 mb-0.5">SSID</label>
-                                        <input type="password" id="admin-sys-gemini-ssid" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="SSID...">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Right: System OpenAI & Compatible Gateway Card -->
-                        <div id="admin-sys-openai-card" class="bg-slate-900/80 p-4 rounded-xl border border-indigo-500/30 space-y-3">
-                            <div class="flex items-center justify-between flex-wrap gap-2">
-                                <div class="flex items-center gap-1.5">
-                                    <span class="text-sm">🤖</span>
-                                    <span class="text-xs font-bold text-indigo-300">OpenAI & Custom Gateway</span>
-                                </div>
-                                <span class="text-[10px] px-2 py-0.5 rounded font-mono bg-indigo-950 text-indigo-300 border border-indigo-700/50">Compatible Proxy</span>
-                            </div>
-
-                            <!-- Quick Presets -->
-                            <div>
-                                <span class="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Quick Presets</span>
-                                <div class="flex flex-wrap gap-1.5 text-[10px]">
-                                    <button type="button" data-admin-gateway-preset="openai" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-900/50 border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">OpenAI</button>
-                                    <button type="button" data-admin-gateway-preset="openrouter" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-900/50 border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">OpenRouter</button>
-                                    <button type="button" data-admin-gateway-preset="experientiallabs" class="px-2 py-0.5 rounded bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/50 text-indigo-200 hover:text-white transition cursor-pointer">Experiential Labs</button>
-                                    <button type="button" data-admin-gateway-preset="deepseek" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-900/50 border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">DeepSeek</button>
-                                    <button type="button" data-admin-gateway-preset="groq" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-900/50 border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Groq</button>
-                                    <button type="button" data-admin-gateway-preset="ollama" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-900/50 border border-slate-700 text-slate-300 hover:text-white transition cursor-pointer">Ollama</button>
-                                </div>
-                            </div>
-
-                            <!-- API Key & Base URL Inputs -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                    <label for="admin-sys-openai-key" class="block text-[11px] font-medium text-slate-300 mb-0.5">Gateway API Key</label>
-                                    <input type="password" id="admin-sys-openai-key" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono" placeholder="sk-...">
-                                </div>
-                                <div>
-                                    <label for="admin-sys-openai-base-url" class="block text-[11px] font-medium text-slate-300 mb-0.5">Base URL</label>
-                                    <input type="text" id="admin-sys-openai-base-url" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
-                                </div>
-                            </div>
-
-                            <!-- Models -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                <div>
-                                    <div class="flex items-center justify-between mb-0.5">
-                                        <label for="admin-sys-openai-model" class="block text-[11px] font-medium text-slate-300">Default Text Model</label>
-                                        <button type="button" id="admin-fetch-openai-models-btn" class="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer flex items-center gap-1">
-                                            Fetch
-                                        </button>
-                                    </div>
-                                    <input type="text" list="admin-openai-model-list" id="admin-sys-openai-model" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono" placeholder="gpt-4o" value="gpt-4o">
-                                    <datalist id="admin-openai-model-list">
-                                        <option value="gpt-4o">OpenAI GPT-4o</option>
-                                        <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
-                                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (Gateway)</option>
-                                        <option value="gemini-flash-latest">Gemini Flash Latest (Gateway)</option>
-                                        <option value="gemini-3.6-flash">Gemini 3.6 Flash (Gateway)</option>
-                                        <option value="deepseek-chat">DeepSeek Chat (V3)</option>
-                                        <option value="deepseek-reasoner">DeepSeek Reasoner (R1)</option>
-                                        <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B Instruct</option>
-                                    </datalist>
-                                </div>
-                                <div>
-                                    <label for="admin-sys-openai-image-model" class="block text-[11px] font-medium text-slate-300 mb-0.5">Default Image Model</label>
-                                    <input type="text" list="admin-openai-image-model-list" id="admin-sys-openai-image-model" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-mono" placeholder="dall-e-3" value="dall-e-3">
-                                    <datalist id="admin-openai-image-model-list">
-                                        <option value="dall-e-3">DALL-E 3 (OpenAI)</option>
-                                        <option value="dall-e-2">DALL-E 2 (OpenAI)</option>
-                                        <option value="black-forest-labs/flux-1-schnell">Flux 1 Schnell</option>
-                                        <option value="black-forest-labs/flux-1-dev">Flux 1 Dev</option>
-                                        <option value="recraft-v3">Recraft V3</option>
-                                    </datalist>
-                                </div>
-                            </div>
-
-                            <div>
-                                <button type="button" id="admin-test-openai-connection-btn" class="w-full bg-slate-800 hover:bg-slate-700 border border-indigo-500/40 text-indigo-200 font-semibold py-1.5 px-3 text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                    <span>Test Gateway Connection</span>
-                                </button>
-                                <div id="admin-openai-connection-status" class="hidden mt-2 p-2 rounded text-[10px] leading-relaxed break-words"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CARD 2: Specialized Voice, Media & Infrastructure Keys -->
-                <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-4 shadow-sm">
-                    <div class="border-b border-slate-700/50 pb-2.5">
-                        <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                            <span>🎙️</span> Creative Audio, Media & Infrastructure Keys
-                        </h4>
-                        <p class="text-[11px] text-slate-400">Fallback credentials for audio narration, word alignment, stock media, and server bypass</p>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                        <div>
-                            <label for="admin-sys-elevenlabs-key" class="block text-xs font-semibold text-slate-300 mb-1">ElevenLabs Voice Key</label>
-                            <input type="password" id="admin-sys-elevenlabs-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="sk_...">
-                            <p class="text-[10px] text-slate-400 mt-1">High-fidelity voice synthesis & narrations.</p>
-                        </div>
-                        <div>
-                            <label for="admin-sys-deepgram-key" class="block text-xs font-semibold text-slate-300 mb-1">Deepgram API Key</label>
-                            <input type="password" id="admin-sys-deepgram-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="Deepgram Key">
-                            <p class="text-[10px] text-slate-400 mt-1">Speech alignment & precise word timestamps.</p>
-                        </div>
-                        <div>
-                            <label for="admin-sys-stability-key" class="block text-xs font-semibold text-slate-300 mb-1">Stability AI Key</label>
-                            <input type="password" id="admin-sys-stability-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="sk-...">
-                            <p class="text-[10px] text-slate-400 mt-1">High-resolution art & asset generation.</p>
-                        </div>
-                        <div>
-                            <label for="admin-sys-ai33-key" class="block text-xs font-semibold text-slate-300 mb-1">AI33 Voice Key</label>
-                            <input type="password" id="admin-sys-ai33-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="AI33 Key">
-                            <p class="text-[10px] text-slate-400 mt-1">Alternative TTS engine integration.</p>
-                        </div>
-                        <div>
-                            <label for="admin-sys-pexels-key" class="block text-xs font-semibold text-slate-300 mb-1">Pexels Stock Media Key</label>
-                            <input type="password" id="admin-sys-pexels-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="Pexels Key">
-                            <p class="text-[10px] text-slate-400 mt-1">Stock image and video b-roll search.</p>
-                        </div>
-                        <div>
-                            <label for="admin-sys-gradio-url" class="block text-xs font-semibold text-slate-300 mb-1">Gradio TTS Endpoint URL</label>
-                            <input type="text" id="admin-sys-gradio-url" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="https://hf.space...">
-                            <p class="text-[10px] text-slate-400 mt-1">Self-hosted or HuggingFace voice endpoint.</p>
-                        </div>
-                        <div class="sm:col-span-2 lg:col-span-2">
-                            <div class="flex items-center justify-between mb-1">
-                                <label for="admin-sys-firebase-key" class="block text-xs font-semibold text-slate-300">Firebase Web API Key (Auth Override)</label>
-                                <span class="text-[10px] text-slate-400 font-mono">Optional</span>
-                            </div>
-                            <input type="password" id="admin-sys-firebase-key" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="AIzaSy... (Leave empty to use project default)">
-                            <p class="text-[10px] text-slate-400 mt-1">Overrides default Firebase key if restricted or reporting <code>auth/api-key-not-found</code>.</p>
-                        </div>
-                        <div>
-                            <div class="flex items-center justify-between mb-1">
-                                <label for="admin-sys-desktop-password" class="block text-xs font-semibold text-slate-300">Desktop Master Password</label>
-                                <span class="text-[10px] text-purple-400 font-mono">Default: 13218361</span>
-                            </div>
-                            <input type="password" id="admin-sys-desktop-password" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none font-mono" placeholder="13218361">
-                            <p class="text-[10px] text-slate-400 mt-1">Password for Creator Studio offline mode.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CARD 3: System Access, Rate-Limiting & Abuse Policies -->
-                <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 space-y-3.5 shadow-sm">
-                    <div class="border-b border-slate-700/50 pb-2.5">
-                        <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                            <span>🛡️</span> Platform Consumption Policies & Abuse Guardrails
-                        </h4>
-                        <p class="text-[11px] text-slate-400">Enforce platform security rules, prevent quota drainage, and gate export capabilities</p>
-                    </div>
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <!-- Disable Image Generation Policy -->
-                        <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                            <div class="space-y-1 pr-3">
-                                <label for="admin-sys-disable-image-gen-toggle" class="font-bold text-white text-xs cursor-pointer flex items-center gap-2">
-                                    <span>🚫 Disable Image Gen on System Key</span>
-                                    <span id="admin-sys-image-gen-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                                        Allowed
-                                    </span>
-                                </label>
-                                <p class="text-slate-400 text-[10px]">Prevents users without personal keys from generating images using your system key.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input type="checkbox" id="admin-sys-disable-image-gen-toggle" class="sr-only peer">
-                                <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
-                            </label>
-                        </div>
-
-                        <!-- Disable Video Generation Policy -->
-                        <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                            <div class="space-y-1 pr-3">
-                                <label for="admin-sys-disable-video-gen-toggle" class="font-bold text-white text-xs cursor-pointer flex items-center gap-2">
-                                    <span>🎥 Disable Video Gen on System Key</span>
-                                    <span id="admin-sys-video-gen-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                                        Allowed
-                                    </span>
-                                </label>
-                                <p class="text-slate-400 text-[10px]">Prevents rendering Veo videos using system key without a personal key.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input type="checkbox" id="admin-sys-disable-video-gen-toggle" class="sr-only peer">
-                                <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
-                            </label>
-                        </div>
-
-                        <!-- Disable Gemini Audio Generation Policy -->
-                        <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                            <div class="space-y-1 pr-3">
-                                <label for="admin-sys-disable-audio-gen-toggle" class="font-bold text-white text-xs cursor-pointer flex items-center gap-2">
-                                    <span>🎙️ Disable Gemini Audio on System Key</span>
-                                    <span id="admin-sys-audio-gen-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                                        Allowed
-                                    </span>
-                                </label>
-                                <p class="text-slate-400 text-[10px]">Prevents users without personal keys from generating Gemini speech/SFX using your system key.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input type="checkbox" id="admin-sys-disable-audio-gen-toggle" class="sr-only peer">
-                                <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
-                            </label>
-                        </div>
-
-                        <!-- Require Approval Policy -->
-                        <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                            <div class="space-y-1 pr-3">
-                                <label for="admin-sys-require-approval-toggle" class="font-bold text-white text-xs cursor-pointer flex items-center gap-2">
-                                    <span>🔒 Require Approval for New Users</span>
-                                    <span id="admin-sys-require-approval-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                                        Auto-Approve
-                                    </span>
-                                </label>
-                                <p class="text-slate-400 text-[10px]">New signups remain in 'pending' status until reviewed by an admin or reseller.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input type="checkbox" id="admin-sys-require-approval-toggle" class="sr-only peer">
-                                <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
-                            </label>
-                        </div>
-
-                        <!-- Enforce Guest Restrictions Policy -->
-                        <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                            <div class="space-y-1 pr-3">
-                                <label for="admin-sys-guest-restrictions-toggle" class="font-bold text-white text-xs cursor-pointer flex items-center gap-2">
-                                    <span>🛡️ Guest Anti-Abuse Protection</span>
-                                    <span id="admin-sys-guest-restrictions-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                                        Enforced
-                                    </span>
-                                </label>
-                                <p class="text-slate-400 text-[10px]">Blocks anonymous visitors from consuming credits without personal keys.</p>
-                            </div>
-                            <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                                <input type="checkbox" id="admin-sys-guest-restrictions-toggle" class="sr-only peer" checked>
-                                <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Guest Export Gating Policy -->
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80 gap-3">
-                        <div class="space-y-1 pr-4">
-                            <label for="admin-sys-guest-export-policy-select" class="font-bold text-white text-xs flex items-center gap-2">
-                                <span>🎬 Guest Video Export Gating Policy</span>
-                                <span id="admin-sys-guest-export-badge" class="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-950 text-amber-400 border border-amber-500/40">
-                                    320p + Watermark
-                                </span>
-                            </label>
-                            <p class="text-slate-400 text-[10px]">Restricts guest accounts from exporting full resolution videos to safeguard monetization.</p>
-                        </div>
-                        <div class="shrink-0 min-w-[220px]">
-                            <select id="admin-sys-guest-export-policy-select" class="w-full bg-slate-800 text-white text-xs border border-slate-600 rounded-lg p-2 focus:border-amber-500 focus:outline-none cursor-pointer">
-                                <option value="watermark_320p" selected>320p Quality with Watermark (Freemium)</option>
-                                <option value="block_all">Completely Block Guest Exports (Strict)</option>
-                                <option value="unrestricted">Unrestricted Full Quality (No Gating)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bottom Action Bar for System Keys -->
-                <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
-                    <div id="admin-system-keys-msg" class="hidden text-xs p-2 rounded-lg"></div>
-                    <div class="flex gap-2 ml-auto">
-                        <button id="admin-clear-system-keys-btn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white font-semibold py-2 px-4 rounded-lg transition text-xs flex items-center gap-1.5 cursor-pointer">
-                            <span>🗑️</span> Clear All
-                        </button>
-                        <button id="admin-save-system-keys-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-lg transition text-xs flex items-center gap-1.5 shadow-lg shadow-purple-900/30 cursor-pointer">
-                            <span>💾</span> Save System API Keys
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 3: DYNAMIC CREDIT COSTS SECTION -->
-            <div id="admin-section-credits" class="hidden flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 custom-scrollbar">
-                <!-- Header Banner -->
-                <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 shrink-0">
-                    <div class="flex items-center gap-2.5">
-                        <span class="text-xl">💎</span>
-                        <div>
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">Dynamic Credit Deduction Matrix</h4>
-                            <p class="text-[11px] text-slate-400">Configure real-time credit consumption per operation without redeploying code.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3 Categorized Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <!-- Category 1: Video Production -->
-                    <div class="bg-slate-800/60 border border-purple-500/30 rounded-xl p-4 space-y-3.5 shadow-sm">
-                        <div class="flex items-center gap-2 border-b border-slate-700/50 pb-2.5">
-                            <span class="text-base">🎥</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-purple-200 uppercase tracking-wider">Video Production</h4>
-                                <p class="text-[10px] text-slate-400">Veo cinematic render pipeline</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                            <label for="admin-cost-video-gen" class="block text-[11px] font-semibold text-slate-200">Video Generation (per render)</label>
-                            <div class="relative">
-                                <input type="number" id="admin-cost-video-gen" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="100" min="0" step="1">
-                                <span class="absolute right-3 top-2 text-[10px] font-bold text-purple-400 uppercase">Credits</span>
-                            </div>
-                            <p class="text-[10px] text-slate-400 leading-normal">Default: 100 credits per full video render clip.</p>
-                        </div>
-                    </div>
-
-                    <!-- Category 2: Visuals & Artwork -->
-                    <div class="bg-slate-800/60 border border-indigo-500/30 rounded-xl p-4 space-y-3.5 shadow-sm">
-                        <div class="flex items-center gap-2 border-b border-slate-700/50 pb-2.5">
-                            <span class="text-base">🎨</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-indigo-200 uppercase tracking-wider">Visuals & Artwork</h4>
-                                <p class="text-[10px] text-slate-400">Gemini & Imagen image engines</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <div class="space-y-1.5 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                                <label for="admin-cost-image-gemini" class="block text-[11px] font-semibold text-slate-200">Gemini Image Generation</label>
-                                <div class="relative">
-                                    <input type="number" id="admin-cost-image-gemini" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="5" min="0" step="1">
-                                    <span class="absolute right-3 top-2 text-[10px] font-bold text-indigo-400 uppercase">Credits</span>
-                                </div>
-                                <p class="text-[10px] text-slate-400 leading-normal">Default: 5 credits per image.</p>
-                            </div>
-
-                            <div class="space-y-1.5 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                                <label for="admin-cost-image-imagen" class="block text-[11px] font-semibold text-slate-200">Imagen High-Res Generation</label>
-                                <div class="relative">
-                                    <input type="number" id="admin-cost-image-imagen" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="10" min="0" step="1">
-                                    <span class="absolute right-3 top-2 text-[10px] font-bold text-indigo-400 uppercase">Credits</span>
-                                </div>
-                                <p class="text-[10px] text-slate-400 leading-normal">Default: 10 credits per high-res render.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Category 3: Audio & Voice Engines -->
-                    <div class="bg-slate-800/60 border border-emerald-500/30 rounded-xl p-4 space-y-3.5 shadow-sm">
-                        <div class="flex items-center gap-2 border-b border-slate-700/50 pb-2.5">
-                            <span class="text-base">🎙️</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-emerald-200 uppercase tracking-wider">Audio & Speech</h4>
-                                <p class="text-[10px] text-slate-400">TTS, alignment & voice cloning</p>
-                            </div>
-                        </div>
-
-                        <div class="space-y-3">
-                            <div class="space-y-1.5 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                                <label for="admin-cost-audio-elevenlabs" class="block text-[11px] font-semibold text-slate-200">ElevenLabs Voice Generation</label>
-                                <div class="relative">
-                                    <input type="number" id="admin-cost-audio-elevenlabs" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="10" min="0" step="1">
-                                    <span class="absolute right-3 top-2 text-[10px] font-bold text-emerald-400 uppercase">Credits</span>
-                                </div>
-                                <p class="text-[10px] text-slate-400 leading-normal">Default: 10 credits per voice clip.</p>
-                            </div>
-
-                            <div class="space-y-1.5 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                                <label for="admin-cost-audio-aligned" class="block text-[11px] font-semibold text-slate-200">Aligned Narration Audio</label>
-                                <div class="relative">
-                                    <input type="number" id="admin-cost-audio-aligned" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="5" min="0" step="1">
-                                    <span class="absolute right-3 top-2 text-[10px] font-bold text-emerald-400 uppercase">Credits</span>
-                                </div>
-                                <p class="text-[10px] text-slate-400 leading-normal">Default: 5 credits per narration segment.</p>
-                            </div>
-
-                            <div class="space-y-1.5 bg-slate-900/80 p-3 rounded-lg border border-slate-700/70">
-                                <label for="admin-cost-audio-cloning" class="block text-[11px] font-semibold text-slate-200">Minimax Voice Cloning</label>
-                                <div class="relative">
-                                    <input type="number" id="admin-cost-audio-cloning" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs focus:ring-2 focus:ring-purple-500 outline-none pr-16 font-mono" value="20" min="0" step="1">
-                                    <span class="absolute right-3 top-2 text-[10px] font-bold text-emerald-400 uppercase">Credits</span>
-                                </div>
-                                <p class="text-[10px] text-slate-400 leading-normal">Default: 20 credits per voice clone model.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Footer Action Bar -->
-                <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
-                    <div id="admin-credit-costs-msg" class="hidden text-xs p-2 rounded-lg"></div>
-                    <div class="flex gap-2 ml-auto">
-                        <button id="admin-reset-credit-costs-btn" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs px-4 py-2 rounded-lg transition font-semibold cursor-pointer">
-                            Reset to Defaults
-                        </button>
-                        <button id="admin-save-credit-costs-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-lg transition text-xs flex items-center gap-1.5 shadow-lg shadow-purple-900/30 cursor-pointer">
-                            <span>💾</span> Save Credit Costs
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- TAB 4: MAINTENANCE & SYSTEM CONTROLS SECTION -->
-            <div id="admin-section-maintenance" class="hidden flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 custom-scrollbar">
-                <!-- Header Banner -->
-                <div class="flex items-center justify-between bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 shrink-0">
-                    <div class="flex items-center gap-2.5">
-                        <span class="text-xl">⚙️</span>
-                        <div>
-                            <h4 class="text-xs font-bold text-white uppercase tracking-wider">System Controls & Platform Health</h4>
-                            <p class="text-[11px] text-slate-400">Manage runtime availability, desktop studio access, and admin interface toggles.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Maintenance Lock Mode Card -->
-                <div class="bg-slate-800/60 border border-rose-500/30 rounded-xl p-4 space-y-4 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-700/50 pb-2.5">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">🚧</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Maintenance Lock Mode</h4>
-                                <p class="text-[11px] text-slate-400">When active, all non-admin users are locked out of app features</p>
-                            </div>
-                        </div>
-                        <span id="admin-maintenance-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                            Inactive (Online)
-                        </span>
-                    </div>
-
-                    <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                        <div class="space-y-0.5 pr-4">
-                            <label for="admin-maintenance-toggle" class="font-bold text-white text-xs cursor-pointer block">Activate Maintenance Lock</label>
-                            <p class="text-slate-400 text-[11px]">Blocks non-admin logins and active sessions with an emergency banner.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                            <input type="checkbox" id="admin-maintenance-toggle" class="sr-only peer">
-                            <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
-                        </label>
-                    </div>
-
-                    <div>
-                        <label for="admin-maintenance-message-input" class="block text-xs font-semibold text-slate-300 mb-1">Custom Maintenance Announcement Message</label>
-                        <textarea id="admin-maintenance-message-input" rows="2" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-purple-500 outline-none resize-none leading-relaxed placeholder-slate-500" placeholder="We are currently performing system maintenance to upgrade core models and infrastructure. Please check back shortly."></textarea>
-                        <p class="text-[10px] text-slate-400 mt-1">This announcement is shown to non-admin visitors on the lockout screen.</p>
-                    </div>
-                </div>
-
-                <!-- Desktop Creator Studio Security & Offline Access -->
-                <div class="bg-slate-800/60 border border-indigo-500/30 rounded-xl p-4 space-y-4 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-700/50 pb-2.5">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">💻</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Desktop Studio Offline Security</h4>
-                                <p class="text-[11px] text-slate-400">Manage offline desktop mode bypass and studio master password</p>
-                            </div>
-                        </div>
-                        <span id="admin-desktop-offline-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-500/40">
-                            Offline Access Allowed
-                        </span>
-                    </div>
-
-                    <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                        <div class="space-y-0.5 pr-4">
-                            <label for="admin-desktop-offline-toggle" class="font-bold text-white text-xs cursor-pointer block">Disable Desktop Offline Mode</label>
-                            <p class="text-slate-400 text-[11px]">When switched <strong>ON</strong> (red), offline desktop bypass is disabled and desktop users must sign in with a cloud account.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                            <input type="checkbox" id="admin-desktop-offline-toggle" class="sr-only peer">
-                            <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600"></div>
-                        </label>
-                    </div>
-
-                    <!-- Desktop Studio Master Password Config -->
-                    <div class="bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80 space-y-2.5">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <label for="admin-desktop-password-input" class="font-bold text-white text-xs block flex items-center gap-1.5">
-                                    <span>🔑</span> Desktop Studio Access Password
-                                </label>
-                                <p class="text-slate-400 text-[11px] mt-0.5">Password required to unlock offline Creator Studio. Default is <code>13218361</code>.</p>
-                            </div>
-                            <span id="admin-desktop-pass-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-indigo-950 text-indigo-300 border border-indigo-500/40">
-                                Default (13218361)
-                            </span>
-                        </div>
-
-                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                            <div class="relative flex-1">
-                                <input type="password" id="admin-desktop-password-input" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 pr-10 text-xs text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none" placeholder="Enter password (default: 13218361)" value="13218361">
-                                <button type="button" id="admin-desktop-password-toggle-btn" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-white transition cursor-pointer" title="Show or Hide Password">
-                                    <svg id="admin-desktop-pass-eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0">
-                                <button type="button" id="admin-save-desktop-password-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2 px-3.5 rounded-lg text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    <span>Update Password</span>
-                                </button>
-                                <button type="button" id="admin-reset-desktop-password-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold py-2 px-3 rounded-lg text-xs transition border border-slate-700 cursor-pointer flex items-center justify-center gap-1" title="Reset password to default 13218361">
-                                    <span>Reset</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div id="admin-desktop-password-msg" class="hidden text-xs py-2 px-3 rounded-lg leading-relaxed"></div>
-                    </div>
-                </div>
-
-                <!-- Header Ads Admin Visibility Control Card -->
-                <div class="bg-slate-800/60 border border-purple-500/30 rounded-xl p-4 space-y-3.5 shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-700/50 pb-2.5">
-                        <div class="flex items-center gap-2">
-                            <span class="text-base">⚡</span>
-                            <div>
-                                <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wider">Header Ads Management Trigger</h4>
-                                <p class="text-[11px] text-slate-400">Toggle admin ads button visibility in top header bar</p>
-                            </div>
-                        </div>
-                        <span id="admin-ads-icon-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-950 text-purple-400 border border-purple-500/40">
-                            Icon Visible
-                        </span>
-                    </div>
-
-                    <div class="flex items-center justify-between bg-slate-900/90 p-3.5 rounded-xl border border-slate-700/80">
-                        <div class="space-y-0.5 pr-4">
-                            <label for="admin-show-ads-icon-toggle" class="font-bold text-white text-xs cursor-pointer block">Enable Ads Management Icon</label>
-                            <p class="text-slate-400 text-[11px]">Displays the ads management gear button in top header for instant configuration.</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-                            <input type="checkbox" id="admin-show-ads-icon-toggle" class="sr-only peer">
-                            <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Bottom Action Bar for Maintenance Settings -->
-                <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl">
-                    <div id="admin-maintenance-msg" class="hidden text-xs p-2 rounded-lg"></div>
-                    <button id="admin-save-maintenance-btn" class="ml-auto bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-5 rounded-lg transition text-xs flex items-center gap-1.5 shadow-lg shadow-purple-900/30 cursor-pointer">
-                        <span>💾</span> Apply System & Maintenance Settings
+                <div class="flex items-center gap-2">
+                    <button id="admin-close-btn" class="text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent hover:border-slate-700 rounded-lg p-1.5 transition cursor-pointer flex items-center justify-center" title="Close Control Center (Esc)">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
                     </button>
                 </div>
             </div>
+
+            <!-- Main 2-Column Body Wrapper (Closed at the end of Part 2) -->
+            <div class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
+                
+                <!-- Left Sidebar Navigation -->
+                <aside class="w-full lg:w-60 border-b lg:border-b-0 lg:border-r border-slate-800/90 bg-slate-950/50 p-2.5 lg:p-3 flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-x-visible shrink-0 custom-scrollbar">
+                    <div class="hidden lg:block px-2.5 pt-1 pb-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                        Workspace Modules
+                    </div>
+
+                    <button id="admin-tab-users-btn" class="w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-purple-600 text-white shadow-md shadow-purple-950/50 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <span>Users & Resellers</span>
+                        </span>
+                        <span id="admin-user-count" class="text-[10px] font-mono bg-black/30 text-white px-1.5 py-0.5 rounded-md font-bold">0</span>
+                    </button>
+
+                    <button id="admin-tab-keys-btn" class="w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            <span>AI & Media Gateways</span>
+                        </span>
+                    </button>
+
+                    <button id="admin-tab-credits-btn" class="w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span>Credit Pricing Matrix</span>
+                        </span>
+                    </button>
+
+                    <button id="admin-tab-maintenance-btn" class="w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left">
+                        <span class="flex items-center gap-2.5">
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            <span>Security & Policies</span>
+                        </span>
+                    </button>
+
+                    <!-- Sidebar Footer Status Card (Desktop Only) -->
+                    <div id="admin-quota-card" class="hidden lg:flex flex-col gap-1.5 mt-auto p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-left">
+                        <div class="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">
+                            <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                            <span>Access Scope</span>
+                        </div>
+                        <p id="admin-quota-text" class="text-[11px] text-slate-400 leading-relaxed">
+                            Full system administrator privileges active.
+                        </p>
+                    </div>
+                </aside>
+
+                <!-- Right Main Content Viewport (Closed at the end of Part 2) -->
+                <div id="admin-main-viewport" class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-slate-900/40">
+
+                    <!-- TAB 1: USER & RESELLER DIRECTORY -->
+                    <div id="admin-section-users" class="flex-1 flex flex-col p-4 sm:p-5 space-y-3.5 overflow-hidden">
+                        
+                        <!-- Unified Directory Action & Filter Bar -->
+                        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-slate-950/60 border border-slate-800/90 rounded-xl p-3 shrink-0">
+                            <!-- Left: Live Search + Role & Status Filters -->
+                            <div class="flex flex-wrap items-center gap-2 flex-1">
+                                <div class="relative flex-1 min-w-[200px] max-w-xs">
+                                    <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                    <input type="text" id="admin-user-search-input" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg pl-8 pr-3 py-1.5 text-xs placeholder-slate-500 focus:border-purple-500 focus:outline-none" placeholder="Search name, email, or referrer...">
+                                </div>
+
+                                <select id="admin-user-role-filter" class="bg-slate-900 text-slate-200 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs focus:border-purple-500 focus:outline-none cursor-pointer">
+                                    <option value="all">All Roles</option>
+                                    <option value="owner">👑 Owners</option>
+                                    <option value="admin">🛡️ Admins</option>
+                                    <option value="reseller">🎟️ Resellers</option>
+                                    <option value="user">👤 Standard Users</option>
+                                </select>
+
+                                <select id="admin-user-status-filter" class="bg-slate-900 text-slate-200 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs focus:border-purple-500 focus:outline-none cursor-pointer">
+                                    <option value="all">All Statuses</option>
+                                    <option value="pending">⏳ Pending Approval</option>
+                                    <option value="approved">✓ Approved</option>
+                                    <option value="restricted">⚠️ Restricted</option>
+                                    <option value="banned">🚫 Banned / Rejected</option>
+                                    <option value="warnings">🔍 Typo / Spam Alerts</option>
+                                </select>
+
+                                <span id="admin-pending-count-badge" class="hidden px-2 py-1 rounded-lg text-[11px] font-mono font-semibold bg-amber-950/80 text-amber-300 border border-amber-500/40 cursor-pointer" title="Click to filter pending users">
+                                    0 Pending
+                                </span>
+                            </div>
+
+                            <!-- Right: Directory Maintenance Tools & Provision Drawer Trigger -->
+                            <div class="flex items-center gap-2 flex-wrap shrink-0">
+                                <button id="admin-test-duplicate-btn" class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-lg text-[11px] font-medium flex items-center gap-1 transition cursor-pointer" title="Create a temporary test duplicate document">
+                                    <span>+ Test Dup</span>
+                                </button>
+                                <button id="admin-clean-duplicates-btn" class="px-2.5 py-1.5 bg-slate-900 hover:bg-amber-950/50 text-slate-300 hover:text-amber-200 border border-slate-700/80 hover:border-amber-500/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer" title="Scan and consolidate duplicate user accounts">
+                                    <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span>Dedupe</span>
+                                </button>
+                                <button id="admin-sync-auth-btn" class="px-2.5 py-1.5 bg-slate-900 hover:bg-purple-950/50 text-slate-300 hover:text-purple-200 border border-slate-700/80 hover:border-purple-500/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer" title="Sync Firebase Auth accounts into Firestore">
+                                    <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                    <span>Sync Auth</span>
+                                </button>
+                                <button type="button" id="admin-toggle-provision-drawer-btn" class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-md shadow-purple-950/50 transition cursor-pointer">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4"/></svg>
+                                    <span>Provision User</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Status / Feedback Banner for User Operations -->
+                        <div id="admin-add-user-msg" class="hidden text-xs px-3 py-2 rounded-lg shrink-0"></div>
+
+                        <!-- Collapsible Provision New User Drawer (Collapsed by default to maximize table space) -->
+                        <div id="admin-provision-drawer" class="hidden bg-slate-950/90 border border-purple-500/40 rounded-xl p-4 space-y-3.5 shrink-0 shadow-lg">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                                    <h4 class="text-xs font-bold text-white uppercase tracking-wider">Provision or Pre-Approve Account</h4>
+                                    <span class="text-[11px] text-slate-400 hidden sm:inline">— Instantly grants access or updates an existing profile</span>
+                                </div>
+                                <button type="button" id="admin-close-provision-drawer-btn" class="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded hover:bg-slate-800 cursor-pointer">
+                                    Close ✕
+                                </button>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label for="admin-add-user-email" class="block text-[11px] font-medium text-slate-300 mb-1">Email Address <span class="text-rose-400">*</span></label>
+                                    <input type="email" id="admin-add-user-email" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none font-mono" placeholder="creator@studio.com">
+                                </div>
+                                <div>
+                                    <label for="admin-add-user-name" class="block text-[11px] font-medium text-slate-300 mb-1">Display Name</label>
+                                    <input type="text" id="admin-add-user-name" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none" placeholder="Optional Name">
+                                </div>
+                                <div>
+                                    <label for="admin-add-user-role" class="block text-[11px] font-medium text-slate-300 mb-1">Access Role</label>
+                                    <select id="admin-add-user-role" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none cursor-pointer">
+                                        <option value="user">Standard User</option>
+                                        <option value="reseller">Reseller (Partner)</option>
+                                        <option value="admin">Administrator</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="admin-add-user-status" class="block text-[11px] font-medium text-slate-300 mb-1">Initial Status</label>
+                                    <select id="admin-add-user-status" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none cursor-pointer">
+                                        <option value="approved">Approved</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="restricted">Restricted</option>
+                                        <option value="rejected">Rejected</option>
+                                        <option value="banned">Banned</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="admin-add-user-quota-group" class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                                <div>
+                                    <label for="admin-add-user-credits" class="block text-[11px] font-medium text-slate-300 mb-1">Starting Credits</label>
+                                    <input type="number" id="admin-add-user-credits" class="w-full bg-slate-900 text-amber-300 font-mono font-bold border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none" value="10000" min="0" step="500">
+                                </div>
+                                <div>
+                                    <label for="admin-add-user-quota" class="block text-[11px] font-medium text-slate-300 mb-1">Reseller Seat Limit</label>
+                                    <input type="number" id="admin-add-user-quota" class="w-full bg-slate-900 text-white font-mono border border-slate-700 rounded-lg p-2 text-xs focus:border-purple-500 outline-none" value="5" min="1" max="1000">
+                                </div>
+                                <div>
+                                    <span class="block text-[11px] font-medium text-slate-300 mb-1">Default Image Access</span>
+                                    <label class="flex items-center gap-2 px-2.5 py-2 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer hover:border-slate-600 transition h-[34px]">
+                                        <input type="checkbox" id="admin-add-user-image-gen" class="w-3.5 h-3.5 text-purple-600 bg-slate-800 border-slate-600 rounded focus:ring-purple-500">
+                                        <span class="text-xs text-slate-300 select-none">Enable Image Gen</span>
+                                    </label>
+                                </div>
+                                <div class="flex items-end">
+                                    <button id="admin-add-user-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer h-[34px]">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+                                        <span>Create / Update User</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Streamlined 6-Column User Directory Table -->
+                        <div class="flex-1 flex flex-col min-h-0 border border-slate-800/90 rounded-xl bg-slate-950/60 overflow-hidden">
+                            <div class="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
+                                <table class="w-full text-left border-collapse text-xs min-w-[860px]">
+                                    <thead class="bg-slate-900/95 text-slate-400 uppercase text-[10px] font-mono tracking-wider sticky top-0 z-10 border-b border-slate-800">
+                                        <tr>
+                                            <th class="py-3 px-4">Member / Identity</th>
+                                            <th class="py-3 px-3">Role & Seats</th>
+                                            <th class="py-3 px-3">Credit Balance</th>
+                                            <th class="py-3 px-3">Cloud Render Quota</th>
+                                            <th class="py-3 px-3" title="Per-user generation & cookie permissions">Capabilities</th>
+                                            <th class="py-3 px-4 text-right">Status & Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-users-list" class="divide-y divide-slate-800/70 text-slate-200">
+                                        <!-- Populated dynamically by src/auth/admin-panel.ts -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: AI & MEDIA GATEWAYS (SYSTEM API KEYS & ENDPOINTS) -->
+                    <div id="admin-section-keys" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+                        
+                        <!-- Scrollable Content Area -->
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar">
+                            
+                            <!-- Section Header Banner -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/70 border border-slate-800/90 rounded-xl p-4">
+                                <div>
+                                    <div class="flex items-center gap-2.5">
+                                        <h4 class="text-sm font-bold text-white">System AI & Media Gateways</h4>
+                                    </div>
+                                    <p class="text-xs text-slate-400 mt-1">
+                                        Configure global server-side credentials stored in <code class="text-purple-300 bg-slate-900 px-1.5 py-0.5 rounded">settings/system_config</code>. End-users never see these keys in the browser.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- 1. Primary Google / Gemini Inference Gateway Card -->
+                            <div class="bg-slate-950/60 border border-slate-800/90 rounded-xl p-5 space-y-4">
+                                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-800/80 pb-3.5">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-500/30 flex items-center justify-center text-purple-300 font-bold text-xs">G</div>
+                                        <div>
+                                            <h5 class="text-xs font-bold text-white uppercase tracking-wider">Primary Gemini & Multimodal Routing</h5>
+                                            <p class="text-[11px] text-slate-400">Select how system-funded Gemini, Imagen, Veo, and TTS requests are authenticated.</p>
+                                        </div>
+                                    </div>
+                                    <!-- Auth Mode Switcher -->
+                                    <div class="flex bg-slate-900 p-0.5 rounded-lg border border-slate-800 shrink-0">
+                                        <button type="button" id="admin-sys-gemini-auth-api-btn" class="px-3 py-1.5 text-xs font-semibold rounded-md transition bg-purple-600 text-white shadow-sm cursor-pointer">
+                                            API Key / ADC
+                                        </button>
+                                        <button type="button" id="admin-sys-gemini-auth-cookie-btn" class="px-3 py-1.5 text-xs font-semibold rounded-md transition text-slate-400 hover:text-white cursor-pointer">
+                                            Web Cookies
+                                        </button>
+                                        <button type="button" id="admin-sys-gemini-auth-openaigateway-btn" class="px-3 py-1.5 text-xs font-semibold rounded-md transition text-slate-400 hover:text-white cursor-pointer">
+                                            Gateway Route
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Mode A: API Key / Vertex ADC Container -->
+                                <div id="admin-sys-gemini-key-container" class="space-y-3">
+                                    <div class="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+                                        <button type="button" id="admin-auth-aistudio-tab" class="flex-1 py-2 px-2 text-xs font-semibold rounded-md bg-purple-600 text-white transition-colors cursor-pointer">
+                                            Google AI Studio
+                                        </button>
+                                        <button type="button" id="admin-auth-vertex-tab" class="flex-1 py-2 px-2 text-xs font-semibold rounded-md text-slate-400 hover:text-white transition-colors cursor-pointer">
+                                            Google Cloud Vertex AI
+                                        </button>
+                                    </div>
+
+                                    <!-- Vertex Specific Fields -->
+                                    <div id="admin-vertex-fields" class="hidden space-y-3 bg-slate-900/70 p-4 rounded-lg border border-slate-800/90">
+                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <span class="text-xs font-medium text-slate-300">Vertex Authentication Method</span>
+                                            <div class="flex bg-slate-950 p-0.5 rounded-md border border-slate-800 shrink-0">
+                                                <button type="button" id="admin-vertex-auth-apikey-btn" class="px-3 py-1 text-xs font-semibold rounded transition bg-purple-600 text-white cursor-pointer">Cloud API Key</button>
+                                                <button type="button" id="admin-vertex-auth-adc-btn" class="px-3 py-1 text-xs font-semibold rounded transition text-slate-400 hover:text-white cursor-pointer">Server ADC</button>
+                                            </div>
+                                        </div>
+                                        <div id="admin-vertex-adc-info" class="hidden p-3 rounded-md bg-indigo-950/60 border border-indigo-500/30 text-xs text-indigo-200 leading-relaxed">
+                                            <strong>Application Default Credentials (ADC):</strong> Uses the attached Cloud Run service account automatically. No API key required.
+                                        </div>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label for="admin-sys-vertex-project" class="text-[11px] font-medium text-slate-400 block mb-1">GCP Project ID</label>
+                                                <input type="text" id="admin-sys-vertex-project" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none" placeholder="my-gcp-project">
+                                            </div>
+                                            <div>
+                                                <label for="admin-sys-vertex-location" class="text-[11px] font-medium text-slate-400 block mb-1">GCP Region</label>
+                                                <input type="text" id="admin-sys-vertex-location" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none" value="us-central1">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="admin-sys-vertex-adc-notice" class="hidden p-3 rounded-lg bg-emerald-950/60 border border-emerald-500/30 text-xs text-emerald-200 leading-relaxed">
+                                        <div class="flex items-center gap-1.5 font-semibold text-emerald-300 mb-0.5">
+                                            <span>✓ Native Cloud ADC Active</span>
+                                        </div>
+                                        <span class="text-[11px] text-emerald-300/80">Requests authenticate via the attached server service account.</span>
+                                    </div>
+
+                                    <div id="admin-sys-gemini-key-wrapper" class="space-y-1">
+                                        <label for="admin-sys-gemini-key" id="admin-sys-gemini-key-label" class="block text-[11px] font-medium text-slate-300">System Gemini API Key</label>
+                                        <input type="password" id="admin-sys-gemini-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg px-3 py-2 text-xs focus:border-purple-500 outline-none font-mono" placeholder="AIzaSy...">
+                                        <p id="admin-sys-gemini-key-help" class="text-[10px] text-slate-500">Default key for storyboards, scripting, and Gemini image generation.</p>
+                                    </div>
+                                    
+                                    <div class="pt-1">
+                                        <button type="button" id="admin-test-gemini-key-btn" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-purple-300 font-semibold py-2 px-3 text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+                                            <span>Test Gemini / Vertex Connection</span>
+                                        </button>
+                                        <div id="admin-gemini-key-status" class="hidden mt-2 p-2.5 rounded-lg text-xs leading-relaxed break-words"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Mode B: Web Cookie Input Container -->
+                                <div id="admin-sys-gemini-cookie-container" class="hidden space-y-3 bg-slate-900/50 border border-amber-500/30 rounded-xl p-4">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div class="sm:col-span-2">
+                                            <label for="admin-sys-gemini-psid" class="block text-[11px] font-mono text-slate-300 mb-1">__Secure-1PSID <span class="text-rose-400 font-bold">*</span></label>
+                                            <input type="password" id="admin-sys-gemini-psid" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono focus:border-amber-500 outline-none" placeholder="Paste __Secure-1PSID cookie...">
+                                        </div>
+                                        <div>
+                                            <label for="admin-sys-gemini-psidts" class="block text-[11px] font-mono text-slate-400 mb-1">__Secure-1PSIDTS</label>
+                                            <input type="password" id="admin-sys-gemini-psidts" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono focus:border-amber-500 outline-none" placeholder="Optional">
+                                        </div>
+                                        <div>
+                                            <label for="admin-sys-gemini-psidcc" class="block text-[11px] font-mono text-slate-400 mb-1">__Secure-1PSIDCC</label>
+                                            <input type="password" id="admin-sys-gemini-psidcc" class="w-full bg-slate-950 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono focus:border-amber-500 outline-none" placeholder="Optional">
+                                        </div>
+                                    </div>
+                                    <!-- Keep hidden inputs to satisfy dom.ts without cluttering UI -->
+                                    <div class="hidden">
+                                        <input type="password" id="admin-sys-gemini-compass">
+                                        <input type="password" id="admin-sys-gemini-sid">
+                                        <input type="password" id="admin-sys-gemini-hsid">
+                                        <input type="password" id="admin-sys-gemini-ssid">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2. OpenAI-Compatible Universal Gateway Card -->
+                            <div id="admin-sys-openai-card" class="bg-slate-950/60 border border-slate-800/90 rounded-xl p-5 space-y-4">
+                                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-800/80 pb-3.5">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-indigo-950/80 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-xs">⇄</div>
+                                        <div>
+                                            <h5 class="text-xs font-bold text-white uppercase tracking-wider">OpenAI-Compatible Gateway</h5>
+                                            <p class="text-[11px] text-slate-400">Configure OpenRouter, Groq, DeepSeek, or OpenAI endpoints.</p>
+                                        </div>
+                                    </div>
+                                    <!-- Quick Presets -->
+                                    <div class="flex flex-wrap gap-1 text-[10px]">
+                                        <button type="button" data-admin-gateway-preset="openai" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">OpenAI</button>
+                                        <button type="button" data-admin-gateway-preset="openrouter" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">OpenRouter</button>
+                                        <button type="button" data-admin-gateway-preset="experientiallabs" class="px-2 py-1 rounded bg-indigo-950 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 transition cursor-pointer">ExpLabs</button>
+                                        <button type="button" data-admin-gateway-preset="deepseek" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">DeepSeek</button>
+                                        <button type="button" data-admin-gateway-preset="groq" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">Groq</button>
+                                        <button type="button" data-admin-gateway-preset="ollama" class="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 transition cursor-pointer">Ollama</button>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label for="admin-sys-openai-base-url" class="block text-[11px] font-medium text-slate-300 mb-1">Base URL (<code class="text-indigo-300">/v1</code>)</label>
+                                        <input type="url" id="admin-sys-openai-base-url" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-indigo-500 outline-none" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-openai-key" class="block text-[11px] font-medium text-slate-300 mb-1">Gateway API Key</label>
+                                        <input type="password" id="admin-sys-openai-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-indigo-500 outline-none" placeholder="sk-...">
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <label for="admin-sys-openai-model" class="block text-[11px] font-medium text-slate-300">Default Text Model</label>
+                                            <button type="button" id="admin-fetch-openai-models-btn" class="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer">↻ Fetch List</button>
+                                        </div>
+                                        <input type="text" list="admin-openai-model-list" id="admin-sys-openai-model" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-indigo-500 outline-none" placeholder="gpt-4o" value="gpt-4o">
+                                        <datalist id="admin-openai-model-list"></datalist>
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-openai-image-model" class="block text-[11px] font-medium text-slate-300 mb-1">Default Image Model</label>
+                                        <input type="text" list="admin-openai-image-model-list" id="admin-sys-openai-image-model" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-indigo-500 outline-none" placeholder="dall-e-3" value="dall-e-3">
+                                        <datalist id="admin-openai-image-model-list">
+                                            <option value="dall-e-3">DALL-E 3</option>
+                                            <option value="black-forest-labs/flux-1-schnell">Flux Schnell</option>
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div class="pt-1">
+                                    <button type="button" id="admin-test-openai-connection-btn" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-indigo-300 font-semibold py-2 px-3 text-xs rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer">
+                                        <span>Test Gateway Endpoint</span>
+                                    </button>
+                                    <div id="admin-openai-connection-status" class="hidden mt-2 p-2.5 rounded-lg text-xs leading-relaxed break-words"></div>
+                                </div>
+                            </div>
+
+                            <!-- 3. Voice & Stock Media API Keys -->
+                            <div class="bg-slate-950/60 border border-slate-800/90 rounded-xl p-5 space-y-4">
+                                <div class="border-b border-slate-800/80 pb-3">
+                                    <h5 class="text-xs font-bold text-white uppercase tracking-wider">Secondary Services: Voice, Audio & Media</h5>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                    <div>
+                                        <label for="admin-sys-elevenlabs-key" class="block text-[11px] font-medium text-slate-300 mb-1">ElevenLabs API Key</label>
+                                        <input type="password" id="admin-sys-elevenlabs-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-deepgram-key" class="block text-[11px] font-medium text-slate-300 mb-1">Deepgram ASR Key</label>
+                                        <input type="password" id="admin-sys-deepgram-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-stability-key" class="block text-[11px] font-medium text-slate-300 mb-1">Stability AI Key</label>
+                                        <input type="password" id="admin-sys-stability-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-ai33-key" class="block text-[11px] font-medium text-slate-300 mb-1">AI33 Voice Key</label>
+                                        <input type="password" id="admin-sys-ai33-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-pexels-key" class="block text-[11px] font-medium text-slate-300 mb-1">Pexels Stock Key</label>
+                                        <input type="password" id="admin-sys-pexels-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div>
+                                        <label for="admin-sys-gradio-url" class="block text-[11px] font-medium text-slate-300 mb-1">Gradio TTS Endpoint URL</label>
+                                        <input type="text" id="admin-sys-gradio-url" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none">
+                                    </div>
+                                    <div class="sm:col-span-2 lg:col-span-3">
+                                        <label for="admin-sys-firebase-key" class="block text-[11px] font-medium text-slate-300 mb-1">Firebase Web API Key Override (Optional)</label>
+                                        <input type="password" id="admin-sys-firebase-key" class="w-full bg-slate-900 text-white border border-slate-700/80 rounded-lg p-2 text-xs font-mono focus:border-purple-500 outline-none" placeholder="Leave blank to use default json config">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Hidden DOM dependencies preserved -->
+                            <div class="hidden">
+                                <input type="password" id="admin-sys-desktop-password" value="13218361">
+                            </div>
+                            <div id="admin-system-keys-msg" class="hidden text-xs p-3 rounded-lg"></div>
+                        </div>
+
+                        <!-- Sticky Footer Action Bar for Tab 2 -->
+                        <div class="px-6 py-4 border-t border-slate-800/90 bg-slate-950/80 flex items-center justify-between gap-4 shrink-0">
+                            <span class="text-[11px] text-slate-400 hidden sm:inline">Settings save globally to <code class="font-mono text-slate-300">system_config</code>.</span>
+                            <div class="flex gap-2">
+                                <button type="button" id="admin-clear-system-keys-btn" class="px-4 py-2 bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-200 rounded-lg text-xs font-semibold transition cursor-pointer">Clear All</button>
+                                <button type="button" id="admin-save-system-keys-btn" class="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs shadow-md cursor-pointer flex items-center gap-2">
+                                    <span>💾</span> Save Credentials
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: CREDIT ECONOMY & PRICING MATRIX -->
+                    <div id="admin-section-credits" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar">
+                            <div class="bg-slate-950/70 border border-slate-800/90 rounded-xl p-4 mb-4">
+                                <h4 class="text-sm font-bold text-white">Dynamic Credit Pricing Matrix</h4>
+                                <p class="text-xs text-slate-400 mt-1">Configure credit deductions. Users providing personal BYOK API keys are automatically billed at a flat <strong class="text-amber-300">10%</strong> platform rate.</p>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <!-- Col 1: Video -->
+                                <div class="bg-slate-950/60 border border-indigo-500/30 rounded-xl p-4">
+                                    <h5 class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">🎥 Motion & Video</h5>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label for="admin-cost-video-gen" class="block text-[11px] font-semibold text-slate-200 mb-1">Veo Video Clip Generation</label>
+                                            <input type="number" id="admin-cost-video-gen" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="100">
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Col 2: Images -->
+                                <div class="bg-slate-950/60 border border-purple-500/30 rounded-xl p-4">
+                                    <h5 class="text-xs font-bold text-purple-300 uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">🎨 Visuals & Art</h5>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label for="admin-cost-image-gemini" class="block text-[11px] font-semibold text-slate-200 mb-1">Gemini Image Generation</label>
+                                            <input type="number" id="admin-cost-image-gemini" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="5">
+                                        </div>
+                                        <div>
+                                            <label for="admin-cost-image-imagen" class="block text-[11px] font-semibold text-slate-200 mb-1">Imagen High-Res Generation</label>
+                                            <input type="number" id="admin-cost-image-imagen" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="10">
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Col 3: Audio -->
+                                <div class="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-4">
+                                    <h5 class="text-xs font-bold text-emerald-300 uppercase tracking-wider mb-4 border-b border-slate-800 pb-2">🎙️ Audio & Speech</h5>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label for="admin-cost-audio-elevenlabs" class="block text-[11px] font-semibold text-slate-200 mb-1">ElevenLabs Voice Generation</label>
+                                            <input type="number" id="admin-cost-audio-elevenlabs" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="10">
+                                        </div>
+                                        <div>
+                                            <label for="admin-cost-audio-aligned" class="block text-[11px] font-semibold text-slate-200 mb-1">Aligned Narration Audio</label>
+                                            <input type="number" id="admin-cost-audio-aligned" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="5">
+                                        </div>
+                                        <div>
+                                            <label for="admin-cost-audio-cloning" class="block text-[11px] font-semibold text-slate-200 mb-1">Voice Cloning</label>
+                                            <input type="number" id="admin-cost-audio-cloning" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-xs font-mono" value="20">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="admin-credit-costs-msg" class="hidden text-xs p-3 rounded-lg"></div>
+                        </div>
+                        <div class="px-6 py-4 border-t border-slate-800/90 bg-slate-950/80 flex items-center justify-end gap-3 shrink-0">
+                            <button type="button" id="admin-reset-credit-costs-btn" class="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-xs font-semibold cursor-pointer">Reset Default Values</button>
+                            <button type="button" id="admin-save-credit-costs-btn" class="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg text-xs shadow-md cursor-pointer flex items-center gap-2">
+                                <span>💾</span> Publish Matrix
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: SECURITY, POLICIES & OPS -->
+                    <div id="admin-section-maintenance" class="hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+                        <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 custom-scrollbar">
+                            
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <!-- Platform Guardrails -->
+                                <div class="bg-slate-950/60 border border-slate-800/90 rounded-xl p-5 space-y-4">
+                                    <div class="border-b border-slate-800 pb-3">
+                                        <h5 class="text-xs font-bold text-white uppercase tracking-wider">Access & Generation Guardrails</h5>
+                                        <p class="text-[11px] text-slate-400 mt-1">Platform-wide rules for accounts and system keys.</p>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <!-- Access Policies -->
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                                            <div>
+                                                <span class="block text-[11px] font-semibold text-white">Require Approval for New Users</span>
+                                                <span id="admin-sys-require-approval-badge" class="text-[9px] text-amber-400">Loading...</span>
+                                            </div>
+                                            <input type="checkbox" id="admin-sys-require-approval-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                        </div>
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                                            <div>
+                                                <span class="block text-[11px] font-semibold text-white">Enforce Guest Restrictions</span>
+                                                <span id="admin-sys-guest-restrictions-badge" class="text-[9px] text-emerald-400">Loading...</span>
+                                            </div>
+                                            <input type="checkbox" id="admin-sys-guest-restrictions-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                        </div>
+                                        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-900/60 rounded-lg border border-slate-800 gap-2">
+                                            <div>
+                                                <span class="block text-[11px] font-semibold text-white">Guest Export Policy</span>
+                                                <span id="admin-sys-guest-export-badge" class="text-[9px] text-amber-400">Loading...</span>
+                                            </div>
+                                            <select id="admin-sys-guest-export-policy-select" class="bg-slate-950 text-white text-[11px] border border-slate-700 rounded px-2 py-1">
+                                                <option value="watermark_320p">320p + Watermark</option>
+                                                <option value="block_all">Block All</option>
+                                                <option value="unrestricted">Unrestricted</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Circuit Breakers -->
+                                        <div class="pt-2 border-t border-slate-800/60 space-y-2">
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <span class="block text-[11px] font-semibold text-rose-300">Disable System Image Generation</span>
+                                                    <span id="admin-sys-image-gen-badge" class="text-[9px] text-slate-400">Loading...</span>
+                                                </div>
+                                                <input type="checkbox" id="admin-sys-disable-image-gen-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <span class="block text-[11px] font-semibold text-rose-300">Disable System Video Generation</span>
+                                                    <span id="admin-sys-video-gen-badge" class="text-[9px] text-slate-400">Loading...</span>
+                                                </div>
+                                                <input type="checkbox" id="admin-sys-disable-video-gen-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <div>
+                                                    <span class="block text-[11px] font-semibold text-rose-300">Disable System Audio Generation</span>
+                                                    <span id="admin-sys-audio-gen-badge" class="text-[9px] text-slate-400">Loading...</span>
+                                                </div>
+                                                <input type="checkbox" id="admin-sys-disable-audio-gen-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Desktop, Maintenance & Ads -->
+                                <div class="bg-slate-950/60 border border-slate-800/90 rounded-xl p-5 space-y-4">
+                                    <div class="border-b border-slate-800 pb-3">
+                                        <h5 class="text-xs font-bold text-white uppercase tracking-wider">Maintenance, Desktop & Ops</h5>
+                                    </div>
+                                    <div class="space-y-4">
+                                        <!-- Desktop Offline -->
+                                        <div class="space-y-2">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-[11px] font-semibold text-indigo-300">Disable Desktop Offline Unlock</span>
+                                                <input type="checkbox" id="admin-desktop-offline-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <input type="password" id="admin-desktop-password-input" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white" placeholder="Desktop Master Password">
+                                                <button type="button" id="admin-desktop-password-toggle-btn" class="px-2 py-1 bg-slate-800 rounded text-slate-400 hover:text-white">
+                                                    <svg id="admin-desktop-pass-eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                </button>
+                                            </div>
+                                            <div class="flex items-center justify-between">
+                                                <span id="admin-desktop-offline-status-badge" class="hidden"></span>
+                                                <span id="admin-desktop-pass-badge" class="text-[9px] text-slate-400">Loading...</span>
+                                                <div class="flex gap-2">
+                                                    <button type="button" id="admin-reset-desktop-password-btn" class="text-[10px] text-slate-400 underline">Reset</button>
+                                                    <button type="button" id="admin-save-desktop-password-btn" class="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold">Set Password</button>
+                                                </div>
+                                            </div>
+                                            <div id="admin-desktop-password-msg" class="hidden text-xs"></div>
+                                        </div>
+
+                                        <!-- Maintenance -->
+                                        <div class="pt-3 border-t border-slate-800/80 space-y-2">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-[11px] font-semibold text-amber-400">Activate Global Maintenance Lock</span>
+                                                <input type="checkbox" id="admin-maintenance-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                            <textarea id="admin-maintenance-message-input" rows="2" class="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-[10px] focus:border-amber-500 outline-none resize-none" placeholder="Maintenance message..."></textarea>
+                                            <span id="admin-maintenance-status-badge" class="hidden"></span>
+                                        </div>
+
+                                        <!-- Ads -->
+                                        <div class="pt-3 border-t border-slate-800/80 space-y-2">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-[11px] font-semibold text-white">Enable Header Promotions / Ad Banner</span>
+                                                <input type="checkbox" id="admin-show-ads-icon-toggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+                                            </div>
+                                            <button type="button" id="admin-manage-ads-btn" class="w-full px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-300 border border-purple-500/30 rounded-lg text-xs transition cursor-pointer">
+                                                Configure Header Banner Content...
+                                            </button>
+                                            <span id="admin-ads-icon-status-badge" class="hidden"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="admin-maintenance-msg" class="hidden text-xs p-3 rounded-lg"></div>
+                        </div>
+
+                        <div class="px-6 py-4 border-t border-slate-800/90 bg-slate-950/80 flex items-center justify-end shrink-0">
+                            <button type="button" id="admin-save-maintenance-btn" class="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs shadow-md cursor-pointer flex items-center gap-2">
+                                <span>💾</span> Save Security & Maintenance State
+                            </button>
+                        </div>
+                    </div>
+                </div><!-- End #admin-main-viewport -->
+            </div><!-- End 2-Column Body Wrapper -->
         </div>
     </div>
-
     <!-- Maintenance Mode Fullscreen Overlay for Non-Admin Users -->
     <div id="maintenance-mode-overlay" class="hidden fixed inset-0 bg-black/95 backdrop-blur-xl z-[900] flex items-center justify-center p-6 text-center">
         <div class="max-w-md w-full bg-gray-900/90 border border-purple-500/30 rounded-2xl p-8 space-y-5 shadow-2xl relative overflow-hidden">

@@ -394,6 +394,17 @@ export function initAuth() {
     dom.adminNavBtn?.addEventListener('click', openAdminPanel);
     dom.adminCloseBtn?.addEventListener('click', closeAdminPanel);
     dom.adminAddUserBtn?.addEventListener('click', handleAdminAddUser);
+
+    // New Provision Drawer Toggles
+    document.getElementById('admin-toggle-provision-drawer-btn')?.addEventListener('click', () => {
+        const drawer = document.getElementById('admin-provision-drawer');
+        drawer?.classList.toggle('hidden');
+    });
+    
+    document.getElementById('admin-close-provision-drawer-btn')?.addEventListener('click', () => {
+        document.getElementById('admin-provision-drawer')?.classList.add('hidden');
+    });
+
     dom.adminTestDuplicateBtn?.addEventListener('click', async () => {
         if (!dom.adminTestDuplicateBtn) return;
         dom.adminTestDuplicateBtn.disabled = true;

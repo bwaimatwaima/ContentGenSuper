@@ -59,16 +59,28 @@ export async function approveUserWithResellerCheck(userId: string, approvedByMe:
 }
 
 export async function handleAdminAddUser() {
-    if (!dom.adminAddUserEmailInput) return;
-    const emailRaw = dom.adminAddUserEmailInput.value.trim().toLowerCase();
-    let displayName = dom.adminAddUserNameInput?.value.trim() || emailRaw.split('@')[0];
+    const emailInput = document.getElementById('admin-add-user-email') as HTMLInputElement;
+    const nameInput = document.getElementById('admin-add-user-name') as HTMLInputElement;
+    const roleSelect = document.getElementById('admin-add-user-role') as HTMLSelectElement;
+    const statusSelect = document.getElementById('admin-add-user-status') as HTMLSelectElement;
+    const creditsInput = document.getElementById('admin-add-user-credits') as HTMLInputElement;
+    const quotaInput = document.getElementById('admin-add-user-quota') as HTMLInputElement;
+    const imageGenInput = document.getElementById('admin-add-user-image-gen') as HTMLInputElement;
+    const submitBtn = document.getElementById('admin-add-user-btn') as HTMLButtonElement;
+
+    if (!emailInput) return;
+    const emailRaw = emailInput.value.trim().toLowerCase();
+    let displayName = nameInput?.value.trim() || emailRaw.split('@')[0];
     if (isUrlOrLink(displayName)) {
         displayName = emailRaw.split('@')[0];
     }
-    const role = dom.adminAddUserRoleSelect?.value || 'user';
-    const status = dom.adminAddUserStatusSelect?.value || 'approved';
-    const credits = parseInt(dom.adminAddUserCreditsInput?.value || '10000', 10);
-    const maxApprovedUsers = parseInt(dom.adminAddUserQuotaInput?.value || '10', 10);
+    const role = roleSelect?.value || 'user';
+    const status = statusSelect?.value || 'approved';
+    const credits = parseInt(creditsInput?.value || '10000', 10);
+    const maxApprovedUsers = parseInt(quotaInput?.value || '10', 10);
+    
+    // FIX: Properly capture the checkbox state
+    const allowGen = imageGenInput ? imageGenInput.checked : false;
 
     if (!emailRaw) {
         showAdminAddUserMsg("Please enter an email address.", "error");
@@ -81,7 +93,7 @@ export async function handleAdminAddUser() {
     const isReseller = !isAdmin && isUserReseller(userRecord);
 
     if (!isAdmin && !isReseller) {
-        showAdminAddUserMsg("Unauthorized: Only administrators and authorized resellers can add or manage users.", "error");
+        showAdminAddUserMsg("Unauthorized: Only administrators and authorized resellers can manage users.", "error");
         return;
     }
 
@@ -89,12 +101,11 @@ export async function handleAdminAddUser() {
     const finalRole = isAdmin ? role : 'user';
 
     try {
-        if (dom.adminAddUserBtn) {
-            dom.adminAddUserBtn.disabled = true;
-            dom.adminAddUserBtn.innerHTML = '<span class="inline-block animate-spin mr-1">⏳</span> Provisioning...';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="inline-block animate-spin mr-1">⏳</span> Provisioning...';
         }
 
-        // Check if an existing profile exists with this email (or normalized email)
         const q = query(collection(db, 'users'), where('email', '==', email));
         const snap = await getDocs(q);
 
@@ -102,7 +113,6 @@ export async function handleAdminAddUser() {
             const rawDocs: Array<{ id: string; data: any; ref: any }> = [];
             snap.forEach(d => rawDocs.push({ id: d.id, data: d.data(), ref: d.ref }));
 
-            // Sort by permission and authority score: Highest permission document wins
             rawDocs.sort((a, b) => {
                 const scoreA = getDocPermissionScore(a.id, a.data, email);
                 const scoreB = getDocPermissionScore(b.id, b.data, email);
@@ -111,24 +121,28 @@ export async function handleAdminAddUser() {
 
             const primaryDoc = rawDocs[0];
             const lowerPermissionDups = rawDocs.slice(1);
-
             const existing = primaryDoc.data;
+
             const updatePayload: any = {
                 displayName: displayName || existing.displayName,
                 role: finalRole,
                 status: status,
                 credits: !isNaN(credits) ? credits : (existing.credits || 10000),
+                allowImageGeneration: isAdmin ? true : allowGen,
+                allowAudioGeneration: isAdmin ? true : allowGen,
+                allowVideoGeneration: isAdmin ? true : allowGen,
                 updatedAt: serverTimestamp()
             };
+            
             if (finalRole === 'reseller' && !isNaN(maxApprovedUsers)) {
                 updatePayload.maxApprovedUsers = maxApprovedUsers;
             }
             if (isReseller) {
                 updatePayload.assignedBy = currentUser?.email || currentUser?.uid;
             }
+            
             await setDoc(primaryDoc.ref, updatePayload, { merge: true });
 
-            // Sync approvedEmails marker for pre-provisioned status
             try {
                 await setDoc(doc(db, 'approvedEmails', email), {
                     role: finalRole,
@@ -141,12 +155,11 @@ export async function handleAdminAddUser() {
                 console.debug("approvedEmails sync note:", appErr);
             }
 
-            // Delete lower-permission duplicate documents for this email in Firebase
             for (const dup of lowerPermissionDups) {
                 await deleteDoc(dup.ref).catch(err => console.warn(`Could not delete duplicate doc ${dup.id}:`, err));
             }
 
-            showAdminAddUserMsg(`Updated profile for ${email} (${finalRole}, ${status}, ${credits.toLocaleString()} credits)${lowerPermissionDups.length > 0 ? ` and cleaned up ${lowerPermissionDups.length} duplicate document(s)` : ''}.`, "success");
+            showAdminAddUserMsg(`Updated profile for ${email} (${finalRole}, ${status}, ${credits.toLocaleString()} credits).`, "success");
         } else {
             const newUserData: any = {
                 email: email,
@@ -156,9 +169,9 @@ export async function handleAdminAddUser() {
                 credits: !isNaN(credits) ? credits : 10000,
                 renderMinutesQuota: 10,
                 renderMinutesUsed: 0,
-                allowImageGeneration: isAdmin,
-                allowAudioGeneration: isAdmin,
-                allowVideoGeneration: isAdmin,
+                allowImageGeneration: isAdmin ? true : allowGen,
+                allowAudioGeneration: isAdmin ? true : allowGen,
+                allowVideoGeneration: isAdmin ? true : allowGen,
                 allowCookieAuth: isAdmin,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp()
@@ -172,7 +185,6 @@ export async function handleAdminAddUser() {
             }
             await addDoc(collection(db, 'users'), newUserData);
 
-            // Sync approvedEmails marker for pre-provisioned status
             try {
                 await setDoc(doc(db, 'approvedEmails', email), {
                     role: finalRole,
@@ -190,19 +202,20 @@ export async function handleAdminAddUser() {
         }
 
         // Clear form inputs
-        if (dom.adminAddUserEmailInput) dom.adminAddUserEmailInput.value = '';
-        if (dom.adminAddUserNameInput) dom.adminAddUserNameInput.value = '';
-        if (dom.adminAddUserRoleSelect) dom.adminAddUserRoleSelect.value = 'user';
-        if (dom.adminAddUserStatusSelect) dom.adminAddUserStatusSelect.value = 'approved';
-        if (dom.adminAddUserCreditsInput) dom.adminAddUserCreditsInput.value = '10000';
-        if (dom.adminAddUserQuotaGroup) dom.adminAddUserQuotaGroup.classList.add('hidden');
+        if (emailInput) emailInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (roleSelect) roleSelect.value = 'user';
+        if (statusSelect) statusSelect.value = 'approved';
+        if (creditsInput) creditsInput.value = '10000';
+        if (imageGenInput) imageGenInput.checked = false;
+        
     } catch (e: any) {
         console.error("Failed to add user:", e);
         showAdminAddUserMsg(e.message || "Failed to add or update user profile.", "error");
     } finally {
-        if (dom.adminAddUserBtn) {
-            dom.adminAddUserBtn.disabled = false;
-            dom.adminAddUserBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg> <span>Create / Pre-Approve User</span>';
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg> <span>Create / Update User</span>';
         }
     }
 }

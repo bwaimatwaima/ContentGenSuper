@@ -347,9 +347,15 @@ export async function mixSegmentAudio(
 
                     let audioBuf = native;
                     let effectiveRate = rate;
+                    // After WSOLA the buffer is already time-scaled (length = native / rate),
+                    // so offset and duration must be expressed in the stretched buffer's time.
+                    let srcOffset = clip.videoStartOffset || 0;
+                    let srcDuration = clipDur * rate;
                     if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
                         audioBuf = stretchAudioBufferPreservePitch(native, rate);
                         effectiveRate = 1.0;
+                        srcOffset = srcOffset / rate;
+                        srcDuration = clipDur;
                     }
 
                     await mixInNative(
@@ -373,8 +379,8 @@ export async function mixSegmentAudio(
                                 gainNode.gain.setValueAtTime(clipVol, Math.max(0, endInCtx));
                             }
                         },
-                        clip.videoStartOffset || 0,
-                        clipDur * rate,
+                        srcOffset,
+                        srcDuration,
                         effectiveRate
                     );
                 }

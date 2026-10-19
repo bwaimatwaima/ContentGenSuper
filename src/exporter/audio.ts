@@ -175,9 +175,16 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
 
                     let audioBuf = native;
                     let effectivePlaybackRate = rate;
+                    // Source-time window (footage seconds) vs. buffer-time window.
+                    // After WSOLA the buffer is already time-scaled (length = native / rate),
+                    // so offset and duration must be expressed in the stretched buffer's time.
+                    let srcOffset = clip.videoStartOffset || 0;
+                    let srcDuration = clip.duration * rate;
                     if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
                         audioBuf = stretchAudioBufferPreservePitch(native, rate);
                         effectivePlaybackRate = 1.0;
+                        srcOffset = srcOffset / rate;
+                        srcDuration = clip.duration;
                     }
 
                     await mixInNative(clipsBus, audioBuf, offset, shouldLoop, (g) => {
@@ -195,7 +202,7 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
                                 g.gain.setValueAtTime(clipVol, Math.max(0, endInCtx));
                             }
                         }
-                    }, clip.videoStartOffset || 0, clip.duration * rate, effectivePlaybackRate);
+                    }, srcOffset, srcDuration, effectivePlaybackRate);
                 }
             } catch (e) {
                 console.warn(`[Export] Could not mix native audio for clip ${clip.id}:`, e);

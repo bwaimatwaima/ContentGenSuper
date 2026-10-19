@@ -488,38 +488,32 @@ export function applyMaintenanceModeState() {
  */
 function switchAdminTab(tab: 'users' | 'keys' | 'credits' | 'maintenance') {
     const tabs = [
-        { btn: adminTabUsersBtn, section: adminSectionUsers },
-        { btn: adminTabKeysBtn, section: adminSectionKeys },
-        { btn: adminTabCreditsBtn, section: adminSectionCredits },
-        { btn: adminTabMaintenanceBtn, section: adminSectionMaintenance }
+        { btn: document.getElementById('admin-tab-users-btn'), section: document.getElementById('admin-section-users') },
+        { btn: document.getElementById('admin-tab-keys-btn'), section: document.getElementById('admin-section-keys') },
+        { btn: document.getElementById('admin-tab-credits-btn'), section: document.getElementById('admin-section-credits') },
+        { btn: document.getElementById('admin-tab-maintenance-btn'), section: document.getElementById('admin-section-maintenance') }
     ];
 
     tabs.forEach(({ btn, section }) => {
         if (btn && section) {
-            btn.classList.remove('bg-purple-600', 'text-white', 'shadow-md');
-            btn.classList.add('bg-gray-800', 'text-gray-300', 'hover:text-white', 'hover:bg-gray-700');
+            btn.className = 'w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-transparent text-slate-400 hover:text-white hover:bg-slate-800/70 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left';
             section.classList.add('hidden');
+            section.classList.remove('flex');
         }
     });
 
-    let activeBtn = adminTabUsersBtn;
-    let activeSection = adminSectionUsers;
+    const activeMap: any = {
+        'users': { btn: document.getElementById('admin-tab-users-btn'), section: document.getElementById('admin-section-users') },
+        'keys': { btn: document.getElementById('admin-tab-keys-btn'), section: document.getElementById('admin-section-keys') },
+        'credits': { btn: document.getElementById('admin-tab-credits-btn'), section: document.getElementById('admin-section-credits') },
+        'maintenance': { btn: document.getElementById('admin-tab-maintenance-btn'), section: document.getElementById('admin-section-maintenance') }
+    };
 
-    if (tab === 'keys') {
-        activeBtn = adminTabKeysBtn;
-        activeSection = adminSectionKeys;
-    } else if (tab === 'credits') {
-        activeBtn = adminTabCreditsBtn;
-        activeSection = adminSectionCredits;
-    } else if (tab === 'maintenance') {
-        activeBtn = adminTabMaintenanceBtn;
-        activeSection = adminSectionMaintenance;
-    }
-
-    if (activeBtn && activeSection) {
-        activeBtn.classList.remove('bg-gray-800', 'text-gray-300', 'hover:text-white', 'hover:bg-gray-700');
-        activeBtn.classList.add('bg-purple-600', 'text-white', 'shadow-md');
-        activeSection.classList.remove('hidden');
+    const active = activeMap[tab];
+    if (active && active.btn && active.section) {
+        active.btn.className = 'w-auto lg:w-full px-3 py-2.5 rounded-xl text-xs font-semibold bg-purple-600 text-white shadow-md shadow-purple-950/50 transition-all flex items-center justify-between gap-2.5 cursor-pointer shrink-0 text-left';
+        active.section.classList.remove('hidden');
+        active.section.classList.add('flex');
     }
 }
 
@@ -820,18 +814,26 @@ export function setupAdminSystemTabHandlers() {
     });
 
     // Tab switching
-    adminTabUsersBtn?.addEventListener('click', () => switchAdminTab('users'));
-    adminTabKeysBtn?.addEventListener('click', () => {
+    document.getElementById('admin-tab-users-btn')?.addEventListener('click', () => switchAdminTab('users'));
+    document.getElementById('admin-tab-keys-btn')?.addEventListener('click', () => {
         switchAdminTab('keys');
         syncSystemConfigInputs();
     });
-    adminTabCreditsBtn?.addEventListener('click', () => {
+    document.getElementById('admin-tab-credits-btn')?.addEventListener('click', () => {
         switchAdminTab('credits');
         syncSystemConfigInputs();
     });
-    adminTabMaintenanceBtn?.addEventListener('click', () => {
+    document.getElementById('admin-tab-maintenance-btn')?.addEventListener('click', () => {
         switchAdminTab('maintenance');
         syncSystemConfigInputs();
+    });
+
+    // Launch Ad Manager from inside the Maintenance tab
+    const openAdBtn = document.getElementById('admin-open-ad-manager-btn') || document.getElementById('admin-manage-ads-btn');
+    openAdBtn?.addEventListener('click', () => {
+        import('./handlers-ads').then(mod => {
+            mod.openAdModal();
+        });
     });
 
     // Toggle for Disabling System Image Generation

@@ -882,12 +882,14 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     }
   }
 
+  const previewParticleScale = (state.isVideoPlaying && !state.isExporting) ? 0.35 : 1.0;
+
   // 7. ✨ Sparkles (Magic Stars & Glint Flare)
   if (effects.sparkles > 0) {
     ctx.save();
     const sparklesCountMult = Math.max(0.1, effects.sparklesCount ?? state.sparklesCount ?? 0.5) * 2;
     const sparklesSizeMult = Math.max(0.1, effects.sparklesSize ?? state.sparklesSize ?? 0.5) * 2;
-    const numSparkles = Math.floor(45 * effects.sparkles * sparklesCountMult);
+    const numSparkles = Math.floor(45 * effects.sparkles * sparklesCountMult * previewParticleScale);
     for (let i = 0; i < numSparkles; i++) {
       const seedX = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
       const seedY = Math.cos(i * 4.1414 + 12.9898) * 23421.1231;
@@ -936,7 +938,7 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.save();
     const rainCountMult = Math.max(0.1, effects.rainCount ?? state.rainCount ?? 0.5) * 2;
     const rainSizeMult = Math.max(0.1, effects.rainSize ?? state.rainSize ?? 0.5) * 2;
-    const numStreaks = Math.floor(150 * effects.rain * rainCountMult);
+    const numStreaks = Math.floor(150 * effects.rain * rainCountMult * previewParticleScale);
     ctx.globalCompositeOperation = 'screen';
     const dx = w * 0.08;
 
@@ -979,7 +981,7 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.save();
     const dustCountMult = Math.max(0.1, effects.dustParticlesCount ?? state.dustMotesCount ?? 0.5) * 2;
     const dustSizeMult = Math.max(0.1, effects.dustParticlesSize ?? state.dustMotesSize ?? 0.5) * 2;
-    const numParticles = Math.floor(60 * effects.dustParticles * dustCountMult);
+    const numParticles = Math.floor(60 * effects.dustParticles * dustCountMult * previewParticleScale);
     ctx.globalCompositeOperation = 'screen';
 
     for (let i = 0; i < numParticles; i++) {
@@ -1021,7 +1023,7 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.save();
     const snowCountMult = Math.max(0.1, effects.snowCount ?? state.snowCount ?? 0.5) * 2;
     const snowSizeMult = Math.max(0.1, effects.snowSize ?? state.snowSize ?? 0.5) * 2;
-    const numFlakes = Math.floor(100 * effects.snow * snowCountMult);
+    const numFlakes = Math.floor(100 * effects.snow * snowCountMult * previewParticleScale);
     ctx.globalCompositeOperation = 'screen';
 
     for (let i = 0; i < numFlakes; i++) {
@@ -2239,7 +2241,8 @@ function drawVideoFrameImpl(
 
         let targetTime = effectiveOffset + (progress * effectiveClipDur * rate);
         if (video.duration && targetTime > video.duration) {
-            targetTime = Math.min(video.duration - 0.03, targetTime % video.duration || video.duration - 0.03);
+            const remainder = targetTime % video.duration;
+            targetTime = remainder === 0 ? 0 : Math.min(video.duration - 0.03, remainder);
         }
 
         syncVideoElementForPreview(

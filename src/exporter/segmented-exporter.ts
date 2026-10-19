@@ -25,6 +25,7 @@ import { validateBeforeExport } from '../timing/timeline-timing';
 import { audioBufferToWavBlob } from '../utils-core';
 import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
 import { getExportFlags } from './export-flags';
+import { sliceAudioBuffer } from '../audioBufferUtils';
 
 export interface TimelineSegment {
     index: number;
@@ -66,7 +67,7 @@ function hasSegmentAudioSources(): boolean {
     if (clips.some((clip: any) =>
         clip._sfxBuffer ||
         clip._sfxObjectURL ||
-        (clip.useOriginalAudio && (clip.video_id || clip.secondary_video_id || clip._nativeAudioBuffer || clip._nativeAudioArrayBuffer))
+        ((clip.useOriginalAudio || clip.soloAudio) && (clip.video_id || clip.secondary_video_id || clip._nativeAudioBuffer || clip._nativeAudioArrayBuffer))
     )) {
         return true;
     }
@@ -291,15 +292,32 @@ export async function mixSegmentAudio(
         }
     };
 
-    // 1. Voiceover track
+    const clips = timelineState.clips || [];
+
+    // 1. Voiceover track (with soloAudio / muteNarration micro-fade support)
     if (timelineState.masterAudioBuffer) {
+        const hasSoloClips = clips.some((c: any) => c.soloAudio || c.muteNarration);
         await mixInNative(voiceBus, timelineState.masterAudioBuffer, 0, false, (g) => {
+            const FADE_SEC = 0.025; // 25ms anti-click micro-fade
             g.gain.setValueAtTime(1.0, 0);
+            if (!hasSoloClips) return;
+            for (const clip of clips) {
+                if (clip.soloAudio || clip.muteNarration) {
+                    const cStart = Number(clip.startTime) || 0;
+                    const cEnd = Number.isFinite(clip.endTime) ? Number(clip.endTime) : (cStart + (Number(clip.duration) || 0));
+                    const muteStart = Math.max(0, cStart - segStartSec);
+                    const muteEnd = Math.min(segDur, Math.max(muteStart, cEnd - segStartSec));
+                    if (muteEnd <= 0 || muteStart >= segDur) continue;
+                    g.gain.setValueAtTime(1.0, Math.max(0, muteStart - FADE_SEC));
+                    g.gain.linearRampToValueAtTime(0.0, muteStart);
+                    g.gain.setValueAtTime(0.0, Math.max(muteStart, muteEnd - FADE_SEC));
+                    g.gain.linearRampToValueAtTime(1.0, Math.min(segDur, muteEnd));
+                }
+            }
         });
     }
 
     // 2. Sound Effects & Native Clip Audio
-    const clips = timelineState.clips || [];
     for (const clip of clips) {
         const clipStart = Number(clip.startTime) || 0;
         const clipDur = Number(clip.duration) || 0;
@@ -308,22 +326,23 @@ export async function mixSegmentAudio(
         // Skip clips completely outside this segment
         if (clipEnd <= segStartSec || clipStart >= segEndSec) continue;
 
-        if (clip._sfxBuffer) {
+        if (clip._sfxBuffer && !timelineState.isTrackHidden('sfx')) {
             const sfxVol = (clip.sfxVolume ?? 1) * 0.85;
             await mixInNative(sfxBus, clip._sfxBuffer, clipStart, false, (g) => {
                 g.gain.setValueAtTime(sfxVol, 0);
             });
         }
 
-        if (clip.useOriginalAudio && (clip.video_id || clip.secondary_video_id || clip._nativeAudioBuffer || clip._nativeAudioArrayBuffer)) {
+        const targetVidId = clip.video_id || clip.secondary_video_id;
+        if ((clip.useOriginalAudio || clip.soloAudio) && (targetVidId || clip._nativeAudioBuffer || clip._nativeAudioArrayBuffer)) {
             try {
                 let native = clip._nativeAudioBuffer;
                 if (!native && clip._nativeAudioArrayBuffer) {
                     native = await utils.safeDecode(audioCtx, clip._nativeAudioArrayBuffer);
                     clip._nativeAudioBuffer = native;
                 }
-                if (!native && clip.video_id) {
-                    const assetBlob = await assetStorage.getAsset(clip.video_id);
+                if (!native && targetVidId) {
+                    const assetBlob = await assetStorage.getAsset(targetVidId);
                     if (assetBlob) {
                         native = await utils.safeDecode(audioCtx, await assetBlob.arrayBuffer());
                         clip._nativeAudioBuffer = native;
@@ -338,24 +357,25 @@ export async function mixSegmentAudio(
                     const effectiveFadeIn = fadeIn > 0 ? Math.min(fadeIn, Math.max(0.01, clipDur / 2)) : 0.05;
                     const effectiveFadeOut = fadeOut > 0 ? Math.min(fadeOut, Math.max(0.01, clipDur / 2)) : 0;
 
-                    const shouldDuck = state.audioDuckingEnabled !== false &&
+                    const shouldDuck = !clip.soloAudio &&
+                        state.audioDuckingEnabled !== false &&
                         (clip as any).audioDuckingOverride !== false &&
                         speechBlocks.length > 0 &&
                         !!timelineState.masterAudioBuffer;
 
                     const offset = timelineState.mode === 'audio_locked' ? clipStart : ((clip as any)._legacyCursor ?? clipStart);
 
-                    let audioBuf = native;
+                    // Slice ONLY the used clip window first so WSOLA never stretches an entire long source video
+                    const rawOffset = Math.max(0, Number(clip.videoStartOffset) || 0);
+                    const rawSpan = Math.max(0.05, clipDur * rate);
+                    let audioBuf = sliceAudioBuffer(native, rawOffset, rawOffset + rawSpan);
                     let effectiveRate = rate;
-                    // After WSOLA the buffer is already time-scaled (length = native / rate),
-                    // so offset and duration must be expressed in the stretched buffer's time.
-                    let srcOffset = clip.videoStartOffset || 0;
-                    let srcDuration = clipDur * rate;
-                    if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
-                        audioBuf = stretchAudioBufferPreservePitch(native, rate);
+                    const srcOffset = 0;
+                    const srcDuration = clipDur;
+
+                    if (Math.abs(rate - 1.0) > 0.01 && getExportFlags().useWsolaPitchStretch) {
+                        audioBuf = stretchAudioBufferPreservePitch(audioBuf, rate);
                         effectiveRate = 1.0;
-                        srcOffset = srcOffset / rate;
-                        srcDuration = clipDur;
                     }
 
                     await mixInNative(
@@ -553,7 +573,15 @@ export async function encodeSingleSegmentToFile(
 
     videoEncoder = new VideoEncoder({
         output: (chunk, meta) => {
-            pendingVideoAdd = (pendingVideoAdd || Promise.resolve()).then(() => videoSource.add(EncodedPacket.fromEncodedChunk(chunk), meta));
+            const packet = EncodedPacket.fromEncodedChunk(chunk);
+            const prev = pendingVideoAdd || Promise.resolve();
+            const next = prev
+                .catch(() => {})
+                .then(() => videoSource.add(packet, meta))
+                .finally(() => {
+                    if (pendingVideoAdd === next) pendingVideoAdd = null;
+                });
+            pendingVideoAdd = next;
         },
         error: (e) => {
             videoError = e instanceof Error ? e : new Error(String(e));
@@ -597,7 +625,15 @@ export async function encodeSingleSegmentToFile(
         const audioCodec = await selectSupportedAudioCodec('mp4', segAudio.sampleRate, segAudio.numberOfChannels, 128000);
         audioEncoder = new AudioEncoder({
             output: (chunk, meta) => {
-                pendingAudioAdd = (pendingAudioAdd || Promise.resolve()).then(() => audioSource!.add(EncodedPacket.fromEncodedChunk(chunk), meta));
+                const packet = EncodedPacket.fromEncodedChunk(chunk);
+                const prev = pendingAudioAdd || Promise.resolve();
+                const next = prev
+                    .catch(() => {})
+                    .then(() => audioSource!.add(packet, meta))
+                    .finally(() => {
+                        if (pendingAudioAdd === next) pendingAudioAdd = null;
+                    });
+                pendingAudioAdd = next;
             },
             error: (e) => {
                 audioError = e instanceof Error ? e : new Error(String(e));

@@ -547,6 +547,17 @@ export class ParallaxRenderer {
     return this.canvas;
   }
 
+  public releaseTexture(key: any): void {
+    if (!key) return;
+    const entry = this.textures.get(key);
+    if (entry) {
+      try {
+        this.gl.deleteTexture(entry.tex);
+      } catch {}
+      this.textures.delete(key);
+    }
+  }
+
   public dispose() {
     const gl = this.gl;
     for (const entry of this.textures.values()) {

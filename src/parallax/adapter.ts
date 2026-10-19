@@ -137,6 +137,10 @@ export function drawWebGLParallax(
   return out instanceof HTMLCanvasElement ? out : null;
 }
 
+export function releaseParallaxTexture(imageKey: any) {
+  renderer?.releaseTexture(imageKey);
+}
+
 export function cleanupWebGL() {
   renderer?.dispose();
   renderer = null;

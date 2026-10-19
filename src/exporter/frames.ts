@@ -13,6 +13,8 @@ import {
   seekMidFrameSeconds,
   type VideoSlotRole,
 } from './video-frame-source';
+import { releaseParallaxTexture } from '../parallax/adapter';
+import { dropDepth } from '../parallax/depth';
 
 
 /*
@@ -67,10 +69,12 @@ export async function prepareFrameImageWindow(
             const clip = clips[i];
             if (!clip) continue;
 
-            // Dispose older ImageBitmap / Canvas
+            // Dispose older ImageBitmap / Canvas and its GPU texture + depth map
             if (clip._exportOptimizedImage) {
                 try {
                     const bmp = clip._exportOptimizedImage;
+                    dropDepth(bmp);
+                    releaseParallaxTexture(bmp);
                     if (typeof (bmp as any).close === 'function') {
                         (bmp as any).close();
                     } else if (bmp instanceof HTMLCanvasElement) {
@@ -581,7 +585,8 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30,
             const mediaDur = cur.videoElement.duration;
             const shouldLoop = Boolean(Number.isFinite(mediaDur) && mediaDur > 0 && targetTime > mediaDur);
             if (shouldLoop) {
-                targetTime = Math.min(mediaDur - 0.03, targetTime % mediaDur || mediaDur - 0.03); // clamp/loop at end
+                const remainder = targetTime % mediaDur;
+                targetTime = remainder === 0 ? 0 : Math.min(mediaDur - 0.03, remainder);
             }
 
             if (!syncedVideos.has(cur.videoElement)) {

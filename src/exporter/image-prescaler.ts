@@ -5,6 +5,7 @@
 
 import { state } from '../state';
 import { dropDepth } from '../parallax/depth';
+import { releaseParallaxTexture } from '../parallax/adapter';
 
 export interface PrescaleStats {
   totalImages: number;
@@ -219,6 +220,7 @@ export function clearExportOptimizedImages(...clipLists: (any[] | undefined)[]):
       try {
         const bmp = c._exportOptimizedImage;
         dropDepth(bmp);
+        releaseParallaxTexture(bmp);
         if (typeof (bmp as any).close === 'function') {
           (bmp as any).close();
         } else if (bmp instanceof HTMLCanvasElement) {

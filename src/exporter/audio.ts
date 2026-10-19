@@ -10,6 +10,7 @@ import { videoRenderContext } from '../videoRenderer';
 import { audioSynthesizer } from '../audioSynthesizer';
 import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
 import { getExportFlags } from './export-flags';
+import { sliceAudioBuffer } from '../audioBufferUtils';
 
 
 
@@ -173,18 +174,15 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
                     const shouldDuck = state.audioDuckingEnabled !== false && (clip as any).audioDuckingOverride !== false && speechBlocks.length > 0 && !!timelineState.masterAudioBuffer;
                     const shouldLoop = (clip as any).loop !== false && (native.duration < (clip.duration * rate));
 
-                    let audioBuf = native;
+                    const rawOffset = Math.max(0, Number(clip.videoStartOffset) || 0);
+                    const rawSpan = Math.max(0.05, clip.duration * rate);
+                    let audioBuf = sliceAudioBuffer(native, rawOffset, rawOffset + rawSpan);
                     let effectivePlaybackRate = rate;
-                    // Source-time window (footage seconds) vs. buffer-time window.
-                    // After WSOLA the buffer is already time-scaled (length = native / rate),
-                    // so offset and duration must be expressed in the stretched buffer's time.
-                    let srcOffset = clip.videoStartOffset || 0;
-                    let srcDuration = clip.duration * rate;
-                    if (rate !== 1 && getExportFlags().useWsolaPitchStretch) {
-                        audioBuf = stretchAudioBufferPreservePitch(native, rate);
+                    const srcOffset = 0;
+                    const srcDuration = clip.duration;
+                    if (Math.abs(rate - 1.0) > 0.01 && getExportFlags().useWsolaPitchStretch) {
+                        audioBuf = stretchAudioBufferPreservePitch(audioBuf, rate);
                         effectivePlaybackRate = 1.0;
-                        srcOffset = srcOffset / rate;
-                        srcDuration = clip.duration;
                     }
 
                     await mixInNative(clipsBus, audioBuf, offset, shouldLoop, (g) => {

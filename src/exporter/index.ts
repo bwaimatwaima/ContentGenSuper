@@ -442,7 +442,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
 
     let mixedBuffer: AudioBuffer | null = null;
 
-    const hasOriginalAudio = timelineState.clips.some((c: any) => c.useOriginalAudio && (c.video_id || c.secondary_video_id || c._nativeAudioBuffer || c._nativeAudioArrayBuffer));
+    const hasOriginalAudio = timelineState.clips.some((c: any) => (c.useOriginalAudio || c.soloAudio) && (c.video_id || c.secondary_video_id || c._nativeAudioBuffer || c._nativeAudioArrayBuffer));
     const hasClipSfx = timelineState.clips.some((c: any) => c._sfxBuffer || c._sfxObjectURL);
     const hasGraphicsSfx = (timelineState.graphics || []).some((g: any) => g.isSfxOnly || g.type === 'sfxCue' || Boolean(g.sfxTrigger && g.sfxTrigger !== 'none') || g._sfxBuffer || g._sfxObjectURL || g.customSfxUrl || g.customSfxAssetId);
     const hasBgAudio = !!state._bgAudioBuffer;
@@ -450,12 +450,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const hasDroneAudio = !!state.cinematicDroneAudio;
     const hasAnyAudioSources = hasMasterAudio || hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
 
-    // Rendering a fresh OfflineAudioContext for every short audio segment adds
-    // startup and scheduling overhead to ordinary exports. Use the established
-    // full-mix path for short projects, retain chunking for long projects, and
-    // force chunking at 8 minutes to bound full-duration PCM memory.
     const useChunkedAudio = false;
-
     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
 
     const audioSegmentProvider = useChunkedAudio
@@ -473,19 +468,18 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
           }
         : undefined;
 
-    if (shouldBuildFullAudioMix && (audioBuffer || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasOriginalAudio || hasDroneAudio)) {
+    if (shouldBuildFullAudioMix && hasAnyAudioSources) {
         ui.updateProcessingProgress(5, 'Mastering audio tracks & multi-bus mixing...');
-        
-        
+
         const mixCacheParts = [
             timelineState.masterAudioBuffer?.duration.toFixed(3) ?? 'none',
-            // [FIX aroll-trim] duration + videoStartOffset must be part of the key:
-            // trimming changes audio/video length and in-points, and a stale cached
-            // mix here is exactly what makes "audio isnt cut" persist after a trim.
-            (timelineState.clips || []).map((c: any) => `${c.id}:${(c.startTime ?? 0).toFixed(3)}:${(c as any).volume ?? 1}:${(c.duration ?? 0).toFixed(3)}:${(c.videoStartOffset ?? 0).toFixed(3)}`).join('|'),
-            state._bgAudioBuffer ? 'bgm' : 'nobgm',
+            (timelineState.clips || []).map((c: any) =>
+                `${c.id}:${(c.startTime ?? 0).toFixed(3)}:${(c as any).volume ?? 1}:${(c.duration ?? 0).toFixed(3)}:${(c.videoStartOffset ?? 0).toFixed(3)}:${c.useOriginalAudio ? 1 : 0}:${c.soloAudio ? 1 : 0}:${c.muteNarration ? 1 : 0}:${c.playbackRate ?? 1}`
+            ).join('|'),
+            state._bgAudioBuffer ? `bgm:${state.bgAudioVolume ?? 0.3}` : 'nobgm',
             String(state.autoNormalizeAudio),
             String(state.audioDuckingEnabled),
+            String(state.cinematicDroneAudio),
         ];
         const mixKey = `mix_${utils.simpleHash(mixCacheParts.join('::'))}`;
         let cachedMixBlob = null;
@@ -501,228 +495,20 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
         }
 
         if (!mixedBuffer) {
-            const totalOutSamples = Math.ceil(exportDuration * TARGET_SAMPLE_RATE);
-            const offlineCtx = new OfflineAudioContext(2, totalOutSamples, TARGET_SAMPLE_RATE);
-
-            // 1. Master Output Bus
-            const masterBus = offlineCtx.createGain();
-
-            // 2. Sub-Mix Busses (Voice, Clips, SFX, BGM)
-            const voiceBus = offlineCtx.createGain();
-            const clipsBus = offlineCtx.createGain();
-            const sfxBus = offlineCtx.createGain();
-            const bgmBus = offlineCtx.createGain();
-
-            voiceBus.connect(masterBus);
-            clipsBus.connect(masterBus);
-            sfxBus.connect(masterBus);
-            bgmBus.connect(masterBus);
-
-            // 3. Multi-Source Auto-Normalization & Brickwall Peak Limiter
-            if (state.autoNormalizeAudio !== false) {
-                masterBus.gain.value = 0.95;
-                const limiter = offlineCtx.createDynamicsCompressor();
-                limiter.threshold.value = -3.0;
-                limiter.knee.value = 4.0;
-                limiter.ratio.value = 16.0;
-                limiter.attack.value = 0.003;
-                limiter.release.value = 0.15;
-                masterBus.connect(limiter);
-                limiter.connect(offlineCtx.destination);
-            } else {
-                masterBus.gain.value = 1.0;
-                masterBus.connect(offlineCtx.destination);
-            }
-
-            const speechBlocks = calculateSpeechIntervals(exportDuration);
-
-            const applyDucking = (gainNode: GainNode, baseVolume: number, duckRatio: number) => {
-                const DUCK_VOL = baseVolume * duckRatio;
-                const RAMP = 0.3;
-                gainNode.gain.setValueAtTime(baseVolume, 0);
-
-                for (const b of speechBlocks) {
-                    const start = Math.max(0, b.start);
-                    const end = Math.min(exportDuration, b.end);
-                    if (end <= start) continue;
-
-                    const rampDownStart = Math.max(0, start - RAMP);
-                    gainNode.gain.setValueAtTime(baseVolume, rampDownStart);
-                    gainNode.gain.linearRampToValueAtTime(DUCK_VOL, start);
-
-                    gainNode.gain.setValueAtTime(DUCK_VOL, end);
-
-                    const rampUpEnd = Math.min(exportDuration, end + RAMP);
-                    gainNode.gain.linearRampToValueAtTime(baseVolume, rampUpEnd);
-                }
-            };
-
-            const mixInNative = async (
-                targetBus: GainNode,
-                buffer: AudioBuffer,
-                startTime: number,
-                loop: boolean = false,
-                volumeParamSetup?: (gainNode: GainNode) => void,
-                bufferOffset: number = 0,
-                bufferDuration?: number,
-                playbackRate: number = 1.0
-            ) => {
-                let resampled = buffer;
-                if (buffer.sampleRate !== TARGET_SAMPLE_RATE) {
-                    resampled = await utils.resampleAudioBuffer(buffer, TARGET_SAMPLE_RATE);
-                }
-                const source = offlineCtx.createBufferSource();
-                source.buffer = resampled;
-                source.loop = loop;
-                if (playbackRate !== 1.0) {
-                    source.playbackRate.value = playbackRate;
-                }
-
-                const gainNode = offlineCtx.createGain();
-                if (volumeParamSetup) {
-                    volumeParamSetup(gainNode);
-                } else {
-                    gainNode.gain.value = 1.0;
-                }
-
-                source.connect(gainNode);
-                gainNode.connect(targetBus);
-
-                const actualStart = Math.max(0, startTime);
-                const actualOffset = bufferOffset;
-                const actualDuration = bufferDuration;
-
-                if (actualDuration !== undefined && actualDuration <= 0) return;
-                if (actualStart > exportDuration) return;
-
-                if (actualDuration !== undefined) {
-                    source.start(actualStart, actualOffset, actualDuration);
-                } else {
-                    source.start(actualStart, actualOffset);
-                }
-            };
-
-            // 1. Voice Bus
-            if (audioBuffer) {
-                await mixInNative(voiceBus, audioBuffer!, 0, false);
-            }
-
-            // 2. SFX Bus
-            if (!timelineState.isTrackHidden('sfx')) {
-                for (const clip of timelineState.clips) {
-                    if (clip._sfxBuffer) {
-                        await mixInNative(sfxBus, clip._sfxBuffer!, clip.startTime, false, undefined, 0, undefined, 1.0);
-                    }
-                }
-                const sfxCues = (timelineState.graphics || []).filter((g: any) =>
-                    g.isSfxOnly || g.type === 'sfxCue' || Boolean(g.sfxTrigger && g.sfxTrigger !== 'none')
-                );
-                for (const cue of sfxCues) {
-                    const sfxType = (cue as any).sfxTrigger;
-                    if ((cue as any)._sfxBuffer || (cue as any)._sfxObjectURL || (cue as any).customSfxUrl || (cue as any).customSfxAssetId) {
-                        try {
-                            let customBuf = (cue as any)._sfxBuffer;
-                            if (!customBuf && ((cue as any)._sfxObjectURL || (cue as any).customSfxUrl || (cue as any).customSfxAssetId)) {
-                                let url = (cue as any)._sfxObjectURL || (cue as any).customSfxUrl;
-                                if (!url && (cue as any).customSfxAssetId) {
-                                    const blob = await assetStorage.getAsset((cue as any).customSfxAssetId);
-                                    if (blob) url = URL.createObjectURL(blob);
-                                }
-                                if (url) {
-                                    const resp = await fetch(url);
-                                    const arrBuf = await resp.arrayBuffer();
-                                    customBuf = await offlineCtx.decodeAudioData(arrBuf);
-                                }
-                            }
-                            if (customBuf) {
-                                const startOff = (cue as any).startOffset || 0;
-                                const cueDur = Math.max(0.1, (cue.end ?? ((cue.start || 0) + 1.5)) - (cue.start || 0));
-                                await mixInNative(sfxBus, customBuf, cue.start || 0, false, undefined, startOff, cueDur);
-                            }
-                        } catch (e) {
-                            console.warn(`[Export] Failed to mix custom SFX cue at ${cue.start}:`, e);
-                        }
-                    } else if (sfxType && sfxType !== 'none') {
-                        try {
-                            const sfxBuf = await audioSynthesizer.synthesizeSfxBuffer(sfxType, 0.6);
-                            if (sfxBuf) {
-                                await mixInNative(sfxBus, sfxBuf, cue.start || 0, false, undefined, 0, undefined, 1.0);
-                            }
-                        } catch (e) {
-                            console.warn(`[Export] Failed synthesizing SFX ${sfxType}:`, e);
-                        }
-                    }
-                }
-            }
-
-            // 3. Clips Bus
-            for (const clip of timelineState.clips) {
-                if (clip.useOriginalAudio && clip.video_id) {
-                    try {
-                        const assetBlob = await assetStorage.getAsset(clip.video_id);
-                        if (assetBlob) {
-                            const native = await utils.safeDecode(utils.getAudioContext(), await assetBlob.arrayBuffer());
-                            const offset = timelineState.mode === 'audio_locked' ? clip.startTime : (clip._legacyCursor || clip.startTime);
-                            const clipVol = clip.volume ?? 1.0;
-                            const fadeIn = clip.fadeIn ?? 0;
-                            const fadeOut = clip.fadeOut ?? 0;
-                            const rate = clip.playbackRate && !clip.wordTimestamps?.length ? clip.playbackRate : 1;
-                            
-                            const shouldDuck = state.audioDuckingEnabled !== false && clip.audioDuckingOverride !== false && speechBlocks.length > 0 && !!audioBuffer;
-                            
-                            const effectiveFadeIn = fadeIn > 0 ? Math.min(fadeIn, Math.max(0.01, clip.duration / 2)) : 0.05;
-                            const effectiveFadeOut = fadeOut > 0 ? Math.min(fadeOut, Math.max(0.01, clip.duration / 2)) : 0;
-
-                            await mixInNative(clipsBus, native, offset, false, (g: GainNode) => {
-                                if (shouldDuck) {
-                                    applyDucking(g, clipVol, 0.25);
-                                } else {
-                                    const startInCtx = offset;
-                                    const endInCtx = offset + clip.duration;
-                                    g.gain.setValueAtTime(0, Math.max(0, startInCtx));
-                                    g.gain.linearRampToValueAtTime(clipVol, Math.max(0, startInCtx + effectiveFadeIn));
-                                    if (effectiveFadeOut > 0) {
-                                        g.gain.setValueAtTime(clipVol, Math.max(0, endInCtx - effectiveFadeOut));
-                                        g.gain.linearRampToValueAtTime(0, Math.max(0, endInCtx));
-                                    } else {
-                                        g.gain.setValueAtTime(clipVol, Math.max(0, endInCtx));
-                                    }
-                                }
-                            }, clip.videoStartOffset || 0, clip.duration * rate, rate);
-                        }
-                    } catch (e) {
-                        console.warn(`[Export] Could not mix native audio for clip ${clip.id}:`, e);
-                    }
-                }
-            }
-
-            // 4. BGM Bus
-            if (state._bgAudioBuffer) {
-                const baseVolume = state.bgAudioVolume ?? 0.3;
-                const shouldDuck = state.audioDuckingEnabled !== false && speechBlocks.length > 0;
-                
-                await mixInNative(bgmBus, state._bgAudioBuffer!, 0, true, (gainNode: GainNode) => {
-                    if (shouldDuck) {
-                        applyDucking(gainNode, baseVolume, 0.2);
-                    } else {
-                        gainNode.gain.setValueAtTime(baseVolume, 0);
-                    }
-                });
-            }
-
-            // 5. 55Hz Cinematic Drone Audio (procedurally synthesized)
-            if (state.cinematicDroneAudio) {
-                const droneBuffer = await generateCinematicDroneBuffer(exportDuration, TARGET_SAMPLE_RATE, 0.45);
-                await mixInNative(bgmBus, droneBuffer, 0, false, (gainNode: GainNode) => {
-                    gainNode.gain.setValueAtTime(0.22, 0);
-                });
-            }
-
-            mixedBuffer = await offlineCtx.startRendering();
+            startExportStage('audio-mix');
             try {
-                const wavBlob = audioBufferToWavBlob(mixedBuffer);
-                await assetStorage.storeAsset(wavBlob, 'audio', undefined, mixKey);
-            } catch (e) { console.warn('[EXPORT] Failed to cache mastered audio:', e); }
+                mixedBuffer = await mixSegmentAudio(0, exportDuration, TARGET_SAMPLE_RATE);
+            } finally {
+                endExportStage('audio-mix');
+            }
+            if (mixedBuffer) {
+                try {
+                    const wavBlob = audioBufferToWavBlob(mixedBuffer);
+                    await assetStorage.storeAsset(wavBlob, 'audio', undefined, mixKey);
+                } catch (e) {
+                    console.warn('[EXPORT] Failed to cache mastered audio:', e);
+                }
+            }
         }
         audioBuffer = mixedBuffer;
     }

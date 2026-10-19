@@ -72,9 +72,16 @@ export async function encodeToMuxer(
         videoEncoder = new VideoEncoder({
             output: (chunk: any, meta: any) => {
                 videoBacklog++;
-                pendingVideoAdd = (pendingVideoAdd || Promise.resolve())
-                    .then(() => videoSource.add(EncodedPacket.fromEncodedChunk(chunk), meta))
-                    .finally(() => { videoBacklog--; });
+                const packet = EncodedPacket.fromEncodedChunk(chunk);
+                const prev = pendingVideoAdd || Promise.resolve();
+                const next = prev
+                    .catch(() => {})
+                    .then(() => videoSource.add(packet, meta))
+                    .finally(() => {
+                        videoBacklog--;
+                        if (pendingVideoAdd === next) pendingVideoAdd = null;
+                    });
+                pendingVideoAdd = next;
             },
             error: (e: any) => {
                 console.error("Video Encoder Error:", e);
@@ -133,9 +140,16 @@ export async function encodeToMuxer(
             audioEncoder = new AudioEncoder({
                 output: (chunk: any, meta: any) => {
                     audioBacklog++;
-                    pendingAudioAdd = (pendingAudioAdd || Promise.resolve())
-                        .then(() => audioSource!.add(EncodedPacket.fromEncodedChunk(chunk), meta))
-                        .finally(() => { audioBacklog--; });
+                    const packet = EncodedPacket.fromEncodedChunk(chunk);
+                    const prev = pendingAudioAdd || Promise.resolve();
+                    const next = prev
+                        .catch(() => {})
+                        .then(() => audioSource!.add(packet, meta))
+                        .finally(() => {
+                            audioBacklog--;
+                            if (pendingAudioAdd === next) pendingAudioAdd = null;
+                        });
+                    pendingAudioAdd = next;
                 },
                 error: (e: any) => {
                     console.error("Audio Encoder Error:", e);

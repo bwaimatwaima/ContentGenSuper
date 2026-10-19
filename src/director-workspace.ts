@@ -9,6 +9,7 @@ import { state } from './state';
 import { getActiveAspectRatio } from './handlers-effects';
 import { vsIcon } from './ui-icons';
 import { buildTransitionsStudioPanel, syncTransitionsPanel } from './transitions-studio-panel';
+import { initPanelCollapse } from './vs-panel-collapse';
 
 const WORKSPACE_FLAG_KEY = 'cg_flag_vs_workspace';
 
@@ -759,6 +760,7 @@ export function activateVsWorkspace(): boolean {
     bindResizers(shellEl);
     mountPlayerStageOverlays();
     initStudioCommandPalette();
+    initPanelCollapse();
 
     // Refresh canvas sizing after its container moves to the Studio layout.
     requestAnimationFrame(() => {

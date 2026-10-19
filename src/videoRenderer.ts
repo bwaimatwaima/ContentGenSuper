@@ -60,6 +60,9 @@ export type TimelineClip = {
   preserveContent?: boolean;
   talkingHeadRole?: 'primary' | 'secondary';
   useOriginalAudio?: boolean;
+  soloAudio?: boolean;
+  muteNarration?: boolean;
+  hideSubtitles?: boolean;
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
@@ -1244,7 +1247,7 @@ function drawTalkingHeadPiP(
   const marginX = Math.round(cvW * 0.035);
   const marginY = Math.round(cvH * 0.035);
   const isMasterPlaceholder = (text?: string) => !text || /^(?:master\s+a-?roll|a-?roll)$/i.test(text.trim());
-  const subtitleSafeOffset = (timelineState.showSubtitles && timelineState.videoSubtitlePosition === 'bottom' && clip.text && !isMasterPlaceholder(clip.text)) 
+  const subtitleSafeOffset = (timelineState.showSubtitles && timelineState.videoSubtitlePosition === 'bottom' && clip.text && !isMasterPlaceholder(clip.text) && !clip.hideSubtitles) 
     ? SubtitleEngine.getSubtitleHeightOffset(ctx, clip.text, cvW, cvH, timelineState.videoSubtitlePosition, timelineState.videoSubtitleStyle) 
     : 0;
 
@@ -2323,6 +2326,7 @@ function drawVideoFrameImpl(
     // B-roll video frames are decoded into OffscreenCanvas which has no .src property.
     // We must bypass getCachedScaledImage for them, otherwise they all cache under the key 'nosrc' and freeze on frame 1.
     const isCanvasMedia = media instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && media instanceof OffscreenCanvas) || (typeof ImageBitmap !== 'undefined' && media instanceof ImageBitmap);
+    const isVideoMedia = media instanceof HTMLVideoElement || isCanvasMedia;
 
     if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isCanvasMedia && image.src) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
@@ -2337,14 +2341,14 @@ function drawVideoFrameImpl(
         const smearPx = velocity * dW * 0.02;
         ctx.save();
         ctx.globalAlpha = alpha * 0.25 * velocity;
-        ctx.drawImage(image, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx, dY, dW, dH);
+        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx, dY, dW, dH);
         ctx.globalAlpha = alpha * 0.15 * velocity;
-        ctx.drawImage(image, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx * 2, dY, dW, dH);
+        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx * 2, dY, dW, dH);
         ctx.restore();
       }
 
-      // 2.5D Depth Parallax using WebGL
-      const webglCanvas = !lite && state.enableParallaxEffect
+      // 2.5D Depth Parallax using WebGL (only for still image files with a valid src, never for video frames)
+      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image && image.src
         ? drawWebGLParallax(
             image, Math.round(dW), Math.round(dH), bg, fg, movement, progress, focalPoint,
             fg.speedFactor,            // kept for signature compatibility; blur no longer depends on it
@@ -2355,7 +2359,7 @@ function drawVideoFrameImpl(
       if (webglCanvas) {
         ctx.drawImage(webglCanvas, dX, dY, dW, dH);
       } else {
-        ctx.drawImage(image, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
+        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
       }
     }
     
@@ -2818,7 +2822,7 @@ function drawVideoFrameImpl(
   // Draw Subtitles (respecting track visibility)
   const sSubs = t0();
   const isPlaceholderText = cur.text && /^(?:master\s+a-?roll|a-?roll)$/i.test(cur.text.trim());
-  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText) {
+  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !cur.hideSubtitles) {
       // Use real word timestamps whenever available, regardless of timeline mode.
       // Visual-first production also populates wordTimestamps via sliceTranscriptForShots
       // when audio is generated — gating on audio_locked was preventing real timestamp
@@ -3032,7 +3036,7 @@ export function drawExportOverlayLayer(
   const curStart = isNum(cur.startTime) ? cur.startTime : 0;
   const tIn = isAbs ? (time - curStart) : Math.max(0, prog * (cur.duration || 3));
   const isPlaceholderText = cur.text && /^(?:master\s+a-?roll|a-?roll)$/i.test(cur.text.trim());
-  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText) {
+  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !cur.hideSubtitles) {
       const hasTimestamps = cur.wordTimestamps != null && cur.wordTimestamps.length > 0;
       let wordIndex = -1;
 

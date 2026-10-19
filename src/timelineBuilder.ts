@@ -1759,6 +1759,8 @@ export async function restoreVideoTimeline(
           pipScale: meta.pipScale || matchedShot?.pipScale,
           colorFilter: meta.colorFilter || matchedShot?.colorFilter || 'none',
           colorFilterIntensity: meta.colorFilterIntensity ?? matchedShot?.colorFilterIntensity ?? 1.0,
+          hideSubtitles: meta.hideSubtitles ?? matchedShot?.hideSubtitles ?? false,
+          soloAudio: meta.soloAudio ?? matchedShot?.soloAudio ?? false,
         };
       },
     );
@@ -1850,6 +1852,8 @@ export async function restoreVideoTimeline(
             pipScale: shot.pipScale,
             colorFilter: shot.colorFilter || 'none',
             colorFilterIntensity: typeof shot.colorFilterIntensity === 'number' ? shot.colorFilterIntensity : 1.0,
+            hideSubtitles: shot.hideSubtitles ?? false,
+            soloAudio: shot.soloAudio ?? false,
           };
         },
       );

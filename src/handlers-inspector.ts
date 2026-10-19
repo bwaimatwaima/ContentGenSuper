@@ -553,6 +553,9 @@ export function openInspectorForShot(shotId?: string) {
     if (dom.inspectorClipSoloAudioCheckbox) {
         dom.inspectorClipSoloAudioCheckbox.checked = !!(shot.soloAudio || shot.muteNarration);
     }
+    if (dom.inspectorHideSubtitlesCheckbox) {
+        dom.inspectorHideSubtitlesCheckbox.checked = !!shot.hideSubtitles;
+    }
     if (dom.inspectorClipFadeIn) {
         dom.inspectorClipFadeIn.value = String(shot.fadeIn || 0);
     }
@@ -1020,9 +1023,11 @@ export function saveInspectorMetadata() {
     shot.audioDuckingOverride = audioDuckingOverride;
     const preserveContent = dom.inspectorPreserveContentToggle ? dom.inspectorPreserveContentToggle.checked : false;
     const soloAudio = dom.inspectorClipSoloAudioCheckbox ? dom.inspectorClipSoloAudioCheckbox.checked : false;
+    const hideSubtitles = dom.inspectorHideSubtitlesCheckbox ? dom.inspectorHideSubtitlesCheckbox.checked : false;
     shot.preserveContent = preserveContent;
     shot.soloAudio = soloAudio;
     shot.muteNarration = soloAudio;
+    shot.hideSubtitles = hideSubtitles;
     if (imgPrompt) shot.image_prompt = imgPrompt;
     if (brollPrompt) shot.b_roll_prompt = brollPrompt;
 
@@ -1059,6 +1064,7 @@ export function saveInspectorMetadata() {
         clip.preserveContent = preserveContent;
         clip.soloAudio = soloAudio;
         clip.muteNarration = soloAudio;
+        clip.hideSubtitles = hideSubtitles;
         clip.deviceTag = shot.deviceTag;
         clip.rotate = shot.rotate;
         clip.volume = clipVolume;
@@ -1859,6 +1865,28 @@ export function initInspectorHandlers() {
             saveVersion(false);
             if (dom.resultsContainer) renderResults(state.currentScenes);
             showStatus(isSolo ? 'Solo audio enabled: Master voiceover will mute on this shot.' : 'Solo audio disabled.', false, 2500);
+        });
+    }
+
+    if (dom.inspectorHideSubtitlesCheckbox) {
+        dom.inspectorHideSubtitlesCheckbox.addEventListener('change', () => {
+            if (!activeShotId) return;
+            const allShots = getAllStoryboardShots();
+            const targetItem = allShots.find(item => item.shot.id === activeShotId);
+            if (!targetItem) return;
+            const isHidden = dom.inspectorHideSubtitlesCheckbox.checked;
+            targetItem.shot.hideSubtitles = isHidden;
+            const clip = timelineState.clips?.find((c: any) => c.id === activeShotId);
+            if (clip) {
+                clip.hideSubtitles = isHidden;
+            }
+            saveVersion(false);
+            if (dom.resultsContainer) renderResults(state.currentScenes);
+            if (timelineState.videoGenerated) {
+                updateVideoContext();
+                drawVideoFrame(state.videoPauseTime || 0);
+            }
+            showStatus(isHidden ? 'Subtitles hidden for this shot.' : 'Subtitles enabled for this shot.', false, 2500);
         });
     }
 

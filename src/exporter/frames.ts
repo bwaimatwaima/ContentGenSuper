@@ -342,7 +342,7 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
     const prog = Math.min(1, tIn / curLen);
 
     // 1. Subtitle animation guard: untimed subtitles with active text must be drawn fresh per frame
-    const hasSubtitles = (timelineState.showSubtitles ?? true) && Boolean(cur.text && cur.text.trim().length > 0);
+    const hasSubtitles = (timelineState.showSubtitles ?? true) && Boolean(cur.text && cur.text.trim().length > 0) && !cur.hideSubtitles;
     const hasWordTimestamps = Array.isArray(cur.wordTimestamps) && cur.wordTimestamps.length > 0;
     const hasUntimedSubtitle = hasSubtitles && !hasWordTimestamps;
 

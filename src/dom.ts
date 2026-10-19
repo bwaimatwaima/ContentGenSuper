@@ -101,6 +101,7 @@ export let inspectorLayer2Badge: HTMLSpanElement;
 export let inspectorClearLayer2Btn: HTMLButtonElement;
 export let inspectorUploadLayer2Btn: HTMLButtonElement;
 export let inspectorClipSoloAudioCheckbox: HTMLInputElement;
+export let inspectorHideSubtitlesCheckbox: HTMLInputElement;
 export let inspectorUseOriginalAudio: HTMLInputElement;
 export let inspectorClipAudioControls: HTMLDivElement;
 export let inspectorClipVolumeSlider: HTMLInputElement;
@@ -2505,6 +2506,7 @@ export function initDOM() {
     inspectorClearLayer2Btn = document.getElementById('inspector-clear-layer2-btn') as HTMLButtonElement;
     inspectorUploadLayer2Btn = document.getElementById('inspector-upload-layer2-btn') as HTMLButtonElement;
     inspectorClipSoloAudioCheckbox = document.getElementById('inspector-clip-solo-audio-checkbox') as HTMLInputElement;
+    inspectorHideSubtitlesCheckbox = document.getElementById('inspector-hide-subtitles') as HTMLInputElement;
     inspectorUseOriginalAudio = document.getElementById('inspector-use-original-audio') as HTMLInputElement;
     inspectorClipAudioControls = document.getElementById('inspector-clip-audio-controls') as HTMLDivElement;
     inspectorClipVolumeSlider = document.getElementById('inspector-clip-volume-slider') as HTMLInputElement;

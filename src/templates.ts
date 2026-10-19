@@ -3053,6 +3053,14 @@ export const MODAL_TEMPLATES = `
         </label>
       </div>
 
+      <div style="margin-top: 4px; margin-bottom: 8px;">
+        <label class="flex items-center space-x-2 mt-3 cursor-pointer" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="inspector-hide-subtitles" class="form-checkbox h-4 w-4 text-indigo-500 rounded border-gray-600 bg-gray-700 focus:ring-offset-gray-800 focus:ring-indigo-500" style="accent-color: var(--accent);" />
+          <span class="text-sm font-medium text-gray-300" style="font-size: 11.5px;">Hide Subtitles for this Shot</span>
+        </label>
+        <p class="text-xs text-gray-500 ml-6 mt-1" style="font-size: 10.5px; color: var(--text-3); margin: 2px 0 0 22px;">Useful when playing original clip audio that doesn't match the master script.</p>
+      </div>
+
       <div id="inspector-audio-stack-warning" class="insp-note hidden">
         Both voiceover and clip audio are active. Enable Solo Clip if you want to mute narration during this shot.
       </div>

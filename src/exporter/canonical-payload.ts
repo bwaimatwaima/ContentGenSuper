@@ -61,6 +61,7 @@ export interface CanonicalClipPayload {
   fadeOut?: number;
   useOriginalAudio?: boolean;
   soloAudio?: boolean;
+  hideSubtitles?: boolean;
   elements?: any[];
   backgroundPlateUrl?: string;
   deviceTag?: any;
@@ -295,6 +296,7 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       fadeOut: c.fadeOut,
       useOriginalAudio: Boolean(c.useOriginalAudio || c.soloAudio),
       soloAudio: Boolean(c.soloAudio),
+      hideSubtitles: Boolean(c.hideSubtitles),
       elements: Array.isArray(c.elements) ? c.elements : [],
       backgroundPlateUrl,
       deviceTag: c.deviceTag,

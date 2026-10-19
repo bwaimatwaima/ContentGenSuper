@@ -487,21 +487,43 @@ export function auditTimelineTiming(
   };
 }
 
+let _syncOverrideActive = false;
+
 /**
- * Pre-export synchronization gate. Enforces strict fail-closed validation.
+ * Sets whether the user has explicitly chosen to override the timeline sync block.
+ */
+export function setSyncOverride(active: boolean): void {
+  _syncOverrideActive = Boolean(active);
+}
+
+/**
+ * Returns whether the pre-export sync block is currently overridden.
+ */
+export function isSyncOverrideActive(): boolean {
+  return _syncOverrideActive;
+}
+
+/**
+ * Pre-export synchronization gate. Enforces strict fail-closed validation unless overridden by the user.
  */
 export function validateBeforeExport(
   clips: any[],
   audioDuration?: number | null,
-  options?: { mode?: 'audio_locked' | 'free' }
+  options?: { mode?: 'audio_locked' | 'free'; allowOverride?: boolean }
 ): TimelineTimingAudit {
   const audit = auditTimelineTiming(clips, audioDuration, options);
 
-  if (!audit.canExport && options?.mode !== 'free') {
+  const override = options?.allowOverride ?? isSyncOverrideActive();
+
+  if (!audit.canExport && options?.mode !== 'free' && !override) {
     const errorDetails = audit.errors.join('\n• ');
     throw new Error(
       `EXPORT BLOCKED: Timeline timing validation failed.\n• ${errorDetails}\n\nPlease run 'Visual Sync' or check audio alignment.`
     );
+  }
+
+  if (override && !audit.canExport) {
+    console.warn('⚠️ [validateBeforeExport] Sync validation block overridden by user.', audit.errors);
   }
 
   return audit;

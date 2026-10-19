@@ -30,13 +30,15 @@ import { electronService, syncTaskbarProgress } from './electron-bridge';
 import { deliverOpfsExport, hasOpfsWritableSupport, isStreamingSupported, tryInitOpfsExport, tryInitStreamingExport } from './file-targets';
 import { clearStaticFrameCache, yieldToMain } from './frames';
 import { prepareExportOptimizedImages, clearExportOptimizedImages } from './image-prescaler';
-import { validateBeforeExport } from '../timing/timeline-timing';
+import { validateBeforeExport, auditTimelineTiming, setSyncOverride, isSyncOverrideActive } from '../timing/timeline-timing';
+import { promptSyncConflictResolution } from './sync-override-dialog';
 
 
 export function handleCancelExport() {
     if (!state.isCloudRenderActive) {
         state.isVideoProductionRunning = false;
     }
+    setSyncOverride(false);
 }
 
 
@@ -138,31 +140,61 @@ export async function handleExportVideo() {
         resyncTimeline({ notify: false, reason: 'pre-export' });
     } catch (e) {}
 
-    // ── Canonical Fail-Closed Pre-Export Timing Validation ──
+    // ── Canonical Pre-Export Timing Validation & User Sync Choice ──
     const syncMode = (timelineState.mode === 'audio_locked' || (timelineState.masterAudioBuffer && timelineState.isAudioLocked?.())) ? 'audio_locked' : 'free';
-    try {
-        const audit = validateBeforeExport(
-            timelineState.clips,
-            timelineState.masterAudioBuffer?.duration ?? null,
-            { mode: syncMode }
-        );
-        if (audit.reviewableTextMatches && audit.reviewableTextMatches.length > 0) {
-            console.log('ℹ️ [Export Validation] Reviewable script/audio text matches with verified timing:', audit.reviewableTextMatches);
-            ui.showStatus(`Export proceeding: ${audit.reviewableTextMatches.length} shot(s) have script differences but verified acoustic timing.`, false, 4000);
+    const audit = auditTimelineTiming(
+        timelineState.clips,
+        timelineState.masterAudioBuffer?.duration ?? null,
+        { mode: syncMode }
+    );
+    const drift = getTimelineAudioDrift();
+    const hasDriftWarning = drift && Math.abs(drift.seconds) > 0.15;
+    const hasSyncIssues = (!audit.canExport && syncMode !== 'free') || (audit.errors && audit.errors.length > 0) || hasDriftWarning;
+
+    if (hasSyncIssues && !isSyncOverrideActive()) {
+        const choice = await promptSyncConflictResolution(audit, drift);
+        if (choice === 'resync') {
+            try {
+                const { resyncTimeline, updateVideoContext } = await import('../videoController');
+                const res = resyncTimeline({ notify: true, reason: 'pre_export_user_resync' });
+                updateVideoContext(true);
+                ui.showStatus(
+                    `Timeline resynced! Drift is now ${(res.driftAfter * 1000).toFixed(0)}ms (${res.fixedGaps} gaps fixed). You can now export.`,
+                    false,
+                    5000
+                );
+            } catch (err) {
+                console.error('Failed to resync timeline:', err);
+                ui.showStatus('Failed to resync timeline automatically. Please check your clips.', true, 5000);
+            }
+            return;
+        } else if (choice === 'proceed') {
+            setSyncOverride(true);
+            ui.showStatus('Sync block overridden. Proceeding with export...', false, 3500);
+        } else {
+            // Cancelled
+            ui.showStatus('Export cancelled.', false, 3000);
+            return;
         }
-    } catch (valErr: any) {
-        ui.showStatus(valErr.message || 'Export blocked: timeline timing validation failed.', true, 8000);
-        return;
+    } else {
+        // Validate and log any non-blocking notices
+        try {
+            validateBeforeExport(
+                timelineState.clips,
+                timelineState.masterAudioBuffer?.duration ?? null,
+                { mode: syncMode }
+            );
+        } catch (valErr: any) {
+            if (!isSyncOverrideActive()) {
+                ui.showStatus(valErr.message || 'Export blocked: timeline timing validation failed.', true, 8000);
+                return;
+            }
+        }
     }
 
-    // ── NEW: cumulative-drift guard ──
-    const drift = getTimelineAudioDrift();
-    if (drift && Math.abs(drift.seconds) > 0.3) {
-        const pct = Math.max(0, Math.min(100, 100 - (Math.abs(drift.seconds) / Math.max(0.1, drift.audioDuration)) * 100));
-        const ok = window.confirm(
-            `Visual/Audio Sync Warning\n\nYour timeline is ${drift.seconds > 0 ? 'LONGER' : 'SHORTER'} than the audio by ${Math.abs(drift.seconds).toFixed(1)}s (sync integrity ≈ ${pct.toFixed(1)}%).\n\nExport anyway? (Visuals may cut off early or leave a silent gap at the end.)`
-        );
-        if (!ok) return;
+    if (audit.reviewableTextMatches && audit.reviewableTextMatches.length > 0) {
+        console.log('ℹ️ [Export Validation] Reviewable script/audio text matches with verified timing:', audit.reviewableTextMatches);
+        ui.showStatus(`Export proceeding: ${audit.reviewableTextMatches.length} shot(s) have script differences but verified acoustic timing.`, false, 4000);
     }
 
 
@@ -224,6 +256,8 @@ export async function handleExportVideo() {
                 ui.showStatus(`Export failed: ${err?.message || String(err)}`, true, 10000);
             }
         }
+    } finally {
+        setSyncOverride(false);
     }
 }
 

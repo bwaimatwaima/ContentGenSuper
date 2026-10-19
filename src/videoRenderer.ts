@@ -2320,11 +2320,15 @@ function drawVideoFrameImpl(
       ctx.translate(-(dX + dW / 2), -(dY + dH / 2));
     }
 
-    if (!cameraKeyframes && movement === 'static' && alpha === 1) {
+    // B-roll video frames are decoded into OffscreenCanvas which has no .src property.
+    // We must bypass getCachedScaledImage for them, otherwise they all cache under the key 'nosrc' and freeze on frame 1.
+    const isCanvasMedia = media instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && media instanceof OffscreenCanvas) || (typeof ImageBitmap !== 'undefined' && media instanceof ImageBitmap);
+
+    if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isCanvasMedia && image.src) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
       ctx.drawImage(cached, dX, dY);
     } else if (!cameraKeyframes && movement === 'static') {
-      ctx.drawImage(image, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
+      ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
     } else {
       // Whip pan: smear a couple of trailing offset copies during the fast middle
       // section of the move (velocity peaks around progress ~0.3–0.7 with cubic easing).

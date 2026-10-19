@@ -424,9 +424,11 @@ export function auditTimelineTiming(
   if (Number.isFinite(audioDuration) && audioDuration! > 0) {
     driftSeconds = Math.abs(visualDuration - audioDuration!);
     if (driftSeconds > 0.1) {
-      if (isAudioLocked) {
+      // Only block audio_locked exports if the visual timeline is SHORTER than the audio (cutting off narration).
+      // Trailing visual duration (visualDuration > audioDuration) is allowed.
+      if (isAudioLocked && visualDuration < audioDuration!) {
         errors.push(
-          `Master Audio / Visual timeline duration mismatch: visual is ${visualDuration.toFixed(3)}s, audio is ${audioDuration!.toFixed(3)}s (drift: ${(driftSeconds * 1000).toFixed(0)}ms).`
+          `Master Audio / Visual timeline duration mismatch: visual is ${visualDuration.toFixed(3)}s, audio is ${audioDuration!.toFixed(3)}s (audio is cut off).`
         );
       } else {
         warnings.push(`Visual timeline (${visualDuration.toFixed(2)}s) differs from audio duration (${audioDuration!.toFixed(2)}s).`);
@@ -450,11 +452,14 @@ export function auditTimelineTiming(
     ? Math.min(...textMatchConfidences)
     : 1.0;
 
+  // Base the sync health on the actual acoustic alignment and timing reliability, not duration mismatch.
+  const baseHealth = (avgConfidence * 0.6 + avgTimingReliability * 0.4) * 100;
+  
   const syncHealthPercent = Math.max(
     0,
     Math.min(
       100,
-      100 - (driftSeconds * 50) - (gapCount * 5) - (overlapCount * 5) - (unreliableTimingCount * 10) - (lowConfidenceCount * 1)
+      baseHealth - (gapCount * 5) - (overlapCount * 5) - (unreliableTimingCount * 10) - (lowConfidenceCount * 2)
     )
   );
 

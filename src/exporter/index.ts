@@ -148,7 +148,10 @@ export async function handleExportVideo() {
         { mode: syncMode }
     );
     const drift = getTimelineAudioDrift();
-    const hasDriftWarning = drift && Math.abs(drift.seconds) > 0.15;
+    
+    // Only warn if the visual timeline is noticeably SHORTER than the audio (drift.seconds < -0.15).
+    // Positive drift means trailing visual B-roll, which is completely valid.
+    const hasDriftWarning = drift && drift.seconds < -0.15;
     const hasSyncIssues = (!audit.canExport && syncMode !== 'free') || (audit.errors && audit.errors.length > 0) || hasDriftWarning;
 
     if (hasSyncIssues && !isSyncOverrideActive()) {

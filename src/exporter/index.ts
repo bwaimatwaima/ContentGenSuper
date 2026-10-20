@@ -460,21 +460,40 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const memProfile = getAdaptiveMemoryProfile(estW, estH);
     const exportMinutes = exportDuration / 60;
 
-    // NEVER chunk audio during muxing: audio lives on its own continuous track, and
-    // mid-export OfflineAudioContext chunking stalls the hardware VideoEncoder on long exports.
-    const useChunkedAudio = false;
-    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline;
-    const audioSegmentProvider = undefined;
-
     const hasSecondaryAudioBuses = hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
     const hasSoloOrMutedClips = (timelineState.clips || []).some((c: any) => c.soloAudio || c.muteNarration);
-    const canUseMasterAudioDirectly =
-        hasMasterAudio &&
-        !hasSecondaryAudioBuses &&
-        !hasSoloOrMutedClips &&
-        state.autoNormalizeAudio === false;
+    const needsMultiBusMix = hasSecondaryAudioBuses || hasSoloOrMutedClips;
 
-    if (canUseMasterAudioDirectly) {
+    // If the project ONLY has the standalone masterAudioBuffer (no BGM/SFX/clip audio) and exceeds
+    // the device's continuous mix ceiling, pass masterAudioBuffer directly with 0 MB extra allocation!
+    const useDirectMasterBuffer = hasMasterAudio && !needsMultiBusMix && (exportMinutes > memProfile.maxContinuousAudioMinutes || state.autoNormalizeAudio === false);
+
+    // Only use 30s chunked mixing when there are multiple buses (BGM/SFX/clip audio) AND the project
+    // exceeds the device tier's safe continuous audio ceiling (4 min on Low RAM, 12 min on Balanced, 30 min on Pro).
+    const useChunkedAudio =
+        !useLongElectronSegmentedPipeline &&
+        format !== 'mp4-ffmpeg' &&
+        needsMultiBusMix &&
+        exportMinutes > memProfile.maxContinuousAudioMinutes;
+
+    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio && !useDirectMasterBuffer;
+
+    const audioSegmentProvider = useChunkedAudio
+        ? async (startSec: number, durSec: number) => {
+              startExportStage('audio-mix');
+              try {
+                  return await mixSegmentAudio(
+                      startSec,
+                      Math.min(exportDuration, startSec + durSec),
+                      TARGET_SAMPLE_RATE
+                  );
+              } finally {
+                  endExportStage('audio-mix');
+              }
+          }
+        : undefined;
+
+    if (useDirectMasterBuffer) {
         audioBuffer = timelineState.masterAudioBuffer;
         mixedBuffer = timelineState.masterAudioBuffer;
     } else if (shouldBuildFullAudioMix && hasAnyAudioSources) {
@@ -522,8 +541,8 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
         audioBuffer = mixedBuffer;
     }
 
-    const finalAudioBuffer = shouldBuildFullAudioMix ? (mixedBuffer || audioBuffer) : null;
-    const hasAudio = useChunkedAudio || (shouldBuildFullAudioMix && !!(finalAudioBuffer && finalAudioBuffer.length > 0 && finalAudioBuffer.duration > 0.1));
+    const finalAudioBuffer = !useChunkedAudio ? (mixedBuffer || audioBuffer) : null;
+    const hasAudio = useChunkedAudio || !!(finalAudioBuffer && finalAudioBuffer.length > 0 && finalAudioBuffer.duration > 0.1);
     const totalDuration = exportDuration;
     const currentRatio = (state.aspectRatio || dom.videoDirectorAspectSelect?.value || dom.imageResolutionSelect?.value || '16:9') as any;
     let resolutionKey = dom.videoExportResolutionSelect ? dom.videoExportResolutionSelect.value : '';

@@ -449,9 +449,9 @@ export async function handleMasterAudioUpload(file: File) {
         }
 
         if (state.deepgramApiKey) {
-            ui.updateProcessingProgress(45, 'Transcribing script with Deepgram...');
+            ui.updateProcessingProgress(45, 'Transcribing script with Deepgram Nova-3 (sending audio payload)...');
         } else {
-            ui.updateProcessingProgress(45, 'Transcribing script with AI...');
+            ui.updateProcessingProgress(45, 'Transcribing speech to text with AI model...');
         }
         
         let transcriptText = '';

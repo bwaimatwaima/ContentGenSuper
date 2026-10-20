@@ -35,7 +35,7 @@ export async function handleTranscribeTimelineMixdown() {
         const mixWavBlob = await audioBufferToWavBlob(mixBuffer);
         const mixFile = new File([mixWavBlob], "timeline-mix.wav", { type: "audio/wav" });
 
-        ui.showStatus("Transcribing with AI...", false, 4000);
+        ui.showStatus("Sending audio mix to AI speech-to-text service...", false, 8000);
 
         // 3. Transcribe
         const result = await transcribeAudioLocal(mixFile);

@@ -2597,176 +2597,71 @@ function drawVideoFrameImpl(
   const curBg = getBg(cur);
   const nxtBg = getBg(nxt);
 
-  if (holdNext && nxt) {
-    drawImageContain(nxtBg!, nxt.cameraMovement, 0, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-  } else if (isTrans) {
-    if (!nxt) {
-      drawImageContain(curBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-    } else {
-      const easedT = tP * tP * (3 - 2 * tP);
-      const whipT = tP < 0.5 ? 8 * tP * tP * tP * tP : 1 - Math.pow(-2 * tP + 2, 4) / 2;
-      const velocityPeak = Math.sin(Math.min(1, Math.max(0, tP)) * Math.PI);
+  if (isTrans && curBg && nxtBg && nxt) {
+    const nxtLen = Math.max(0.001, isAbs && isNum(nxt.endTime) && isNum(nxt.startTime) ? nxt.endTime - nxt.startTime : (nxt.duration || 3));
+    const nxtProg = Math.min(1, Math.max(0, (time - (nxt.startTime || 0)) / nxtLen));
+    const easedT = tP < 0.5 ? 4 * tP * tP * tP : 1 - Math.pow(-2 * tP + 2, 3) / 2;
+    let curEffectiveBg = curBg;
+    const whipT = Math.pow(tP, 2.5);
+    const velocityPeak = Math.sin(tP * Math.PI);
 
-      // Advance incoming shot during transition handle so it is already in motion (never frozen at 0)
-      const transDur = cur._transitionDuration || 0.5;
-      const nxtLen = Math.max(0.001, isAbs && isNum(nxt.endTime) && isNum(nxt.startTime) ? nxt.endTime - nxt.startTime : (nxt.duration || 3));
-      const nxtProg = Math.min(1, Math.max(0, (tP * transDur) / nxtLen));
-
-      let curEffectiveBg: any = curBg;
-      if (curBg && nxtBg && curBg === nxtBg && curBg instanceof HTMLVideoElement) {
-        if (!transitionOffscreenCanvas) {
-          transitionOffscreenCanvas = document.createElement('canvas');
-        }
-        const vw = curBg.videoWidth || cvW;
-        const vh = curBg.videoHeight || cvH;
-        if (transitionOffscreenCanvas.width !== vw || transitionOffscreenCanvas.height !== vh) {
-          transitionOffscreenCanvas.width = vw;
-          transitionOffscreenCanvas.height = vh;
-        }
-        const tCtx = transitionOffscreenCanvas.getContext('2d');
-        if (tCtx && curBg.readyState >= 2) {
-          tCtx.drawImage(curBg, 0, 0, vw, vh);
-          curEffectiveBg = transitionOffscreenCanvas;
-        }
+    if (typeof HTMLVideoElement !== 'undefined' && curBg instanceof HTMLVideoElement) {
+      if (!transitionOffscreenCanvas) {
+        transitionOffscreenCanvas = document.createElement('canvas');
       }
+      const vw = curBg.videoWidth || cvW;
+      const vh = curBg.videoHeight || cvH;
+      if (transitionOffscreenCanvas.width !== vw || transitionOffscreenCanvas.height !== vh) {
+        transitionOffscreenCanvas.width = vw;
+        transitionOffscreenCanvas.height = vh;
+      }
+      const tCtx = transitionOffscreenCanvas.getContext('2d');
+      if (tCtx) {
+        tCtx.drawImage(curBg, 0, 0, vw, vh);
+        curEffectiveBg = transitionOffscreenCanvas;
+      }
+    }
 
-      // --- BLUR DISSOLVE ---
-      if (tType === 'blurdissolve') {
-        const sc = 0.6;
-        const bw = Math.round(cvW * sc);
-        const bh = Math.round(cvH * sc);
-        const surf = getBlurSurface(bw, bh);
-        const curImg = state.isExporting && cur._exportOptimizedImage ? cur._exportOptimizedImage : (cur.backgroundPlate || cur.image);
-        const nxtImg = state.isExporting && nxt._exportOptimizedImage ? nxt._exportOptimizedImage : (nxt.backgroundPlate || nxt.image);
-        if (surf && !cur.videoElement && !nxt.videoElement && curImg && nxtImg) {
-          const curW = Number((curImg as any).width || (curImg as any).naturalWidth || cvW);
-          const curH = Number((curImg as any).height || (curImg as any).naturalHeight || cvH);
-          const nxtW = Number((nxtImg as any).width || (nxtImg as any).naturalWidth || cvW);
-          const nxtH = Number((nxtImg as any).height || (nxtImg as any).naturalHeight || cvH);
-          const { sx, sy, sWidth, sHeight } = utils.getKenBurnsTransforms(cur.cameraMovement, prog, curW, curH, cvW, cvH, cur.duration, cur.focalPoint);
-          const { sx: nsx, sy: nsy, sWidth: nsw, sHeight: nsh } = utils.getKenBurnsTransforms(nxt.cameraMovement, nxtProg, nxtW, nxtH, cvW, cvH, nxt.duration, nxt.focalPoint);
-          surf.ctx.setTransform(1, 0, 0, 1, 0, 0);
-          surf.ctx.globalCompositeOperation = 'source-over';
-          surf.ctx.clearRect(0, 0, bw, bh);
-          surf.ctx.globalAlpha = 1 - easedT;
-          surf.ctx.drawImage(curImg, sx, sy, sWidth, sHeight, 0, 0, bw, bh);
-          surf.ctx.globalAlpha = easedT;
-          surf.ctx.drawImage(nxtImg, nsx, nsy, nsw, nsh, 0, 0, bw, bh);
-          surf.ctx.globalAlpha = 1;
-          const blurAmount = velocityPeak * 12;
-          ctx.save();
-          ctx.filter = `blur(${blurAmount.toFixed(1)}px)`;
-          ctx.drawImage(surf.canvas, 0, 0, bw, bh, 0, 0, cvW, cvH);
-          ctx.restore();
-        } else {
-          drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - easedT, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-          drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, easedT, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        }
+    // --- SWIPE / WIPE / PUSH ---
+    if (tType.startsWith('swipe') || tType === 'push' || tType === 'wipe') {
+      ctx.save();
+      drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
+      ctx.restore();
 
-      // --- FADE TO BLACK ---
-      } else if (tType === 'fadetoblack') {
-        const midpoint = 0.5;
-        if (easedT < midpoint) {
-          drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - easedT / midpoint, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-        } else {
-          drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, (easedT - midpoint) / midpoint, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        }
-
-      // --- FADE TO WHITE ---
-      } else if (tType === 'fadetowhite') {
-        const midpoint = 0.5;
-        if (easedT < midpoint) {
-          const fo = easedT / midpoint;
-          drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - fo, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-          ctx.save();
-          ctx.globalAlpha = fo;
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, cvW, cvH);
-          ctx.restore();
-        } else {
-          const fi = (easedT - midpoint) / midpoint;
-          drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, fi, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-          ctx.save();
-          ctx.globalAlpha = 1 - fi;
-          ctx.fillStyle = 'white';
-          ctx.fillRect(0, 0, cvW, cvH);
-          ctx.restore();
-        }
-
-      // --- ZOOM DISSOLVE (Continuous Forward Optical Flow: 1.0 -> 1.24 out, 0.84 -> 1.0 in) ---
-      } else if (tType === 'zoomdissolve') {
-        const scaleOut = 1 + whipT * 0.24;
-        const scaleIn = 0.84 + whipT * 0.16;
-        ctx.save();
-        ctx.translate(cvW / 2, cvH / 2);
-        ctx.scale(scaleOut, scaleOut);
-        ctx.translate(-cvW / 2, -cvH / 2);
-        drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - whipT, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-        ctx.restore();
-
-        ctx.save();
-        ctx.translate(cvW / 2, cvH / 2);
-        ctx.scale(scaleIn, scaleIn);
-        ctx.translate(-cvW / 2, -cvH / 2);
-        drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, whipT, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        ctx.restore();
-
-      // --- SWIPE (with whip curve) ---
-      } else if (tType.startsWith('swipe')) {
-        ctx.save();
-        ctx.beginPath();
-        if (tType === 'swipeleft') {
-          ctx.rect(whipT * cvW, 0, cvW * (1 - whipT), cvH);
-        } else if (tType === 'swiperight') {
-          ctx.rect(0, 0, cvW * (1 - whipT), cvH);
-        } else if (tType === 'swipeup') {
-          ctx.rect(0, whipT * cvH, cvW, cvH * (1 - whipT));
-        } else {
-          ctx.rect(0, 0, cvW * (1 - whipT));
-        }
-        ctx.clip();
-        drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-        ctx.restore();
-
-        ctx.save();
-        ctx.beginPath();
-        if (tType === 'swipeleft') {
-          ctx.rect(0, 0, whipT * cvW, cvH);
-        } else if (tType === 'swiperight') {
-          ctx.rect(cvW * (1 - whipT), 0, cvW * whipT, cvH);
-        } else if (tType === 'swipeup') {
-          ctx.rect(0, 0, cvW, whipT * cvH);
-        } else {
-          ctx.rect(0, cvH * (1 - whipT), cvW, cvH * whipT);
-        }
-        ctx.clip();
-        drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        ctx.restore();
-
-      // --- WIPE ---
-      } else if (tType === 'wipe') {
-        drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-        ctx.save();
-        ctx.beginPath();
+      ctx.save();
+      ctx.beginPath();
+      if (tType === 'swipeleft' || tType === 'pushleft' || tType === 'wipeleft') {
+        ctx.rect(cvW * (1 - whipT), 0, cvW * whipT, cvH);
+      } else if (tType === 'swiperight' || tType === 'pushright' || tType === 'wiperight') {
         ctx.rect(0, 0, cvW * whipT, cvH);
-        ctx.clip();
-        drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        ctx.restore();
+      } else if (tType === 'swipeup' || tType === 'pushup' || tType === 'wipeup') {
+        ctx.rect(0, cvH * (1 - whipT), cvW, cvH * whipT);
+      } else if (tType === 'swipedown' || tType === 'pushdown' || tType === 'wipedown') {
+        ctx.rect(0, 0, cvW, cvH * whipT);
+      } else {
+        ctx.rect(cvW * (1 - whipT), 0, cvW * whipT, cvH);
+      }
+      ctx.clip();
+      drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
+      ctx.restore();
 
-      // --- PUSH (Whip-Pan Slide with Horizontal Velocity Stretch) ---
-      } else if (tType === 'push') {
-        const stretch = 1 + velocityPeak * 0.035;
-        ctx.save();
-        ctx.translate(-whipT * cvW, 0);
-        ctx.scale(stretch, 1);
-        drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
-        ctx.restore();
+    // --- ZOOM DISSOLVE ---
+    } else if (tType === 'zoomdissolve') {
+      const scaleOut = 1 + whipT * 0.24;
+      const scaleIn = 0.84 + whipT * 0.16;
+      ctx.save();
+      ctx.translate(cvW / 2, cvH / 2);
+      ctx.scale(scaleOut, scaleOut);
+      ctx.translate(-cvW / 2, -cvH / 2);
+      drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - whipT, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
+      ctx.restore();
 
-        ctx.save();
-        ctx.translate(cvW * (1 - whipT), 0);
-        ctx.scale(stretch, 1);
-        drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
-        ctx.restore();
+      ctx.save();
+      ctx.translate(cvW / 2, cvH / 2);
+      ctx.scale(scaleIn, scaleIn);
+      ctx.translate(-cvW / 2, -cvH / 2);
+      drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, whipT, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
+      ctx.restore();
 
       // --- FLASH CUT (Exponential Warm Film Flash) ---
       } else if (tType === 'flash' || tType === 'whitepop') {
@@ -2853,12 +2748,12 @@ function drawVideoFrameImpl(
         if (cur.displayMode === 'pip_overlay' && transTHVideo) curTHMode = 'full';
         if (nxt?.displayMode === 'pip_overlay' && transTHVideo) nxtTHMode = 'full';
         if (transTHVideo && (curTHMode.startsWith('pip') || nxtTHMode.startsWith('pip'))) {
-          const activeClip = curTHMode.startsWith('pip') ? cur : nxt;
+          const activeClip = (curTHMode.startsWith('pip') ? cur : nxt) || cur;
           drawTalkingHeadPiP(ctx, transTHVideo, activeClip, cvW, cvH, time, targetCanvas);
         }
 
         if (cur.overlayImage || cur.overlayVideoElement || (nxt && (nxt.overlayImage || nxt.overlayVideoElement))) {
-          const activeOverlayClip = (cur.overlayImage || cur.overlayVideoElement) ? cur : nxt;
+          const activeOverlayClip = ((cur.overlayImage || cur.overlayVideoElement) ? cur : nxt) || cur;
           drawCornerCalloutOverlay(ctx, activeOverlayClip, cvW, cvH, prog);
         }
 
@@ -2871,8 +2766,7 @@ function drawVideoFrameImpl(
           drawPopUpBrollPipOverlay(ctx, pipC, cvW, cvH, time, targetCanvas);
         }
       }
-    }
-  } else {
+    } else {
     const thVideo = getClipVideoDrawable(cur, 'talkingHead') || getClipVideoDrawable(cur, 'secondary') || cur.secondaryImage || (cur.videoElement && cur.image ? getClipVideoDrawable(cur, 'primary') : null) || state.uploadedVideoElement;
     let thMode = cur.talkingHeadMode || (thVideo ? (state.talkingHeadDefaultMode || 'none') : 'none');
 

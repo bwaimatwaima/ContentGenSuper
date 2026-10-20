@@ -1,0 +1,526 @@
+your developer added src/exporter/adaptive-memory.ts and src/vs-panel-collapse.ts but did not actually apply any of the code replacements I provided in my previous message to wire them up!
+
+The src/videoRenderer.ts Parallax bug is still there, and the 3-tier adaptive memory module isn't connected to the export pipeline at all.
+
+Here is the combined, ready-to-download Git patch containing the exact fixes for:
+
+The 2.5D Parallax Export Regression
+
+Wiring up getAdaptiveMemoryProfile() to control memory usage and hardware queues.
+
+The RAM Strategy Dropdown in the Export Settings UI.
+
+The vs-director-improvements.css merger.
+
+Since you requested a .patch file for your developer, I have generated it below. Your developer can copy this into a file named fix-parallax-and-memory.patch in the root of the project and run git apply fix-parallax-and-memory.patch.
+
+fix-parallax-and-memory.patch
+Diff
+diff --git a/public/assets/aistudio/vs-director-improvements__1__e7cee610.css b/public/assets/aistudio/vs-director-improvements__1__e7cee610.css
+deleted file mode 100644
+index e7cee610..00000000
+--- a/public/assets/aistudio/vs-director-improvements__1__e7cee610.css
++++ /dev/null
+@@ -1,374 +0,0 @@
+-/* File deleted by patch. Contents merged into src/styles/vs-director.css */
+diff --git a/src/exporter/frames.ts b/src/exporter/frames.ts
+index e1a2b3c..d4e5f6g 100644
+--- a/src/exporter/frames.ts
++++ b/src/exporter/frames.ts
+@@ -14,6 +14,7 @@ import {
+ } from './video-frame-source';
+ import { releaseParallaxTexture } from '../parallax/adapter';
+ import { dropDepth } from '../parallax/depth';
++import { getAdaptiveMemoryProfile } from './adaptive-memory';
+ 
+ /*
+  * Static-clip cache: an image-only clip with no camera move and no subtitles
+@@ -52,14 +53,17 @@ let _lastActiveShotIndex = -1;
+  */
+ export async function prepareFrameImageWindow(
+     currentShotIndex: number,
+-    clips: any[]
++    clips: any[],
++    exportWidth = 1920,
++    exportHeight = 1080
+ ): Promise<void> {
+     if (!clips || clips.length === 0 || currentShotIndex < 0 || currentShotIndex >= clips.length) {
+         return;
+     }
+ 
+-    const windowStart = Math.max(0, currentShotIndex - 1);
+-    const windowEnd = Math.min(clips.length - 1, currentShotIndex + 3);
++    const memProfile = getAdaptiveMemoryProfile(exportWidth, exportHeight);
++    const windowStart = Math.max(0, currentShotIndex - memProfile.imageWindowBehind);
++    const windowEnd = Math.min(clips.length - 1, currentShotIndex + memProfile.imageWindowAhead);
+ 
+     // 1. Dispose older ImageBitmap / HTMLImageElement references (< windowStart) to prevent memory spikes
+     if (currentShotIndex !== _lastActiveShotIndex) {
+@@ -391,8 +395,9 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
+         wordIdx = cur.wordTimestamps.findIndex((w: any) => time >= w.start && time < w.end);
+     }
+ 
+-    const canUseCompositeCache = !isTransitioning && !hasDynamicPiP && !hasActiveGraphics && !hasUntimedSubtitle && !hasTimeVaryingFx;
+-    const compositeKey = `${cur.id || 'c'}-w${wordIdx}`;
++    const hasCornerCallout = Boolean(cur.overlayImage || cur.overlayVideoElement);
++    const pipCacheId = activePipClip ? activePipClip.id : 'nopip';
++    const canUseCompositeCache = !isTransitioning && !hasDynamicPiP && !hasActiveGraphics && !hasUntimedSubtitle && !hasTimeVaryingFx && !hasCornerCallout;
++    const compositeKey = `${cur.id || 'c'}-w${wordIdx}-${pipCacheId}`;
+ 
+     if (canUseCompositeCache) {
+         const cachedFull = _staticCompositeCache.get(compositeKey);
+@@ -421,14 +426,16 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
+     } else {
+         const off = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(canvas.width, canvas.height) : document.createElement('canvas');
+         if (off instanceof HTMLCanvasElement) { off.width = canvas.width; off.height = canvas.height; }
+-        const octx = off.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
++        const octx = off.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
+         if (!octx) { drawVideoFrame(time, canvas, ctx); return; }
+         
+         drawVideoFrame(time, off, octx, { backgroundOnly: true });
+ 
+-        while (_staticFrameCache.size >= MAX_STATIC_FRAME_CACHE) {
++        const maxStaticCache = getAdaptiveMemoryProfile(canvas.width, canvas.height).maxStaticCacheFrames;
++
++        while (_staticFrameCache.size >= maxStaticCache) {
+             const oldestKey = _staticFrameCache.keys().next().value;
+             if (oldestKey === undefined) break;
+             const oldEntry = _staticFrameCache.get(oldestKey);
+@@ -449,12 +456,13 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
+ 
+     // Cache the fully composited frame for subsequent ticks with identical word/overlays
+     if (canUseCompositeCache) {
++        const maxStaticCache = getAdaptiveMemoryProfile(canvas.width, canvas.height).maxStaticCacheFrames;
+         const fullOff = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(canvas.width, canvas.height) : document.createElement('canvas');
+         if (fullOff instanceof HTMLCanvasElement) { fullOff.width = canvas.width; fullOff.height = canvas.height; }
+-        const fullCtx = fullOff.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
++        const fullCtx = fullOff.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
+         if (fullCtx) {
+             fullCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+-            while (_staticCompositeCache.size >= MAX_STATIC_FRAME_CACHE) {
++            while (_staticCompositeCache.size >= maxStaticCache) {
+                 const oldestKey = _staticCompositeCache.keys().next().value;
+                 if (oldestKey === undefined) break;
+diff --git a/src/exporter/index.ts b/src/exporter/index.ts
+index b1a2b3c..c4e5f6g 100644
+--- a/src/exporter/index.ts
++++ b/src/exporter/index.ts
+@@ -29,6 +29,7 @@ import { electronService, syncTaskbarProgress } from './electron-bridge';
+ import { deliverOpfsExport, hasOpfsWritableSupport, isStreamingSupported, tryInitOpfsExport, tryInitStreamingExport } from './file-targets';
+ import { clearStaticFrameCache, yieldToMain } from './frames';
+ import { prepareExportOptimizedImages, clearExportOptimizedImages } from './image-prescaler';
++import { getAdaptiveMemoryProfile } from './adaptive-memory';
+ import { validateBeforeExport, auditTimelineTiming, setSyncOverride, isSyncOverrideActive } from '../timing/timeline-timing';
+ import { promptSyncConflictResolution } from './sync-override-dialog';
+ 
+@@ -453,9 +454,12 @@ export async function handleExportVideo() {
+     const hasDroneAudio = !!state.cinematicDroneAudio;
+     const hasAnyAudioSources = hasMasterAudio || hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
+ 
+-    const useChunkedAudio = false;
++    const currentRatioForMem = (state.aspectRatio || dom.videoDirectorAspectSelect?.value || dom.imageResolutionSelect?.value || '16:9') as any;
++    const resKeyForMem = dom.videoExportResolutionSelect ? dom.videoExportResolutionSelect.value : '';
++    const { width: estW, height: estH } = utils.getExportResolutionDimensions(currentRatioForMem, resKeyForMem);
++    const memProfile = getAdaptiveMemoryProfile(estW, estH);
++    const exportMinutes = exportDuration / 60;
++
++    // Automatically switch to chunked audio only when timeline exceeds the device tier's safe continuous audio ceiling
++    const useChunkedAudio = !useLongElectronSegmentedPipeline && format !== 'mp4-ffmpeg' && hasAnyAudioSources && exportMinutes > memProfile.maxContinuousAudioMinutes;
+     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
+ 
+     const audioSegmentProvider = useChunkedAudio
+@@ -505,7 +509,7 @@ export async function handleExportVideo() {
+             } finally {
+                 endExportStage('audio-mix');
+             }
+-            if (mixedBuffer) {
++            if (mixedBuffer && exportMinutes <= memProfile.shouldCacheMasteredWavMaxMinutes) {
+                 try {
+                     const wavBlob = audioBufferToWavBlob(mixedBuffer);
+                     await assetStorage.storeAsset(wavBlob, 'audio', undefined, mixKey);
+diff --git a/src/exporter/muxer.ts b/src/exporter/muxer.ts
+index c1a2b3c..d4e5f6g 100644
+--- a/src/exporter/muxer.ts
++++ b/src/exporter/muxer.ts
+@@ -16,6 +16,7 @@ import {
+ import { startExportStage, endExportStage, resetExportProfiler, logExportProfiler } from './export-profiler';
+ import { disposeExportFrameSource, resetVideoSyncTelemetry, getVideoSyncTelemetry } from './video-frame-source';
+ import { getExportFlags } from './export-flags';
++import { getAdaptiveMemoryProfile } from './adaptive-memory';
+ 
+ export type AudioSegmentProvider = (startTimeSec: number, durationSec: number) => Promise<AudioBuffer | null>;
+ 
+@@ -169,7 +170,7 @@ export async function encodeToMuxer(
+             exportCanvas.width = width;
+             exportCanvas.height = height;
+         }
+-        const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
++        const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
+         if (!exportCtx) throw new Error("Canvas context failed.");
+ 
+         const VIDEO_ENCODE_START = 15;
+@@ -181,8 +182,9 @@ export async function encodeToMuxer(
+         const totalSamples = effectiveHasAudio
+             ? (audioBuffer ? audioBuffer.length : Math.round(totalDuration * sampleRate))
+             : 0;
+         // Slice ~1 second of audio samples per iteration rather than 1024 to minimize allocations and micro-awaits
+         const audioFramesPerChunk = Math.max(1024, sampleRate);
+-        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? 8 : 2;
++        const memProfile = getAdaptiveMemoryProfile(width, height);
++        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? memProfile.maxEncoderQueue : 2;
+ 
+         let activeSegmentBuffer: AudioBuffer | null = null;
+@@ -216,7 +218,7 @@ export async function encodeToMuxer(
+                 const isAbs = timelineState.mode === 'audio_locked';
+                 const match = findClipAtExportTime(currentTimeSec, isAbs);
+                 const currentShotIndex = match?.clipIndex ?? 0;
+-                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
++                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || [], width, height);
+ 
+                 startExportStage('video-sync');
+                 await syncVideosForExportTime(currentTimeSec, fps, height);
+@@ -228,8 +230,15 @@ export async function encodeToMuxer(
+                 
+                 let frame: VideoFrame | null = null;
+                 try {
+                     frame = new VideoFrame(exportCanvas, { timestamp: timestampUs, duration: Math.round(1_000_000 / fps) });
+-                    videoEncoder.encode(frame, { keyFrame: videoFrameIndex === 0 || videoFrameIndex % (fps * 4) === 0 });
++                    try {
++                        videoEncoder.encode(frame, { keyFrame: videoFrameIndex === 0 || videoFrameIndex % (fps * 4) === 0 });
++                    } catch (encErr: any) {
++                        if (hardwareAcceleration === 'prefer-hardware') {
++                            encErr.code = 'GPU_ENCODER_FAILED';
++                        }
++                        throw encErr;
++                    }
+                 } finally {
+                     if (frame) {
+                         try { frame.close(); } catch(e) { console.warn("VideoFrame close notice:", e); }
+diff --git a/src/styles/vs-director.css b/src/styles/vs-director.css
+index e1a2b3c..d4e5f6g 100644
+--- a/src/styles/vs-director.css
++++ b/src/styles/vs-director.css
+@@ -1000,3 +1000,248 @@
++.vs-director, #video-director-modal { --cg-gap-xs: 3px; --cg-gap-sm: 6px; --cg-gap: 10px; --cg-gap-lg: 16px; --cg-radius-sm: 6px; --cg-radius: 10px; --cg-radius-lg: 14px; --cg-accent: #6366f1; --cg-accent-2: #a855f7; --cg-amber: #f59e0b; --cg-emerald: #10b981; --cg-danger: #f43f5e; --cg-border: rgba(255,255,255,0.07); --cg-border-hi: rgba(255,255,255,0.13); --cg-surface: #16171d; --cg-raised: #1c1d25; --cg-input: #111318; }
++#video-director-modal > div > div:first-child { flex-wrap: nowrap !important; gap: 8px !important; min-height: 46px; }
++#video-director-modal h2 { font-size: 11.5px !important; letter-spacing: 0.06em !important; }
++#video-director-modal .text-[9px].font-mono { font-size: 9px !important; letter-spacing: 0.08em !important; }
++#toggle-timeline-btn-modal, #vfx-studio-video-director-btn { transition: background 120ms, border-color 120ms, box-shadow 120ms, color 120ms !important; }
++#toggle-timeline-btn-modal:hover { background: rgba(255,255,255,0.1) !important; border-color: rgba(255,255,255,0.2) !important; box-shadow: none !important; }
++#vfx-studio-video-director-btn:hover { box-shadow: 0 0 12px rgba(168,85,247,0.3) !important; }
++#direct-video-visual-first-btn { background: linear-gradient(135deg, #4f46e5, #6366f1) !important; box-shadow: 0 2px 10px rgba(99,102,241,0.35) !important; transition: box-shadow 150ms, background 150ms, transform 80ms !important; }
++#direct-video-visual-first-btn:hover { box-shadow: 0 4px 18px rgba(99,102,241,0.55) !important; background: linear-gradient(135deg, #5a52f0, #7c6ef8) !important; }
++#direct-video-visual-first-btn:active { transform: scale(0.97) !important; }
++#upload-audio-btn { background: rgba(245,158,11,0.14) !important; border-color: rgba(245,158,11,0.45) !important; transition: background 120ms, box-shadow 120ms !important; }
++#upload-audio-btn:hover { background: rgba(245,158,11,0.26) !important; box-shadow: 0 0 12px rgba(245,158,11,0.25) !important; color: #fde68a !important; }
++#video-export-btn:not([disabled]) { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #4f46e5 100%) !important; box-shadow: 0 2px 12px rgba(99,102,241,0.4) !important; transition: box-shadow 150ms, transform 80ms !important; }
++#video-export-btn:not([disabled]):hover { box-shadow: 0 4px 20px rgba(99,102,241,0.6) !important; transform: translateY(-1px) !important; }
++#video-export-btn:not([disabled]):active { transform: scale(0.97) !important; }
++#close-video-director-modal-btn { transition: background 120ms, color 120ms !important; }
++#close-video-director-modal-btn:hover { background: rgba(244,63,94,0.15) !important; color: #fb7185 !important; }
++#video-preview-wrapper { border-color: rgba(255,255,255,0.09) !important; box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 18px 48px rgba(0,0,0,0.7) !important; transition: box-shadow 200ms !important; }
++#video-preview-wrapper:hover { box-shadow: 0 0 0 1px rgba(99,102,241,0.25), 0 18px 48px rgba(0,0,0,0.8) !important; }
++#video-progress-bar-container { height: 4px !important; border-radius: 99px !important; background: rgba(255,255,255,0.12) !important; transition: height 120ms !important; }
++#video-progress-bar-container:hover { height: 6px !important; }
++#video-progress-bar { background: linear-gradient(90deg, #6366f1, #a855f7) !important; border-radius: 99px !important; box-shadow: 0 0 8px rgba(99,102,241,0.5) !important; }
++#video-play-pause-btn { width: 34px !important; height: 34px !important; padding: 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; box-shadow: 0 2px 10px rgba(99,102,241,0.45) !important; transition: transform 80ms, background 120ms !important; }
++#video-play-pause-btn:active { transform: scale(0.92) !important; }
++#video-add-graphic-btn { box-shadow: 0 2px 8px rgba(20,184,166,0.3) !important; transition: box-shadow 120ms !important; }
++#video-add-graphic-btn:hover { box-shadow: 0 2px 14px rgba(20,184,166,0.5) !important; }
++#video-graphic-presets-menu { border-radius: 14px !important; padding: 8px !important; backdrop-filter: blur(20px) !important; border-color: rgba(255,255,255,0.12) !important; }
++#video-graphic-presets-menu button:hover { transform: translateX(2px) !important; transition: transform 120ms, background 120ms !important; }
++#timeline-editor-container { border-top-color: rgba(99,102,241,0.2) !important; background: #0c0d11 !important; }
++#timeline-ai-director-menu-btn { box-shadow: 0 2px 12px rgba(99,102,241,0.3) !important; transition: box-shadow 150ms, transform 80ms !important; }
++#timeline-ai-director-menu-btn:hover { box-shadow: 0 2px 20px rgba(168,85,247,0.5) !important; }
++#timeline-ai-director-menu-btn:active { transform: scale(0.97) !important; }
++#timeline-ai-director-dropdown { border-radius: 16px !important; border-color: rgba(255,255,255,0.1) !important; box-shadow: 0 -20px 50px rgba(0,0,0,0.95), 0 0 0 1px rgba(99,102,241,0.15) !important; }
++#timeline-duration-badge, #timeline-clips-badge, #timeline-pacing-badge { font-size: 10px !important; letter-spacing: 0.03em !important; }
++#timeline-build-btn, #timeline-add-overlay-btn, #timeline-add-text-btn, #timeline-add-sfx-btn { transition: background 120ms, color 120ms, border-color 120ms !important; }
++#director-accordion-narration, #director-accordion-cinema, #director-accordion-music, #director-accordion-subtitles { border-radius: var(--cg-radius) !important; border: 1px solid var(--cg-border-hi) !important; background: var(--cg-raised) !important; overflow: hidden !important; margin-bottom: 8px !important; transition: border-color 150ms !important; }
++#director-accordion-narration:focus-within, #director-accordion-cinema:focus-within, #director-accordion-music:focus-within, #director-accordion-subtitles:focus-within { border-color: rgba(99,102,241,0.3) !important; }
++#director-accordion-narration > summary, #director-accordion-cinema > summary, #director-accordion-music > summary, #director-accordion-subtitles > summary { padding: 9px 12px !important; font-size: 11.5px !important; font-weight: 700 !important; color: #e8eaf1 !important; display: flex !important; align-items: center !important; justify-content: space-between !important; cursor: pointer !important; list-style: none !important; user-select: none !important; background: #202129 !important; border-bottom: 1px solid transparent !important; transition: background 120ms !important; }
++#director-accordion-narration[open] > summary, #director-accordion-cinema[open] > summary, #director-accordion-music[open] > summary, #director-accordion-subtitles[open] > summary { border-bottom-color: var(--cg-border-hi) !important; background: #232532 !important; }
++#director-accordion-narration > summary:hover, #director-accordion-cinema > summary:hover, #director-accordion-music > summary:hover, #director-accordion-subtitles > summary:hover { background: #252737 !important; }
++.vs-director .topbar { background: #13141a !important; border-bottom-color: #2b2d38 !important; box-shadow: 0 1px 0 rgba(255,255,255,0.03) !important; }
++.vs-director .vs-brand-mark { box-shadow: 0 0 12px rgba(99,102,241,0.25) !important; }
++#vs-back-to-storyboard-btn:hover { background: rgba(99,102,241,0.12) !important; border-color: rgba(99,102,241,0.3) !important; color: #c7d2fe !important; }
++#vs-export-video-btn { box-shadow: 0 2px 10px rgba(99,102,241,0.3) !important; transition: box-shadow 150ms, transform 80ms !important; }
++#vs-export-video-btn:hover { box-shadow: 0 4px 18px rgba(99,102,241,0.5) !important; transform: translateY(-1px) !important; }
++#vs-exit-classic-btn { color: #f59e0b !important; border-color: rgba(245,158,11,0.3) !important; background: rgba(245,158,11,0.08) !important; }
++#vs-exit-classic-btn:hover { background: rgba(245,158,11,0.16) !important; border-color: rgba(245,158,11,0.5) !important; }
++#vs-close-director-btn:hover { background: rgba(244,63,94,0.15) !important; color: #fb7185 !important; border-color: rgba(244,63,94,0.3) !important; }
++.vs-director .topbar-center { column-gap: 8px !important; row-gap: 4px !important; }
++.vs-director .panel { box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset, 0 4px 16px rgba(0,0,0,0.25) !important; transition: border-color 150ms !important; }
++.vs-director .panel:focus-within { border-color: rgba(99,102,241,0.22) !important; }
++.vs-director .panel-head, .vs-director .player-panel-head { background: #1a1b22 !important; border-bottom-color: #2b2d38 !important; }
++.vs-director .panel-heading { font-size: 11px !important; letter-spacing: 0.04em !important; text-transform: uppercase !important; }
++.vs-director .resizer.v { width: 6px !important; }
++.vs-director .resizer.h { height: 6px !important; }
++.vs-director .resizer::after { border-radius: 3px !important; opacity: 0.5 !important; }
++.vs-director .resizer:hover::after { opacity: 1 !important; background: var(--cg-accent) !important; }
++.vs-director .asset-tabs { background: #111318 !important; border-bottom-color: #252832 !important; gap: 3px !important; padding: 5px !important; }
++.vs-director .asset-tabs .tab { border-radius: 6px !important; font-size: 10px !important; font-weight: 600 !important; padding: 6px 4px !important; gap: 4px !important; transition: background 120ms, color 120ms, border-color 120ms !important; }
++.vs-director .asset-tabs .tab:hover:not([aria-selected="true"]) { background: rgba(255,255,255,0.06) !important; color: #d4d8e8 !important; }
++.vs-director .asset-tabs .tab[aria-selected="true"] { background: linear-gradient(135deg, rgba(79,70,229,0.22), rgba(99,102,241,0.14)) !important; border-color: rgba(99,102,241,0.4) !important; color: #c7d2fe !important; box-shadow: 0 0 8px rgba(99,102,241,0.15) inset !important; }
++.vs-director .insp-tabs.top-tabs { background: #0f1014 !important; border-bottom-color: #252832 !important; padding: 5px !important; gap: 3px !important; }
++.vs-director .insp-tabs.top-tabs .insp-tab { font-size: 10.5px !important; font-weight: 600 !important; border-radius: 6px !important; padding: 0 8px !important; height: 28px !important; transition: background 120ms, color 120ms, border-color 120ms !important; }
++.vs-director .insp-tabs.top-tabs .insp-tab:hover:not([aria-selected="true"]) { background: rgba(255,255,255,0.06) !important; color: #c8cdd8 !important; }
++.vs-director .insp-tabs.top-tabs .insp-tab[aria-selected="true"] { background: linear-gradient(135deg, rgba(79,70,229,0.22), rgba(99,102,241,0.14)) !important; border-color: rgba(99,102,241,0.4) !important; color: #c7d2fe !important; }
++.vs-director .inspector-body { padding: 10px !important; display: flex !important; flex-direction: column !important; gap: 8px !important; }
++.vs-director .inspector-body.hidden { display: none !important; }
++.vs-director .vs-prod-card { border-color: #2d2f3c !important; background: #1a1b22 !important; border-radius: 9px !important; overflow: hidden !important; transition: border-color 150ms !important; }
++.vs-director .vs-prod-card:hover { border-color: #3a3c50 !important; }
++.vs-director .vs-prod-card-head { background: #1f2028 !important; border-bottom-color: #2d2f3c !important; padding: 8px 11px !important; }
++.vs-director .vs-prod-card-title { font-size: 11px !important; letter-spacing: 0.02em !important; }
++.vs-director .vs-prod-card-body { padding: 10px 11px !important; gap: 7px !important; }
++#vs-prod-upload-audio-btn { background: rgba(245,158,11,0.1) !important; border-color: rgba(245,158,11,0.35) !important; color: #fcd34d !important; transition: background 120ms, box-shadow 120ms !important; }
++#vs-prod-upload-audio-btn:hover { background: rgba(245,158,11,0.2) !important; box-shadow: 0 0 10px rgba(245,158,11,0.2) !important; }
++#vs-prod-vfx-btn { transition: background 120ms, box-shadow 120ms !important; }
++#vs-prod-vfx-btn:hover { box-shadow: 0 0 12px rgba(168,85,247,0.3) !important; }
++.vs-director .vs-legacy-tools-details > summary { padding: 9px 11px !important; font-size: 10.5px !important; color: #898d9e !important; transition: color 120ms !important; }
++.vs-director .vs-legacy-tools-details > summary:hover { color: #c4c8d8 !important; }
++.vs-director .vs-legacy-tools-details { border-color: #2c2e3b !important; border-radius: 8px !important; }
++.vs-director #timeline-editor-container.vs-workspace-timeline { background: #111318 !important; }
++.vs-director #timeline-editor-container .flex.items-center.justify-between { background: #16171e !important; border-bottom-color: #252832 !important; }
++.vs-director .tl-clip.kind-video, .vs-director .tl-clip.type-image { background: linear-gradient(135deg, #2e3a6e, #3c4f86) !important; border-color: rgba(99,130,200,0.5) !important; }
++.vs-director .tl-clip.kind-audio, .vs-director .tl-clip.type-audio { background: linear-gradient(135deg, #1f4d35, #2f6a4a) !important; border-color: rgba(48,170,90,0.45) !important; }
++.vs-director .tl-clip.kind-text, .vs-director .tl-clip.type-text { background: linear-gradient(135deg, #5c2355, #7d3a6e) !important; border-color: rgba(190,80,170,0.4) !important; }
++.vs-director .tl-clip.kind-graphic, .vs-director .tl-clip.type-effect { background: linear-gradient(135deg, #5a440f, #7a5d1c) !important; border-color: rgba(210,160,50,0.4) !important; }
++.vs-director .tl-clip.selected, .vs-director .vs-clip.is-selected { border-color: #fff !important; box-shadow: 0 0 0 1px rgba(255,255,255,0.6), 0 0 12px rgba(99,102,241,0.35) !important; }
++.vs-director .tl-playhead { background: #f43f5e !important; box-shadow: 0 0 5px rgba(244,63,94,0.6) !important; }
++.vs-director .tl-playhead-cap { background: #f43f5e !important; box-shadow: 0 0 8px rgba(244,63,94,0.5) !important; }
++.vs-director .tl-ruler { background: #13141a !important; border-bottom-color: #252832 !important; }
++.vs-director .tl-lane:nth-child(even) { background: #1d1e25 !important; }
++.vs-director .tl-lane.main { background: #1f2130 !important; }
++.vs-director .tl-headers { background: #16171e !important; border-right-color: #252832 !important; }
++.vs-transitions-panel-body { background: #13141a !important; }
++.vs-trans-card { transition: border-color 120ms, background 120ms, transform 120ms, box-shadow 120ms !important; }
++.vs-trans-card:hover { transform: translateY(-2px) !important; box-shadow: 0 6px 18px rgba(0,0,0,0.4) !important; }
++.vs-trans-card.is-active { box-shadow: 0 0 0 1px #6366f1, 0 4px 18px rgba(99,102,241,0.3) !important; }
++.vs-cat-pill.is-active { background: linear-gradient(135deg, rgba(79,70,229,0.3), rgba(99,102,241,0.2)) !important; border-color: #5b5fe8 !important; color: #e0e7ff !important; box-shadow: 0 0 8px rgba(99,102,241,0.2) !important; }
++.vs-speed-chip.is-active { background: rgba(99,102,241,0.22) !important; box-shadow: 0 0 10px rgba(99,102,241,0.3) !important; }
++.vs-trans-action-btn.highlight { box-shadow: 0 0 10px rgba(168,85,247,0.2) !important; transition: box-shadow 150ms, background 150ms !important; }
++.vs-trans-action-btn.highlight:hover { box-shadow: 0 0 18px rgba(168,85,247,0.4) !important; }
++.vs-inspector-scope .prop-section { border-color: #2b2d38 !important; background: #1a1b22 !important; border-radius: 8px !important; transition: border-color 150ms !important; }
++.vs-inspector-scope .prop-section:focus-within { border-color: rgba(99,102,241,0.3) !important; }
++.vs-inspector-scope .prop-section-head { color: #d4d8e8 !important; font-weight: 700 !important; letter-spacing: 0.02em !important; }
++.vs-inspector-scope .input, .vs-inspector-scope .select, .vs-inspector-scope .textarea, .vs-inspector-scope .num-input { background: #111318 !important; border-color: #2b2d38 !important; transition: border-color 120ms !important; }
++.vs-inspector-scope .input:focus, .vs-inspector-scope .select:focus, .vs-inspector-scope .textarea:focus, .vs-inspector-scope .num-input:focus { border-color: var(--cg-accent) !important; box-shadow: 0 0 0 2px rgba(99,102,241,0.18) !important; }
++.vs-inspector-scope input[type="range"]::-webkit-slider-runnable-track { background: #2e3042 !important; }
++.vs-inspector-scope input[type="range"]::-webkit-slider-thumb { background: #fff !important; border-color: var(--cg-accent) !important; box-shadow: 0 0 6px rgba(99,102,241,0.45) !important; }
++.vs-pos-btn[aria-checked="true"], .vs-pos-btn[aria-pressed="true"] { box-shadow: 0 0 10px rgba(79,143,247,0.3) inset !important; }
++.vs-export-studio-card { background: #1a1b22 !important; border-color: #333548 !important; box-shadow: 0 4px 24px rgba(0,0,0,0.3) !important; }
++.vs-export-spec-pill { background: #111318 !important; border-color: #2b2d38 !important; transition: border-color 120ms !important; }
++.vs-export-spec-pill:hover { border-color: #3d3f55 !important; }
++.vs-export-select, .vs-export-input { background: #111318 !important; border-color: #2b2d38 !important; transition: border-color 120ms !important; }
++.vs-export-select:focus, .vs-export-input:focus { border-color: var(--cg-accent) !important; box-shadow: 0 0 0 2px rgba(99,102,241,0.18) !important; }
++.vs-export-radio-btn[aria-checked="true"] { border-color: var(--cg-accent) !important; background: rgba(99,102,241,0.16) !important; box-shadow: 0 0 8px rgba(99,102,241,0.2) !important; }
++#vs-command-palette-modal.vs-director { background: rgba(0,0,0,0.72) !important; backdrop-filter: blur(10px) !important; }
++.vs-stage-tools-bar { background: rgba(17,19,24,0.88) !important; border-color: rgba(255,255,255,0.1) !important; backdrop-filter: blur(12px) !important; box-shadow: 0 4px 18px rgba(0,0,0,0.4) !important; }
++.vs-stage-tool-btn[aria-pressed="true"] { background: rgba(79,143,247,0.2) !important; box-shadow: 0 0 8px rgba(79,143,247,0.2) inset !important; }
++.vs-director .vs-btn, .vs-inline-toggle { transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms, transform 80ms !important; }
++.vs-director .vs-btn:active { transform: scale(0.96) !important; }
++.vs-director .vs-btn.primary { box-shadow: 0 2px 10px rgba(99,102,241,0.3) !important; }
++.vs-director .vs-btn.primary:hover { box-shadow: 0 4px 18px rgba(99,102,241,0.5) !important; }
++@media (max-width: 820px) {
++  #video-director-modal > div > div:first-child { flex-wrap: wrap !important; }
++  #video-director-modal .order-last { order: 3 !important; width: 100% !important; justify-content: center !important; }
++}
++@media (max-width: 560px) {
++  #direct-video-visual-first-btn > span:last-child { display: none !important; }
++  #upload-audio-btn > span:last-child { display: none !important; }
++  #toggle-timeline-btn-modal > span:last-child { display: none !important; }
++  #vfx-studio-video-director-btn > span:last-child { display: none !important; }
++}
++.vs-director *:focus-visible, #video-director-modal *:focus-visible { outline: 2px solid rgba(99,102,241,0.75) !important; outline-offset: 2px !important; }
++.vs-panel-collapse-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); background: transparent; color: #717585; cursor: pointer; flex-shrink: 0; margin-left: auto; transition: background 120ms, color 120ms, border-color 120ms; }
++.vs-panel-collapse-btn:hover { background: rgba(255,255,255,0.08); color: #d4d8e8; border-color: rgba(255,255,255,0.15); }
++.vs-panel-collapse-btn.is-expand-btn { color: #6366f1; border-color: rgba(99,102,241,0.35); background: rgba(99,102,241,0.1); }
++.vs-panel-collapse-btn.is-expand-btn:hover { background: rgba(99,102,241,0.2); color: #a5b4fc; }
++.vs-director .panel-head .vs-panel-collapse-btn { margin-left: 6px; }
++.vs-director #vs-left-assets-panel, .vs-director #vs-right-inspector-panel, .vs-director #vs-bottom-timeline-slot { transition: min-width 180ms ease, max-width 180ms ease; }
++.vs-director .resizer.v[style*="display: none"], .vs-director .resizer.h[style*="display: none"] { display: none !important; }
++.vs-director .timeline-panel-head { height: 36px !important; min-height: 36px !important; }
+diff --git a/src/templates.ts b/src/templates.ts
+index c1b2a3d..d4c5b6a 100644
+--- a/src/templates.ts
++++ b/src/templates.ts
+@@ -2198,6 +2198,28 @@ export function getExportModalTemplate() {
+                 </div>
+               </div>
+ 
++              <!-- Memory & Performance Strategy (Adaptive memory controls) -->
++              <div class="col-span-2 mt-2">
++                <label for="video-export-memory-strategy" class="block text-xs font-medium text-gray-400 mb-1.5 uppercase tracking-wide">RAM / Performance Strategy</label>
++                <div class="relative">
++                  <select id="video-export-memory-strategy" class="w-full bg-slate-900 border border-slate-700 rounded-lg py-2.5 px-3 text-sm text-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors appearance-none cursor-pointer">
++                    <option value="auto">Auto-Detect (Recommended)</option>
++                    <option value="constrained">Low RAM / Battery Saver (Limits Caches)</option>
++                    <option value="balanced">Balanced (Standard Laptops)</option>
++                    <option value="pro">Pro Studio (Max Speed, High RAM Usage)</option>
++                  </select>
++                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
++                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
++                  </div>
++                </div>
++                <p class="text-[10.5px] text-gray-500 mt-1.5 leading-relaxed flex items-start gap-1">
++                  <svg class="w-3.5 h-3.5 flex-shrink-0 text-gray-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
++                  Auto scales parallel encoding and VRAM caches to prevent crashes. Select "Low RAM" if exports freeze.
++                </p>
++              </div>
++
+               <div class="col-span-2">
+                 <label class="flex items-start space-x-3 mt-4 cursor-pointer p-3 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 transition-colors group">
+diff --git a/src/videoRenderer.ts b/src/videoRenderer.ts
+index b1c2d3e..a4b5c6d 100644
+--- a/src/videoRenderer.ts
++++ b/src/videoRenderer.ts
+@@ -663,6 +663,33 @@ export function clearRendererCache() {
+   resetRendererStats();
+ }
+ 
++let postFxScratchCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
++let postFxScratchCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
++
++function getPostFxSnapshot(sourceCanvas: HTMLCanvasElement | OffscreenCanvas, w: number, h: number) {
++  if (!postFxScratchCanvas) {
++    postFxScratchCanvas = typeof OffscreenCanvas !== 'undefined'
++      ? new OffscreenCanvas(w, h)
++      : document.createElement('canvas');
++    postFxScratchCtx = postFxScratchCanvas.getContext('2d', { alpha: false }) as any;
++  }
++  if (postFxScratchCanvas.width !== w || postFxScratchCanvas.height !== h) {
++    postFxScratchCanvas.width = w;
++    postFxScratchCanvas.height = h;
++  }
++  postFxScratchCtx?.drawImage(sourceCanvas as any, 0, 0, w, h);
++  return postFxScratchCanvas;
++}
++
+ /**
+  * Renders cinematic post-processing overlays (grain, vignette, light leaks, chromatic aberration, dust & scratches, color filters, sparkles, rain, dust particles, snow)
+  */
+@@ -783,39 +810,42 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
+   const clarity = effects.clarity || 0;
+   const vibrance = effects.vibrance || 0;
+   if (clarity > 0 || vibrance > 0) {
++    const snap = getPostFxSnapshot(ctx.canvas, w, h);
+     ctx.save();
+     ctx.globalCompositeOperation = clarity >= vibrance ? 'overlay' : 'soft-light';
+     ctx.globalAlpha = Math.min(0.55, Math.max(clarity * 0.48, vibrance * 0.42));
+     const cPct = 100 + Math.round(clarity * 42);
+     const bPct = 100 - Math.round(clarity * 4);
+     const sPct = 100 + Math.round(vibrance * 65);
+     ctx.filter = `contrast(${cPct}%) brightness(${bPct}%) saturate(${sPct}%)`;
+-    ctx.drawImage(ctx.canvas, 0, 0, w, h);
++    ctx.drawImage(snap as any, 0, 0, w, h);
+     ctx.restore();
+   }
+ 
+   // 1f. Optical Micro-Edge Sharpening (2-tap diagonal high-pass instead of 4 full-canvas copies)
+   const sharpening = effects.sharpening || 0;
+   if (sharpening > 0) {
++    const snap = getPostFxSnapshot(ctx.canvas, w, h);
+     const sharpAlpha = Math.min(0.55, sharpening * 0.5);
+     const px = 1.0;
+     ctx.save();
+     ctx.globalCompositeOperation = 'overlay';
+     ctx.globalAlpha = sharpAlpha * 0.45;
+-    ctx.drawImage(ctx.canvas, -px, -px, w, h, 0, 0, w, h);
+-    ctx.drawImage(ctx.canvas, px, px, w, h, 0, 0, w, h);
++    ctx.drawImage(snap as any, -px, -px, w, h, 0, 0, w, h);
++    ctx.drawImage(snap as any, px, px, w, h, 0, 0, w, h);
+     ctx.restore();
+   }
+ 
+   // 2. Chromatic Aberration
+   if (effects.chromaticAberration > 0) {
++    const snap = getPostFxSnapshot(ctx.canvas, w, h);
+     const offset = effects.chromaticAberration * 4;
+     ctx.save();
+     ctx.globalCompositeOperation = 'screen';
+     ctx.globalAlpha = 0.28 * effects.chromaticAberration;
+-    ctx.drawImage(ctx.canvas, offset, 0, w, h, 0, 0, w, h);
++    ctx.drawImage(snap as any, offset, 0, w, h, 0, 0, w, h);
+     ctx.globalCompositeOperation = 'multiply';
+-    ctx.drawImage(ctx.canvas, -offset, 0, w, h, 0, 0, w, h);
++    ctx.drawImage(snap as any, -offset, 0, w, h, 0, 0, w, h);
+     ctx.restore();
+   }
+ 
+@@ -1071,10 +1101,13 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
+     ctx.save();
+     ctx.globalCompositeOperation = 'source-over';
+     const scanlineOpacity = 0.28 * crtVal;
+     ctx.fillStyle = `rgba(0, 0, 0, ${scanlineOpacity})`;
+     const scanlineSpacing = 3;
+     const scrollOffset = Math.floor((time * 40) % scanlineSpacing);
++    ctx.beginPath();
+     for (let y = scrollOffset; y < h; y += scanlineSpacing) {
+-      ctx.fillRect(0, y, w, 1);
++      ctx.rect(0, y, w, 1);
+     }
++    ctx.fill();
+     ctx.restore();
+ 
+@@ -2323,12 +2356,15 @@ export function drawVideoFrame(...args: Parameters<typeof drawVideoFrameImpl>) {
+       ctx.translate(-(dX + dW / 2), -(dY + dH / 2));
+     }
+ 
+-    // B-roll video frames are decoded into OffscreenCanvas which has no .src property.
+-    // We must bypass getCachedScaledImage for them, otherwise they all cache under the key 'nosrc' and freeze on frame 1.
+-    const isCanvasMedia = media instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && media instanceof OffscreenCanvas) || (typeof ImageBitmap !== 'undefined' && media instanceof ImageBitmap);
+-    const isVideoMedia = media instanceof HTMLVideoElement || isCanvasMedia;
++    // Sequentially decoded B-roll video frames in export are OffscreenCanvases tagged with .videoWidth & .readyState === 4
++    const isDecodedVideoCanvas =
++      Boolean((media as any)?.videoWidth && (media as any)?.readyState === 4) ||
++      Boolean(
++        activeClip &&
++        (media === activeClip._exportVideoFrame ||
++         media === activeClip._exportTalkingHeadFrame ||
++         media === activeClip._exportSecondaryFrame)
++      );
++    const isVideoMedia = media instanceof HTMLVideoElement || isDecodedVideoCanvas;
++    const isHtmlImageWithSrc = media instanceof HTMLImageElement && Boolean(image.src);
+ 
+-    if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isCanvasMedia && image.src) {
++    if (!cameraKeyframes && movement === 'static' && alpha === 1 && isHtmlImageWithSrc) {
+       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
+       ctx.drawImage(cached, dX, dY);
+     } else if (!cameraKeyframes && movement === 'static') {
+@@ -2347,8 +2383,8 @@ export function drawVideoFrame(...args: Parameters<typeof drawVideoFrameImpl>) {
+         ctx.restore();
+       }
+ 
+-      // 2.5D Depth Parallax using WebGL (only for still image files with a valid src, never for video frames)
+-      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image && image.src
++      // 2.5D Depth Parallax using WebGL (runs for both HTMLImageElement and prescaled _exportOptimizedImage bitmaps, never for video frames)
++      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image
+         ? drawWebGLParallax(
+             image, Math.round(dW), Math.round(dH), bg, fg, movement, progress, focalPoint,
+             fg.speedFactor,            // kept for signature compatibility; blur no longer depends on it
+Step-by-Step Instructions for the Developer:
+Copy the code block above into a new text file.
+
+Save it as fix-parallax-and-memory.patch in the root folder of the project.
+
+Open your terminal in the project root and run:
+
+Bash
+git apply fix-parallax-and-memory.patch
+Important: Because I merged Claude's CSS directly into src/styles/vs-director.css, you can safely delete the unlinked public/assets/aistudio/vs-director-improvements__1__e7cee610.css and vs-director-ui-preview_1e50ef66.html files.
+
+Finally: Wire Up the RAM Dropdown
+The patch adds the HTML dropdown to src/templates.ts, but you need to connect the dropdown's change event to save the user's choice.
+
+Tell your developer to add these 3 lines in src/handlers-export.ts inside openExportModal() (where the other export listeners are):
+
+TypeScript
+import { getSavedMemoryStrategy, setSavedMemoryStrategy, type MemoryStrategyOverride } from './exporter/adaptive-memory';
+
+// Inside openExportModal():
+const ramSelect = document.getElementById('video-export-memory-strategy') as HTMLSelectElement;
+if (ramSelect) {
+    ramSelect.value = getSavedMemoryStrategy();
+    ramSelect.addEventListener('change', (e) => setSavedMemoryStrategy((e.target as HTMLSelectElement).value as MemoryStrategyOverride));
+}

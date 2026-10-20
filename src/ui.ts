@@ -17,6 +17,7 @@ import { assetStorage } from './assetStorage';
 import { updateAspectRatioState } from './ui-renderers';
 import { getScriptDerivedTitle, escapeHtml } from './utils';
 import { calculateBitrate } from './exporter/codecs';
+import { getSavedMemoryStrategy, setSavedMemoryStrategy, type MemoryStrategyOverride } from './exporter/adaptive-memory';
 
 export { escapeHtml };
 
@@ -1239,6 +1240,17 @@ export function openExportSettingsModal() {
   }
   if (dom.videoExportAudioDuckingCheckbox) {
     dom.videoExportAudioDuckingCheckbox.checked = state.audioDuckingEnabled !== false;
+  }
+
+  const ramSelect = dom.videoExportMemoryStrategySelect || (document.getElementById('video-export-memory-strategy') as HTMLSelectElement);
+  if (ramSelect) {
+    ramSelect.value = getSavedMemoryStrategy();
+    if (!(ramSelect as any)._boundChange) {
+      (ramSelect as any)._boundChange = true;
+      ramSelect.addEventListener('change', (e) => {
+        setSavedMemoryStrategy((e.target as HTMLSelectElement).value as MemoryStrategyOverride);
+      });
+    }
   }
 
   if (dom.videoExportFilenameInput) {

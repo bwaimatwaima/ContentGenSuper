@@ -3382,6 +3382,26 @@ export const MODAL_TEMPLATES = `
                     </div>
                 </div>
 
+                <!-- Memory & Performance Strategy (Adaptive memory controls) -->
+                <div class="col-span-2 mt-2">
+                  <label for="video-export-memory-strategy" class="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">RAM / Performance Strategy</label>
+                  <div class="relative">
+                    <select id="video-export-memory-strategy" class="w-full bg-zinc-800 text-zinc-100 text-xs font-medium border border-zinc-700 rounded-xl p-2.5 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none cursor-pointer appearance-none">
+                      <option value="auto">Auto-Detect (Recommended)</option>
+                      <option value="constrained">Low RAM / Battery Saver (Limits Caches)</option>
+                      <option value="balanced">Balanced (Standard Laptops)</option>
+                      <option value="pro">Pro Studio (Max Speed, High RAM Usage)</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                  </div>
+                  <p class="text-[10px] text-zinc-400 mt-1.5 leading-relaxed flex items-start gap-1">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0 text-zinc-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Auto scales parallel encoding and VRAM caches to prevent crashes. Select "Low RAM" if exports freeze.
+                  </p>
+                </div>
+
                 <!-- Sidecar Subtitles Option -->
                 <div class="pt-2">
                     <label class="flex items-center gap-2.5 cursor-pointer select-none group">

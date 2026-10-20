@@ -1069,6 +1069,7 @@ export let exportSavePathDisplay: HTMLDivElement;
 export let videoExportResolutionSelect: HTMLSelectElement;
 export let videoExportFpsSelect: HTMLSelectElement;
 export let videoExportQualitySelect: HTMLSelectElement;
+export let videoExportMemoryStrategySelect: HTMLSelectElement;
 export let videoExportSubtitlesCheckbox: HTMLInputElement;
 export let videoExportNormalizeAudioCheckbox: HTMLInputElement;
 export let videoExportAudioDuckingCheckbox: HTMLInputElement;
@@ -2174,6 +2175,7 @@ export function initDOM() {
     videoExportResolutionSelect = document.getElementById('video-export-resolution') as HTMLSelectElement;
     videoExportFpsSelect = document.getElementById('video-export-fps') as HTMLSelectElement;
     videoExportQualitySelect = document.getElementById('video-export-quality') as HTMLSelectElement;
+    videoExportMemoryStrategySelect = document.getElementById('video-export-memory-strategy') as HTMLSelectElement;
     videoExportSubtitlesCheckbox = document.getElementById('video-export-subtitles-checkbox') as HTMLInputElement;
     videoExportNormalizeAudioCheckbox = document.getElementById('video-export-normalize-audio-checkbox') as HTMLInputElement;
     videoExportAudioDuckingCheckbox = document.getElementById('video-export-audio-ducking-checkbox') as HTMLInputElement;

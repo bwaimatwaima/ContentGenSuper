@@ -69,14 +69,20 @@ export async function prepareFrameImageWindow(
     if (currentShotIndex !== _lastActiveShotIndex) {
         _lastActiveShotIndex = currentShotIndex;
 
+        const upcomingClips = clips.slice(windowStart);
+
         for (let i = 0; i < windowStart; i++) {
             const clip = clips[i];
             if (!clip) continue;
 
-            // Dispose older ImageBitmap / Canvas and its GPU texture + depth map
-            if (clip._exportOptimizedImage) {
+            const bmp = clip._exportOptimizedImage;
+            const isBmpReusedAhead = bmp && upcomingClips.some(c => c && c._exportOptimizedImage === bmp);
+            const isImageReusedAhead = clip.image && upcomingClips.some(c => c && (c.image === clip.image || c.backgroundPlate === clip.image));
+            const isPlateReusedAhead = clip.backgroundPlate && upcomingClips.some(c => c && (c.backgroundPlate === clip.backgroundPlate || c.image === clip.backgroundPlate));
+
+            // Dispose older ImageBitmap / Canvas and its GPU texture + depth map ONLY if not needed ahead
+            if (bmp && !isBmpReusedAhead) {
                 try {
-                    const bmp = clip._exportOptimizedImage;
                     dropDepth(bmp);
                     releaseParallaxTexture(bmp);
                     if (typeof (bmp as any).close === 'function') {
@@ -89,8 +95,8 @@ export async function prepareFrameImageWindow(
                 delete clip._exportOptimizedImage;
             }
 
-            // Release older decoded HTMLImageElement raster memory
-            if (clip.image && !clip._exportImageUnloaded) {
+            // Release older decoded HTMLImageElement raster memory ONLY if not needed ahead
+            if (clip.image && !clip._exportImageUnloaded && !isImageReusedAhead) {
                 clip._cachedExportSrc = clip._cachedExportSrc || clip.image.src || clip._imageObjectURL || clip.imageUrl;
                 try {
                     clip.image.src = '';
@@ -98,7 +104,7 @@ export async function prepareFrameImageWindow(
                 clip._exportImageUnloaded = true;
             }
 
-            if (clip.backgroundPlate && !clip._exportPlateUnloaded) {
+            if (clip.backgroundPlate && !clip._exportPlateUnloaded && !isPlateReusedAhead) {
                 clip._cachedPlateSrc = clip._cachedPlateSrc || clip.backgroundPlate.src;
                 try {
                     clip.backgroundPlate.src = '';
@@ -166,6 +172,26 @@ export async function prepareFrameImageWindow(
     // 3. Explicitly await activeImage.decode() for currentShotIndex before advancing the frame
     const activeClip = clips[currentShotIndex];
     if (activeClip) {
+        if (activeClip.image instanceof HTMLImageElement && !activeClip.image.complete && activeClip.image.src) {
+            try {
+                await new Promise<void>((resolve) => {
+                    if (activeClip.image.complete) return resolve();
+                    activeClip.image.onload = () => resolve();
+                    activeClip.image.onerror = () => resolve();
+                    setTimeout(resolve, 800);
+                });
+            } catch {}
+        }
+        if (activeClip.backgroundPlate instanceof HTMLImageElement && !activeClip.backgroundPlate.complete && activeClip.backgroundPlate.src) {
+            try {
+                await new Promise<void>((resolve) => {
+                    if (activeClip.backgroundPlate.complete) return resolve();
+                    activeClip.backgroundPlate.onload = () => resolve();
+                    activeClip.backgroundPlate.onerror = () => resolve();
+                    setTimeout(resolve, 800);
+                });
+            } catch {}
+        }
         const activeImage: any = activeClip._exportOptimizedImage || activeClip.image || activeClip.backgroundPlate;
         if (activeImage && typeof activeImage.decode === 'function') {
             try {

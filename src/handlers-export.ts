@@ -14,6 +14,7 @@ import { DB } from './db';
 import { assetStorage } from './assetStorage';
 import { syncStateFromDOM, handleFileImport, loadProject, saveVersion, startNewProject } from './handlers-project';
 import { checkGuestRestriction } from './auth';
+import { getSavedMemoryStrategy, setSavedMemoryStrategy, type MemoryStrategyOverride } from './exporter/adaptive-memory';
 
 declare const JSZip: any;
 declare const jspdf: any;
@@ -758,5 +759,14 @@ export async function exportNLETimeline(event?: Event) {
         state.isVideoProductionRunning = false;
         ui.setButtonsDisabled(false);
         ui.closeProcessingModal();
+    }
+}
+
+export function openExportModal() {
+    ui.openExportSettingsModal();
+    const ramSelect = document.getElementById('video-export-memory-strategy') as HTMLSelectElement;
+    if (ramSelect) {
+        ramSelect.value = getSavedMemoryStrategy();
+        ramSelect.addEventListener('change', (e) => setSavedMemoryStrategy((e.target as HTMLSelectElement).value as MemoryStrategyOverride));
     }
 }

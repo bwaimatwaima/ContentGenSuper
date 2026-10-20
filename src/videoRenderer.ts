@@ -646,6 +646,7 @@ export function resetRendererStats() {
 }
 export function clearRendererCache() {
   imageCache.clear();
+  sparkleGradCache.clear();
   if (blurCanvas) {
     blurCanvas.width = 1;
     blurCanvas.height = 1;
@@ -677,6 +678,7 @@ function getPostFxSnapshot(sourceCanvas: HTMLCanvasElement | OffscreenCanvas, w:
 }
 
 const bokehSpriteCache = new Map<string, HTMLCanvasElement | OffscreenCanvas>();
+const sparkleGradCache = new Map<string, CanvasGradient>();
 function getBokehSprite(rgb: string): HTMLCanvasElement | OffscreenCanvas {
   let sprite = bokehSpriteCache.get(rgb);
   if (sprite) return sprite;
@@ -2387,11 +2389,25 @@ function drawVideoFrameImpl(
     const isVideoMedia = media instanceof HTMLVideoElement || isDecodedVideoCanvas;
     const isHtmlImageWithSrc = media instanceof HTMLImageElement && Boolean(image.src);
 
+    const safeDraw = (src: any, ...drawArgs: any[]) => {
+      try {
+        (ctx as any).drawImage(src, ...drawArgs);
+      } catch (e) {
+        if (activeClip?.image && activeClip.image !== src) {
+          try {
+            (ctx as any).drawImage(activeClip.image, ...drawArgs);
+            return;
+          } catch {}
+        }
+        console.warn('[VideoRenderer] drawImage fallback notice:', e);
+      }
+    };
+
     if (!cameraKeyframes && movement === 'static' && alpha === 1 && isHtmlImageWithSrc) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
-      ctx.drawImage(cached, dX, dY);
+      safeDraw(cached, dX, dY);
     } else if (!cameraKeyframes && movement === 'static') {
-      ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
+      safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
     } else {
       // Whip pan: smear a couple of trailing offset copies during the fast middle
       // section of the move (velocity peaks around progress ~0.3–0.7 with cubic easing).
@@ -2400,9 +2416,9 @@ function drawVideoFrameImpl(
         const smearPx = velocity * dW * 0.02;
         ctx.save();
         ctx.globalAlpha = alpha * 0.25 * velocity;
-        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx, dY, dW, dH);
+        safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx, dY, dW, dH);
         ctx.globalAlpha = alpha * 0.15 * velocity;
-        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx * 2, dY, dW, dH);
+        safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX + smearPx * 2, dY, dW, dH);
         ctx.restore();
       }
 
@@ -2416,9 +2432,9 @@ function drawVideoFrameImpl(
           )
         : null;
       if (webglCanvas) {
-        ctx.drawImage(webglCanvas, dX, dY, dW, dH);
+        safeDraw(webglCanvas, dX, dY, dW, dH);
       } else {
-        ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
+        safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
       }
     }
     
@@ -2493,7 +2509,17 @@ function drawVideoFrameImpl(
     const thV = getClipVideoDrawable(c, 'talkingHead') || state.uploadedVideoElement;
     const thM = c.talkingHeadMode || (thV ? (state.talkingHeadDefaultMode || 'none') : 'none');
     if (thV && (thM === 'full' || c.displayMode === 'pip_overlay')) return thV;
-    const optImg = state.isExporting && c._exportOptimizedImage ? c._exportOptimizedImage : null;
+    const isDrawable = (m: any) => {
+      if (!m) return false;
+      if (typeof ImageBitmap !== 'undefined' && m instanceof ImageBitmap) {
+        return m.width > 0 && m.height > 0;
+      }
+      if (m instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && m instanceof OffscreenCanvas)) {
+        return m.width > 0 && m.height > 0;
+      }
+      return true;
+    };
+    const optImg = state.isExporting && c._exportOptimizedImage && isDrawable(c._exportOptimizedImage) ? c._exportOptimizedImage : null;
     const expVid = getClipVideoDrawable(c, 'primary');
     return expVid || optImg || c.backgroundPlate || c.image || (thV && thM !== 'none' ? thV : null) || thV;
   };

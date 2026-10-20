@@ -1392,10 +1392,16 @@ export function getKeyframeCameraTransforms(
     canvasHeight: number,
     duration: number = 4.0
 ): { sx: number, sy: number, sWidth: number, sHeight: number, rotation?: number, speedFactor: number } {
+    const safeNum = (v: number, fallback: number) => typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+    progress = safeNum(progress, 0);
     progress = Math.max(0, Math.min(1, progress));
+    imgW = Math.max(1, safeNum(imgW, 1920));
+    imgH = Math.max(1, safeNum(imgH, 1080));
+    canvasWidth = Math.max(1, safeNum(canvasWidth, 1920));
+    canvasHeight = Math.max(1, safeNum(canvasHeight, 1080));
     
     let t = progress;
-    const easing = keyframes.easing || 'easeInOut';
+    const easing = keyframes?.easing || 'easeInOut';
     if (easing === 'easeInOut') {
         t = easeInOutCubic(progress);
     } else if (easing === 'easeIn') {
@@ -1408,14 +1414,14 @@ export function getKeyframeCameraTransforms(
     }
 
     const motionMultiplier = typeof state.cameraMotionIntensity === 'number' ? state.cameraMotionIntensity : 1.0;
-    const start = keyframes.start || { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 };
-    const end = keyframes.end || { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 };
+    const start = keyframes?.start || { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 };
+    const end = keyframes?.end || { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 };
 
-    const curX = start.x + (end.x - start.x) * t * motionMultiplier;
-    const curY = start.y + (end.y - start.y) * t * motionMultiplier;
-    const deltaScale = (end.scale - start.scale) * motionMultiplier;
-    const curScale = Math.max(1.0, start.scale + deltaScale * t);
-    const curRotDeg = start.rotation + (end.rotation - start.rotation) * t * motionMultiplier;
+    const curX = safeNum(start.x, 0.5) + (safeNum(end.x, 0.5) - safeNum(start.x, 0.5)) * t * motionMultiplier;
+    const curY = safeNum(start.y, 0.5) + (safeNum(end.y, 0.5) - safeNum(start.y, 0.5)) * t * motionMultiplier;
+    const deltaScale = (safeNum(end.scale, 1.0) - safeNum(start.scale, 1.0)) * motionMultiplier;
+    const curScale = Math.max(1.0, safeNum(start.scale, 1.0) + deltaScale * t);
+    const curRotDeg = safeNum(start.rotation, 0) + (safeNum(end.rotation, 0) - safeNum(start.rotation, 0)) * t * motionMultiplier;
     const rotation = (curRotDeg * Math.PI) / 180;
 
     // Calculate source rect
@@ -1425,15 +1431,15 @@ export function getKeyframeCameraTransforms(
     const centerX = curX * imgW;
     const centerY = curY * imgH;
 
-    const sx = Math.max(0, Math.min(imgW - sWidth, centerX - sWidth / 2));
-    const sy = Math.max(0, Math.min(imgH - sHeight, centerY - sHeight / 2));
+    const sx = Math.max(0, Math.min(Math.max(0, imgW - sWidth), centerX - sWidth / 2));
+    const sy = Math.max(0, Math.min(Math.max(0, imgH - sHeight), centerY - sHeight / 2));
 
     return {
-        sx,
-        sy,
-        sWidth,
-        sHeight,
-        rotation,
+        sx: safeNum(sx, 0),
+        sy: safeNum(sy, 0),
+        sWidth: safeNum(sWidth, imgW),
+        sHeight: safeNum(sHeight, imgH),
+        rotation: safeNum(rotation, 0),
         speedFactor: 1.0
     };
 }

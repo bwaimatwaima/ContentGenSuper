@@ -2042,8 +2042,58 @@ export function getPreviewDimensions(aspectRatio: string = '16:9', resQuality?: 
 
 export function drawVideoFrame(...args: Parameters<typeof drawVideoFrameImpl>) {
   const s = t0();
-  try { return drawVideoFrameImpl(...args); }
-  finally { t1(args[1] ? 'frame.export' : 'frame.preview', s); }
+  try {
+    return drawVideoFrameImpl(...args);
+  } catch (error) {
+    // A renderer exception used to surface only as a black/stalled preview or a
+    // generic failed export frame. Add the exact timeline location and asset so
+    // a scene-specific failure can be diagnosed without guessing.
+    try {
+      const time = Number(args[0]) || 0;
+      const clips = videoRenderContext?.clips || [];
+      let clipIndex = -1;
+      if (timelineState.mode === 'audio_locked') {
+        clipIndex = linearFind(clips, time);
+      } else {
+        let cursor = 0;
+        for (let i = 0; i < clips.length; i++) {
+          const duration = Number(clips[i]?.duration) || 0;
+          if (time >= cursor && time < cursor + duration) { clipIndex = i; break; }
+          cursor += duration;
+        }
+      }
+      const clip: any = clipIndex >= 0 ? clips[clipIndex] : null;
+      const describe = (value: any) => {
+        if (!value) return null;
+        if (value instanceof HTMLImageElement) {
+          return { type: 'image', src: value.currentSrc || value.src || '', complete: value.complete, naturalWidth: value.naturalWidth, naturalHeight: value.naturalHeight };
+        }
+        if (typeof HTMLVideoElement !== 'undefined' && value instanceof HTMLVideoElement) {
+          return { type: 'video', src: value.currentSrc || value.src || '', readyState: value.readyState, videoWidth: value.videoWidth, videoHeight: value.videoHeight, currentTime: value.currentTime };
+        }
+        return { type: value.constructor?.name || typeof value, width: value.width ?? value.videoWidth ?? null, height: value.height ?? value.videoHeight ?? null };
+      };
+      console.error('[VideoRenderer] Frame render threw', {
+        timeSeconds: time,
+        timecode: `${Math.floor(time / 60)}:${(time % 60).toFixed(3).padStart(6, '0')}`,
+        isExporting: state.isExporting,
+        target: args[1] ? 'export/offscreen' : 'preview',
+        mode: timelineState.mode,
+        clipIndex,
+        clipId: clip?.id ?? null,
+        transition: clip?.transitionToNext ?? clip?.transition ?? null,
+        image: describe(clip?.image),
+        backgroundPlate: describe(clip?.backgroundPlate),
+        optimizedImage: describe(clip?._exportOptimizedImage),
+        primaryVideo: describe(clip?.videoElement),
+      }, error);
+    } catch (diagnosticError) {
+      console.warn('[VideoRenderer] Failed to collect frame-render diagnostics', diagnosticError);
+    }
+    throw error;
+  } finally {
+    t1(args[1] ? 'frame.export' : 'frame.preview', s);
+  }
 }
 
 function drawVideoFrameImpl(
@@ -2212,24 +2262,45 @@ function drawVideoFrameImpl(
         surf.ctx.setTransform(1, 0, 0, 1, 0, 0);
         surf.ctx.globalCompositeOperation = 'source-over';
         surf.ctx.globalAlpha = 1;
-        // Avoid expensive CSS filter readbacks on <video> during low-res preview
-        const useFastPreviewBlur = !targetCanvas && !state.isExporting && (isVideo || cvH <= 540);
-        if (useFastPreviewBlur) {
-          surf.ctx.filter = 'none';
-          surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
-          surf.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-          surf.ctx.fillRect(0, 0, bw, bh);
-        } else {
-          surf.ctx.filter = shotFilterCss !== 'none' ? `blur(3px) brightness(0.65) ${shotFilterCss}` : 'blur(3px) brightness(0.65)';
-          surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
-          surf.ctx.filter = 'none';
+        // Avoid expensive CSS filter readbacks on <video> during low-res preview.
+        // A missing/undecoded source can throw from this blur draw before the
+        // main draw's fallback is reached. Treat blur as optional and let the
+        // normal foreground draw below use its safe source fallback.
+        let blurReady = false;
+        try {
+          const useFastPreviewBlur = !targetCanvas && !state.isExporting && (isVideo || cvH <= 540);
+          if (useFastPreviewBlur) {
+            surf.ctx.filter = 'none';
+            surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
+            surf.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+            surf.ctx.fillRect(0, 0, bw, bh);
+          } else {
+            surf.ctx.filter = shotFilterCss !== 'none' ? `blur(3px) brightness(0.65) ${shotFilterCss}` : 'blur(3px) brightness(0.65)';
+            surf.ctx.drawImage(media, 0, 0, mediaW, mediaH, -bw * 0.1, -bh * 0.1, bw * 1.2, bh * 1.2);
+          }
+          blurReady = true;
+        } catch (blurError) {
+          console.warn('[VideoRenderer] Background blur skipped for unavailable media', {
+            timeSeconds: time,
+            clipId: activeClip?.id ?? null,
+            sourceType: (media as any)?.constructor?.name || typeof media,
+          }, blurError);
+        } finally {
+          try { surf.ctx.filter = 'none'; surf.ctx.globalAlpha = 1; } catch {}
         }
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.imageSmoothingEnabled = true;
-        (ctx as any).imageSmoothingQuality = (!targetCanvas && !state.isExporting && cvH <= 360) ? 'low' : 'high';
-        ctx.drawImage(surf.canvas, 0, 0, bw, bh, 0, 0, cvW, cvH);
-        ctx.restore();
+        if (blurReady) {
+          ctx.save();
+          try {
+            ctx.globalAlpha = alpha;
+            ctx.imageSmoothingEnabled = true;
+            (ctx as any).imageSmoothingQuality = (!targetCanvas && !state.isExporting && cvH <= 360) ? 'low' : 'high';
+            ctx.drawImage(surf.canvas, 0, 0, bw, bh, 0, 0, cvW, cvH);
+          } catch (blurCompositeError) {
+            console.warn('[VideoRenderer] Background blur composite skipped', { timeSeconds: time, clipId: activeClip?.id ?? null }, blurCompositeError);
+          } finally {
+            ctx.restore();
+          }
+        }
       } else {
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, cvW, cvH);

@@ -1000,7 +1000,7 @@ export const MODAL_TEMPLATES = `
                                 </button>
                             </div>
 
-                            <!-- Snap, Modes & Timeline Pan Slider -->
+                             <!-- Snap & Modes -->
                             <div class="flex items-center gap-1.5 shrink-0">
                                 <button id="timeline-snap-toggle" title="Toggle Magnet Snapping to Playhead, Clip Edges, and Transcript Words" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-600/90 hover:bg-amber-500 text-white rounded-md transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-xs">
                                     <span>🧲</span>
@@ -1009,11 +1009,6 @@ export const MODAL_TEMPLATES = `
                                 <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-md p-0.5 shrink-0 shadow-inner">
                                     <button id="timeline-mode-ripple" title="Ripple Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-zinc-800 text-white rounded transition-colors cursor-pointer shrink-0">Ripple</button>
                                     <button id="timeline-mode-slip" title="Slip Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">Slip</button>
-                                </div>
-                                <!-- Timeline Horizontal Pan Slider -->
-                                <div class="hidden md:flex items-center gap-1.5 bg-zinc-950/90 border border-white/10 rounded-lg px-2 py-0.5 shadow-inner shrink-0" title="Slide to pan left/right across timeline sequence">
-                                    <span class="text-[9px] text-amber-400 font-bold uppercase tracking-wider shrink-0 flex items-center gap-0.5">↔ Pan</span>
-                                    <input id="timeline-scroll-slider" type="range" min="0" max="100" value="0" step="0.1" class="w-16 lg:w-28 h-1.5 bg-zinc-800 accent-amber-500 rounded cursor-pointer opacity-90 hover:opacity-100 transition-opacity" />
                                 </div>
                             </div>
                         </div>
@@ -1029,11 +1024,6 @@ export const MODAL_TEMPLATES = `
 
                             <!-- Zoom & Guide Controls -->
                             <div class="flex items-center gap-0.5 sm:gap-1 pl-1 border-l border-white/10 shrink-0">
-                                <!-- Smooth Timeline Zoom Slider -->
-                                <div class="hidden sm:flex items-center gap-1 bg-zinc-950/90 border border-white/10 rounded-lg px-2 py-0.5 shadow-inner shrink-0 mr-0.5" title="Slide to adjust timeline zoom level">
-                                    <span class="text-[9px] text-cyan-400 font-bold uppercase tracking-wider shrink-0">🔍 Zoom</span>
-                                    <input id="timeline-zoom-slider" type="range" min="0.2" max="5.0" value="1.0" step="0.05" class="w-14 lg:w-20 h-1.5 bg-zinc-800 accent-cyan-400 rounded cursor-pointer opacity-90 hover:opacity-100 transition-opacity" />
-                                </div>
                                 <button id="timeline-zoom-fit-btn" title="Zoom to Fit Sequence" class="px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300 hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer shrink-0">Fit</button>
                                 <button id="timeline-shortcut-guide-btn" title="Keyboard Shortcuts (?)" class="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded-md transition-colors cursor-pointer shrink-0">
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>

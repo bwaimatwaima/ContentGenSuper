@@ -28,10 +28,13 @@ export function setVsWorkspaceEnabled(enabled: boolean): void {
   if (enabled) {
     const mounted = activateVsWorkspace();
     try { localStorage.setItem(WORKSPACE_FLAG_KEY, mounted ? '1' : '0'); } catch {}
-    return;
+  } else {
+    deactivateVsWorkspace();
+    try { localStorage.setItem(WORKSPACE_FLAG_KEY, '0'); } catch {}
   }
-  deactivateVsWorkspace();
-  try { localStorage.setItem(WORKSPACE_FLAG_KEY, '0'); } catch {}
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
 }
 
 interface ReparentRecord {
@@ -1295,7 +1298,9 @@ export function mountPlayerStageOverlays(): void {
     guidesEl.dataset.aspect = getActiveAspectRatio();
   };
 
-  const ro = new ResizeObserver(syncOverlayBoundsToCanvas);
+  const ro = new ResizeObserver(() => {
+    requestAnimationFrame(syncOverlayBoundsToCanvas);
+  });
   ro.observe(host);
   ro.observe(previewCanvas);
   window.addEventListener('resize', syncOverlayBoundsToCanvas);

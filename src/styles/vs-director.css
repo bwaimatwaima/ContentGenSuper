@@ -4152,3 +4152,82 @@
   height: 36px !important;
   min-height: 36px !important;
 }
+
+/* ==========================================================================
+   Classic UI Responsiveness, Header/Close Button & A1 Waveform Fixes
+   ========================================================================== */
+
+/* 1. Constrain Classic UI modal/wrapper to the viewport */
+.video-director-modal:not(.vs-director),
+.classic-ui-shell {
+  width: min(1440px, 96vw) !important;
+  max-width: 96vw !important;
+  height: min(920px, 94dvh) !important;
+  max-height: 94dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* 2. Keep the top bar & Close button always visible and inside bounds */
+.video-director-modal:not(.vs-director) .director-header,
+.classic-ui-shell .director-header {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  z-index: 30 !important;
+}
+
+/* Ensure header action buttons (Close, Studio toggle, Export) never shrink off-screen */
+.video-director-modal:not(.vs-director) .director-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+
+/* 3. Allow Preview area to shrink proportionally so Timeline + Header always fit */
+.video-director-modal:not(.vs-director) .director-preview-area,
+.classic-ui-shell .director-preview-area {
+  flex: 1 1 0% !important;
+  min-height: 180px !important;
+  max-height: 52dvh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* 4. Fix A1 Waveform bottom clipping & scrollbar overlap */
+.video-director-modal:not(.vs-director) .timeline-tracks-scroll,
+.classic-ui-shell .timeline-tracks-scroll {
+  padding-bottom: 14px !important; /* Clears horizontal scrollbar over A1 */
+  box-sizing: border-box !important;
+}
+
+.video-director-modal:not(.vs-director) .track-a1,
+.video-director-modal:not(.vs-director) [data-track="A1"] {
+  height: 56px !important;
+  min-height: 56px !important;
+  display: flex !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.video-director-modal:not(.vs-director) .track-a1 canvas,
+.video-director-modal:not(.vs-director) [data-track="A1"] canvas {
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+  display: block !important;
+}
+

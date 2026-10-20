@@ -152,6 +152,9 @@
                 if (isCircularJsonError(fullMessage)) {
                     return;
                 }
+                if (lower.includes('resizeobserver')) {
+                    return;
+                }
                 if (
                     lower.includes('could not reach cloud firestore backend') ||
                     (lower.includes('@firebase/firestore') && lower.includes("backend didn't respond within 10 seconds")) ||
@@ -195,6 +198,11 @@
                     return true;
                 }
                 var lowerStr = str.toLowerCase();
+                if (lowerStr.includes('resizeobserver')) {
+                    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+                    if (event && typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                    return true;
+                }
                 if (
                     lowerStr.includes('could not reach cloud firestore backend') ||
                     (lowerStr.includes('@firebase/firestore') && lowerStr.includes("backend didn't respond within 10 seconds")) ||

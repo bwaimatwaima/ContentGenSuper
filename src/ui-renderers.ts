@@ -143,14 +143,16 @@ export function initPreviewResizeObserver() {
   if (!container || typeof ResizeObserver === "undefined") return;
 
   previewResizeObserver = new ResizeObserver(() => {
-    resizeVideoPreviewWrapper();
-    try {
-      if (!state.isVideoPlaying) {
-        drawVideoFrame(state.lastRenderedTime || 0);
+    requestAnimationFrame(() => {
+      resizeVideoPreviewWrapper();
+      try {
+        if (!state.isVideoPlaying) {
+          drawVideoFrame(state.lastRenderedTime || 0);
+        }
+      } catch (err) {
+        console.warn("Failed to redraw video frame during resize:", err);
       }
-    } catch (err) {
-      console.warn("Failed to redraw video frame during resize:", err);
-    }
+    });
   });
   previewResizeObserver.observe(container);
 }

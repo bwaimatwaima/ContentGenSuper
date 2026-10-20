@@ -201,15 +201,42 @@ export async function encodeToMuxer(
             const audioTime = audioSampleIndex < totalSamples ? (audioSampleIndex / sampleRate) : Infinity;
 
             if (videoTime <= audioTime) {
-                // Keep GPU encoder fed with up to 3/8 frames in flight when hardware acceleration is active
+                // Keep GPU encoder fed with up to maxVideoQueue frames, with stall watchdog
+                const queueWaitStart = performance.now();
+                let nudgeFlushed = false;
                 while (videoEncoder.encodeQueueSize > maxVideoQueue) {
-                    await yieldToMain();
+                    if (videoEncoderError) throw videoEncoderError;
+                    if (videoEncoder.state !== 'configured') {
+                        const stateErr: any = new Error(`VideoEncoder unexpectedly entered state "${videoEncoder.state}" at frame ${videoFrameIndex}.`);
+                        if (hardwareAcceleration === 'prefer-hardware') stateErr.code = 'GPU_ENCODER_FAILED';
+                        throw stateErr;
+                    }
                     if (!state.isVideoProductionRunning) throw new Error("Cancelled.");
+
+                    const waitedMs = performance.now() - queueWaitStart;
+                    if (waitedMs > 3000 && !nudgeFlushed) {
+                        nudgeFlushed = true;
+                        console.warn(`[EXPORT] VideoEncoder queue (${videoEncoder.encodeQueueSize}) stalled >3s at frame ${videoFrameIndex}; nudging with flush()...`);
+                        await Promise.race([
+                            videoEncoder.flush().catch((e) => { videoEncoderError = e; }),
+                            new Promise((r) => setTimeout(r, 4000))
+                        ]);
+                        break;
+                    }
+                    if (waitedMs > 8000) {
+                        const stallErr: any = new Error(`Hardware VideoEncoder timed out (queue=${videoEncoder.encodeQueueSize}) at frame ${videoFrameIndex}.`);
+                        if (hardwareAcceleration === 'prefer-hardware') stallErr.code = 'GPU_ENCODER_FAILED';
+                        throw stallErr;
+                    }
+                    await yieldToMain();
                 }
+
                 if (checkBackpressure) await checkBackpressure();
-                // Only pause drawing if a significant muxer packet backlog builds up
                 if (videoBacklog > 8 && pendingVideoAdd) {
-                    await pendingVideoAdd;
+                    await Promise.race([
+                        pendingVideoAdd,
+                        new Promise((_, rej) => setTimeout(() => rej(new Error(`Muxer video packet write timed out at frame ${videoFrameIndex}`)), 10000))
+                    ]);
                 }
 
                 const currentTimeSec = videoFrameIndex / fps;
@@ -259,14 +286,36 @@ export async function encodeToMuxer(
                 
                 videoFrameIndex++;
             } else {
-                // Throttle audio encoder queue
+                // Throttle audio encoder queue with stall watchdog
+                const audioQueueStart = performance.now();
+                let audioNudged = false;
                 while (audioEncoder && audioEncoder.encodeQueueSize > 4) {
-                    await yieldToMain();
+                    if (audioEncoderError) throw audioEncoderError;
+                    if (audioEncoder.state !== 'configured') {
+                        throw new Error(`AudioEncoder unexpectedly entered state "${audioEncoder.state}" at sample ${audioSampleIndex}.`);
+                    }
                     if (!state.isVideoProductionRunning) throw new Error("Cancelled.");
+                    const waitedAudioMs = performance.now() - audioQueueStart;
+                    if (waitedAudioMs > 3000 && !audioNudged) {
+                        audioNudged = true;
+                        console.warn(`[EXPORT] AudioEncoder queue (${audioEncoder.encodeQueueSize}) stalled >3s; nudging with flush()...`);
+                        await Promise.race([
+                            audioEncoder.flush().catch((e) => { audioEncoderError = e; }),
+                            new Promise((r) => setTimeout(r, 4000))
+                        ]);
+                        break;
+                    }
+                    if (waitedAudioMs > 8000) {
+                        throw new Error(`AudioEncoder timed out (queue=${audioEncoder.encodeQueueSize}) at sample ${audioSampleIndex}.`);
+                    }
+                    await yieldToMain();
                 }
                 if (checkBackpressure) await checkBackpressure();
                 if (audioBacklog > 8 && pendingAudioAdd) {
-                    await pendingAudioAdd;
+                    await Promise.race([
+                        pendingAudioAdd,
+                        new Promise((_, rej) => setTimeout(() => rej(new Error(`Muxer audio packet write timed out at sample ${audioSampleIndex}`)), 10000))
+                    ]);
                 }
 
                 const len = Math.min(audioFramesPerChunk, totalSamples - audioSampleIndex);
@@ -334,10 +383,28 @@ export async function encodeToMuxer(
         }
 
         onProgress(90, `Flushing encoders...`);
-        await videoEncoder.flush();
-        if (audioEncoder) await audioEncoder.flush();
-        if (pendingVideoAdd) await pendingVideoAdd;
-        if (pendingAudioAdd) await pendingAudioAdd;
+        await Promise.race([
+            videoEncoder.flush(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('VideoEncoder flush timed out at end of export')), 12000))
+        ]);
+        if (audioEncoder) {
+            await Promise.race([
+                audioEncoder.flush(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('AudioEncoder flush timed out at end of export')), 8000))
+            ]);
+        }
+        if (pendingVideoAdd) {
+            await Promise.race([
+                pendingVideoAdd,
+                new Promise((_, rej) => setTimeout(() => rej(new Error('Pending video packet write timed out at end of export')), 12000))
+            ]);
+        }
+        if (pendingAudioAdd) {
+            await Promise.race([
+                pendingAudioAdd,
+                new Promise((_, rej) => setTimeout(() => rej(new Error('Pending audio packet write timed out at end of export')), 12000))
+            ]);
+        }
 
         console.log(`[EXPORT] Encode path: ${encoderCodec} / ${hardwareAcceleration === 'prefer-hardware' ? 'HARDWARE' : 'software'} / latency=${videoLatencyMode}`);
         logExportProfiler();

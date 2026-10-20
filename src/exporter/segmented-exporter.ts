@@ -202,11 +202,18 @@ export async function mixSegmentAudio(
     const globalSpeechBlocks = getExportSpeechIntervals(videoRenderContext?.totalDuration || segEndSec);
     const speechBlocks: { start: number; end: number }[] = [];
     const PAD = 0.15; // 150ms cross-window lookahead/lookbehind padding
+    const MIN_DUCK_GAP = 0.45; // Coalesce blocks <450ms apart so ducking ramps never overlap
     for (const b of globalSpeechBlocks) {
         if (b.end < segStartSec - PAD || b.start > segEndSec + PAD) continue;
         const wStartInSeg = Math.max(-PAD, b.start - segStartSec);
         const wEndInSeg = Math.min(segDur + PAD, b.end - segStartSec);
-        speechBlocks.push({ start: wStartInSeg, end: wEndInSeg });
+        if (wEndInSeg <= wStartInSeg) continue;
+        const prev = speechBlocks[speechBlocks.length - 1];
+        if (prev && wStartInSeg - prev.end < MIN_DUCK_GAP) {
+            prev.end = Math.max(prev.end, wEndInSeg);
+        } else {
+            speechBlocks.push({ start: wStartInSeg, end: wEndInSeg });
+        }
     }
 
     const applyDucking = (gainNode: GainNode, baseVol: number, duckedVol: number) => {
@@ -230,15 +237,30 @@ export async function mixSegmentAudio(
         }
         gainNode.gain.setValueAtTime(initialGain, 0);
 
+        let lastEventTime = 0;
         for (const block of speechBlocks) {
-            const duckStart = Math.max(0, block.start - 0.05);
-            const duckEnd = Math.min(segDur, block.end + 0.1);
-            if (duckStart > 0) {
+            const duckStart = Math.max(lastEventTime, block.start - 0.05);
+            const duckPeak = Math.min(segDur, Math.max(duckStart, block.start - 0.05 + 0.08));
+            const duckEnd = Math.min(segDur, Math.max(duckPeak, block.end + 0.1));
+            const rampEnd = Math.min(segDur, Math.max(duckEnd, duckEnd + 0.15));
+
+            if (duckStart > lastEventTime) {
                 gainNode.gain.setValueAtTime(baseVol, duckStart);
             }
-            gainNode.gain.linearRampToValueAtTime(duckedVol, Math.min(segDur, Math.max(0, block.start - 0.05 + 0.08)));
-            gainNode.gain.setValueAtTime(duckedVol, duckEnd);
-            gainNode.gain.linearRampToValueAtTime(baseVol, Math.min(segDur, duckEnd + 0.15));
+            if (duckPeak > duckStart) {
+                gainNode.gain.linearRampToValueAtTime(duckedVol, duckPeak);
+            } else {
+                gainNode.gain.setValueAtTime(duckedVol, duckStart);
+            }
+            if (duckEnd > duckPeak) {
+                gainNode.gain.setValueAtTime(duckedVol, duckEnd);
+            }
+            if (rampEnd > duckEnd) {
+                gainNode.gain.linearRampToValueAtTime(baseVol, rampEnd);
+            } else {
+                gainNode.gain.setValueAtTime(baseVol, duckEnd);
+            }
+            lastEventTime = rampEnd;
         }
     };
 
@@ -294,27 +316,46 @@ export async function mixSegmentAudio(
 
     const clips = timelineState.clips || [];
 
-    // 1. Voiceover track (with soloAudio / muteNarration micro-fade support)
-    if (timelineState.masterAudioBuffer) {
-        const hasSoloClips = clips.some((c: any) => c.soloAudio || c.muteNarration);
-        await mixInNative(voiceBus, timelineState.masterAudioBuffer, 0, false, (g) => {
-            const FADE_SEC = 0.025; // 25ms anti-click micro-fade
-            g.gain.setValueAtTime(1.0, 0);
-            if (!hasSoloClips) return;
-            for (const clip of clips) {
-                if (clip.soloAudio || clip.muteNarration) {
-                    const cStart = Number(clip.startTime) || 0;
-                    const cEnd = Number.isFinite(clip.endTime) ? Number(clip.endTime) : (cStart + (Number(clip.duration) || 0));
-                    const muteStart = Math.max(0, cStart - segStartSec);
-                    const muteEnd = Math.min(segDur, Math.max(muteStart, cEnd - segStartSec));
-                    if (muteEnd <= 0 || muteStart >= segDur) continue;
-                    g.gain.setValueAtTime(1.0, Math.max(0, muteStart - FADE_SEC));
-                    g.gain.linearRampToValueAtTime(0.0, muteStart);
-                    g.gain.setValueAtTime(0.0, Math.max(muteStart, muteEnd - FADE_SEC));
-                    g.gain.linearRampToValueAtTime(1.0, Math.min(segDur, muteEnd));
+    // 1. Voiceover track — slice ONLY [segStartSec, segEndSec] so we never attach or resample a 30+ min buffer per chunk
+    if (timelineState.masterAudioBuffer && segStartSec < timelineState.masterAudioBuffer.duration) {
+        const masterEnd = Math.min(segEndSec, timelineState.masterAudioBuffer.duration);
+        if (masterEnd > segStartSec + 0.01) {
+            const voiceSlice = (segStartSec === 0 && masterEnd >= timelineState.masterAudioBuffer.duration - 0.05)
+                ? timelineState.masterAudioBuffer
+                : sliceAudioBuffer(timelineState.masterAudioBuffer, segStartSec, masterEnd);
+
+            const hasSoloClips = clips.some((c: any) => c.soloAudio || c.muteNarration);
+            await mixInNative(voiceBus, voiceSlice, segStartSec, false, (g) => {
+                const FADE_SEC = 0.025;
+                g.gain.setValueAtTime(1.0, 0);
+                if (!hasSoloClips) return;
+                let lastMuteTime = 0;
+                for (const clip of clips) {
+                    if (clip.soloAudio || clip.muteNarration) {
+                        const cStart = Number(clip.startTime) || 0;
+                        const cEnd = Number.isFinite(clip.endTime) ? Number(clip.endTime) : (cStart + (Number(clip.duration) || 0));
+                        const muteStart = Math.max(0, cStart - segStartSec);
+                        const muteEnd = Math.min(segDur, Math.max(muteStart, cEnd - segStartSec));
+                        if (muteEnd <= 0 || muteStart >= segDur || muteEnd <= muteStart) continue;
+
+                        const t1 = Math.max(lastMuteTime, muteStart - FADE_SEC);
+                        const t2 = Math.max(t1, muteStart);
+                        const t3 = Math.max(t2, muteEnd - FADE_SEC);
+                        const t4 = Math.min(segDur, Math.max(t3, muteEnd));
+
+                        if (t1 > lastMuteTime) g.gain.setValueAtTime(1.0, t1);
+                        if (t2 > t1) g.gain.linearRampToValueAtTime(0.0, t2);
+                        else g.gain.setValueAtTime(0.0, t1);
+
+                        if (t3 > t2) g.gain.setValueAtTime(0.0, t3);
+                        if (t4 > t3) g.gain.linearRampToValueAtTime(1.0, t4);
+                        else g.gain.setValueAtTime(1.0, t3);
+
+                        lastMuteTime = t4;
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     // 2. Sound Effects & Native Clip Audio
@@ -488,7 +529,12 @@ export async function mixSegmentAudio(
         });
     }
 
-    const rendered = await offlineCtx.startRendering();
+    const rendered = await Promise.race([
+        offlineCtx.startRendering(),
+        new Promise<AudioBuffer>((_, reject) =>
+            setTimeout(() => reject(new Error(`OfflineAudioContext render timed out for segment [${segStartSec.toFixed(1)}s - ${segEndSec.toFixed(1)}s]`)), 30000)
+        )
+    ]);
     return softClipAudioBuffer(rendered);
 }
 
@@ -765,10 +811,28 @@ export async function encodeSingleSegmentToFile(
         }
     }
 
-    await videoEncoder.flush();
-    if (audioEncoder) await audioEncoder.flush();
-    if (pendingVideoAdd) await pendingVideoAdd;
-    if (pendingAudioAdd) await pendingAudioAdd;
+    await Promise.race([
+        videoEncoder.flush(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Segment videoEncoder flush timed out')), 10000))
+    ]);
+    if (audioEncoder) {
+        await Promise.race([
+            audioEncoder.flush(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Segment audioEncoder flush timed out')), 6000))
+        ]);
+    }
+    if (pendingVideoAdd) {
+        await Promise.race([
+            pendingVideoAdd,
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Segment pendingVideoAdd timed out')), 10000))
+        ]);
+    }
+    if (pendingAudioAdd) {
+        await Promise.race([
+            pendingAudioAdd,
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Segment pendingAudioAdd timed out')), 10000))
+        ]);
+    }
 
     if (videoEncoder.state !== 'closed') videoEncoder.close();
     if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();

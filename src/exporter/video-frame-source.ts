@@ -271,6 +271,15 @@ export class ExportVideoFrameSource {
       const jumpedDiscontinuously =
         !cursor.curr || targetSec - refTimestamp > DISCONTINUITY_THRESHOLD_SEC;
 
+      const nextWithTimeout = (iter: AsyncGenerator<WrappedCanvasFrame, void, unknown>) => {
+        return Promise.race([
+          iter.next(),
+          new Promise<IteratorResult<WrappedCanvasFrame, void>>((_, reject) =>
+            setTimeout(() => reject(new Error('Mediabunny video frame decode timeout')), 2500)
+          ),
+        ]);
+      };
+
       if (!cursor.iterator || soughtBackward || jumpedDiscontinuously) {
         telemetry.sequentialResets++;
         await cursor.iterator?.return?.();
@@ -279,10 +288,10 @@ export class ExportVideoFrameSource {
           void,
           unknown
         >;
-        const first = await cursor.iterator.next();
+        const first = await nextWithTimeout(cursor.iterator);
         cursor.curr = first.done ? null : (first.value ?? null);
         if (cursor.curr) {
-          const second = await cursor.iterator.next();
+          const second = await nextWithTimeout(cursor.iterator);
           cursor.next = second.done ? null : (second.value ?? null);
         } else {
           cursor.next = null;
@@ -291,7 +300,7 @@ export class ExportVideoFrameSource {
         // Sequential advance: step through decoded frames until `next` is ahead of `targetSec`
         while (cursor.next && cursor.next.timestamp <= targetSec + 1e-4) {
           cursor.curr = cursor.next;
-          const step = await cursor.iterator.next();
+          const step = await nextWithTimeout(cursor.iterator);
           cursor.next = step.done ? null : (step.value ?? null);
         }
       }

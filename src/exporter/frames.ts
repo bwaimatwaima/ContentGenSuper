@@ -169,7 +169,15 @@ export async function prepareFrameImageWindow(
         }
     }
 
-    // 3. Explicitly await activeImage.decode() for currentShotIndex before advancing the frame
+    // 3. Await activeImage.decode() with a 1500ms safety timeout so a stalled image decode never deadlocks export
+    const decodeWithTimeout = (img: any) => {
+        if (!img || typeof img.decode !== 'function') return Promise.resolve();
+        return Promise.race([
+            img.decode().catch(() => {}),
+            new Promise<void>((resolve) => setTimeout(resolve, 1500))
+        ]);
+    };
+
     const activeClip = clips[currentShotIndex];
     if (activeClip) {
         if (activeClip.image instanceof HTMLImageElement && !activeClip.image.complete && activeClip.image.src) {
@@ -193,17 +201,9 @@ export async function prepareFrameImageWindow(
             } catch {}
         }
         const activeImage: any = activeClip._exportOptimizedImage || activeClip.image || activeClip.backgroundPlate;
-        if (activeImage && typeof activeImage.decode === 'function') {
-            try {
-                await activeImage.decode();
-            } catch {
-                // Safe ignore if already decoded or animated texture
-            }
-        }
-        if (activeClip.backgroundPlate && typeof activeClip.backgroundPlate.decode === 'function') {
-            try {
-                await activeClip.backgroundPlate.decode();
-            } catch {}
+        await decodeWithTimeout(activeImage);
+        if (activeClip.backgroundPlate && activeClip.backgroundPlate !== activeImage) {
+            await decodeWithTimeout(activeClip.backgroundPlate);
         }
     }
 }

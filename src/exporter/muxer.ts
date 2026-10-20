@@ -19,6 +19,7 @@ import {
 import { startExportStage, endExportStage, resetExportProfiler, logExportProfiler } from './export-profiler';
 import { disposeExportFrameSource, resetVideoSyncTelemetry, getVideoSyncTelemetry } from './video-frame-source';
 import { getExportFlags } from './export-flags';
+import { getAdaptiveMemoryProfile } from './adaptive-memory';
 
 
 export type AudioSegmentProvider = (startTimeSec: number, durationSec: number) => Promise<AudioBuffer | null>;
@@ -169,7 +170,7 @@ export async function encodeToMuxer(
             exportCanvas.width = width;
             exportCanvas.height = height;
         }
-        const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
+        const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
         if (!exportCtx) throw new Error("Canvas context failed.");
 
         const VIDEO_ENCODE_START = 15;
@@ -182,7 +183,8 @@ export async function encodeToMuxer(
             : 0;
         // Slice ~1 second of audio samples per iteration rather than 1024 to minimize allocations and micro-awaits
         const audioFramesPerChunk = Math.max(1024, sampleRate);
-        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? 8 : 2;
+        const memProfile = getAdaptiveMemoryProfile(width, height);
+        const maxVideoQueue = hardwareAcceleration === 'prefer-hardware' ? memProfile.maxEncoderQueue : 2;
 
         let activeSegmentBuffer: AudioBuffer | null = null;
         let activeSegmentStartSec = -1;
@@ -199,7 +201,7 @@ export async function encodeToMuxer(
             const audioTime = audioSampleIndex < totalSamples ? (audioSampleIndex / sampleRate) : Infinity;
 
             if (videoTime <= audioTime) {
-                // Keep GPU encoder fed with up to 8 frames in flight when hardware acceleration is active
+                // Keep GPU encoder fed with up to 3/8 frames in flight when hardware acceleration is active
                 while (videoEncoder.encodeQueueSize > maxVideoQueue) {
                     await yieldToMain();
                     if (!state.isVideoProductionRunning) throw new Error("Cancelled.");
@@ -216,7 +218,7 @@ export async function encodeToMuxer(
                 const isAbs = timelineState.mode === 'audio_locked';
                 const match = findClipAtExportTime(currentTimeSec, isAbs);
                 const currentShotIndex = match?.clipIndex ?? 0;
-                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
+                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || [], width, height);
 
                 startExportStage('video-sync');
                 await syncVideosForExportTime(currentTimeSec, fps, height);
@@ -229,7 +231,14 @@ export async function encodeToMuxer(
                 let frame: VideoFrame | null = null;
                 try {
                     frame = new VideoFrame(exportCanvas, { timestamp: timestampUs, duration: Math.round(1_000_000 / fps) });
-                    videoEncoder.encode(frame, { keyFrame: videoFrameIndex === 0 || videoFrameIndex % (fps * 4) === 0 });
+                    try {
+                        videoEncoder.encode(frame, { keyFrame: videoFrameIndex === 0 || videoFrameIndex % (fps * 4) === 0 });
+                    } catch (encErr: any) {
+                        if (hardwareAcceleration === 'prefer-hardware') {
+                            encErr.code = 'GPU_ENCODER_FAILED';
+                        }
+                        throw encErr;
+                    }
                 } finally {
                     if (frame) {
                         try { frame.close(); } catch(e) { console.warn("VideoFrame close notice:", e); }

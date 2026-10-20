@@ -30,6 +30,7 @@ import { electronService, syncTaskbarProgress } from './electron-bridge';
 import { deliverOpfsExport, hasOpfsWritableSupport, isStreamingSupported, tryInitOpfsExport, tryInitStreamingExport } from './file-targets';
 import { clearStaticFrameCache, yieldToMain } from './frames';
 import { prepareExportOptimizedImages, clearExportOptimizedImages } from './image-prescaler';
+import { getAdaptiveMemoryProfile } from './adaptive-memory';
 import { validateBeforeExport, auditTimelineTiming, setSyncOverride, isSyncOverrideActive } from '../timing/timeline-timing';
 import { promptSyncConflictResolution } from './sync-override-dialog';
 
@@ -453,7 +454,14 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const hasDroneAudio = !!state.cinematicDroneAudio;
     const hasAnyAudioSources = hasMasterAudio || hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
 
-    const useChunkedAudio = false;
+    const currentRatioForMem = (state.aspectRatio || dom.videoDirectorAspectSelect?.value || dom.imageResolutionSelect?.value || '16:9') as any;
+    const resKeyForMem = dom.videoExportResolutionSelect ? dom.videoExportResolutionSelect.value : '';
+    const { width: estW, height: estH } = utils.getExportResolutionDimensions(currentRatioForMem, resKeyForMem);
+    const memProfile = getAdaptiveMemoryProfile(estW, estH);
+    const exportMinutes = exportDuration / 60;
+
+    // Automatically switch to chunked audio only when timeline exceeds the device tier's safe continuous audio ceiling
+    const useChunkedAudio = !useLongElectronSegmentedPipeline && format !== 'mp4-ffmpeg' && hasAnyAudioSources && exportMinutes > memProfile.maxContinuousAudioMinutes;
     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
 
     const audioSegmentProvider = useChunkedAudio
@@ -504,7 +512,7 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
             } finally {
                 endExportStage('audio-mix');
             }
-            if (mixedBuffer) {
+            if (mixedBuffer && exportMinutes <= memProfile.shouldCacheMasteredWavMaxMinutes) {
                 try {
                     const wavBlob = audioBufferToWavBlob(mixedBuffer);
                     await assetStorage.storeAsset(wavBlob, 'audio', undefined, mixKey);

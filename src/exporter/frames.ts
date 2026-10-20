@@ -15,6 +15,7 @@ import {
 } from './video-frame-source';
 import { releaseParallaxTexture } from '../parallax/adapter';
 import { dropDepth } from '../parallax/depth';
+import { getAdaptiveMemoryProfile } from './adaptive-memory';
 
 
 /*
@@ -52,14 +53,17 @@ let _lastActiveShotIndex = -1;
  */
 export async function prepareFrameImageWindow(
     currentShotIndex: number,
-    clips: any[]
+    clips: any[],
+    exportWidth = 1920,
+    exportHeight = 1080
 ): Promise<void> {
     if (!clips || clips.length === 0 || currentShotIndex < 0 || currentShotIndex >= clips.length) {
         return;
     }
 
-    const windowStart = Math.max(0, currentShotIndex - 1);
-    const windowEnd = Math.min(clips.length - 1, currentShotIndex + 3);
+    const memProfile = getAdaptiveMemoryProfile(exportWidth, exportHeight);
+    const windowStart = Math.max(0, currentShotIndex - memProfile.imageWindowBehind);
+    const windowEnd = Math.min(clips.length - 1, currentShotIndex + memProfile.imageWindowAhead);
 
     // 1. Dispose older ImageBitmap / HTMLImageElement references (< windowStart) to prevent memory spikes
     if (currentShotIndex !== _lastActiveShotIndex) {
@@ -391,8 +395,10 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
         wordIdx = cur.wordTimestamps.findIndex((w: any) => time >= w.start && time < w.end);
     }
 
-    const canUseCompositeCache = !isTransitioning && !hasDynamicPiP && !hasActiveGraphics && !hasUntimedSubtitle && !hasTimeVaryingFx;
-    const compositeKey = `${cur.id || 'c'}-w${wordIdx}`;
+    const hasCornerCallout = Boolean(cur.overlayImage || cur.overlayVideoElement);
+    const pipCacheId = activePipClip ? activePipClip.id : 'nopip';
+    const canUseCompositeCache = !isTransitioning && !hasDynamicPiP && !hasActiveGraphics && !hasUntimedSubtitle && !hasTimeVaryingFx && !hasCornerCallout;
+    const compositeKey = `${cur.id || 'c'}-w${wordIdx}-${pipCacheId}`;
 
     if (canUseCompositeCache) {
         const cachedFull = _staticCompositeCache.get(compositeKey);
@@ -422,12 +428,14 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
     } else {
         const off = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(canvas.width, canvas.height) : document.createElement('canvas');
         if (off instanceof HTMLCanvasElement) { off.width = canvas.width; off.height = canvas.height; }
-        const octx = off.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
+        const octx = off.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
         if (!octx) { drawVideoFrame(time, canvas, ctx); return; }
         
         drawVideoFrame(time, off, octx, { backgroundOnly: true });
 
-        while (_staticFrameCache.size >= MAX_STATIC_FRAME_CACHE) {
+        const maxStaticCache = getAdaptiveMemoryProfile(canvas.width, canvas.height).maxStaticCacheFrames;
+
+        while (_staticFrameCache.size >= maxStaticCache) {
             const oldestKey = _staticFrameCache.keys().next().value;
             if (oldestKey === undefined) break;
             const oldEntry = _staticFrameCache.get(oldestKey);
@@ -449,12 +457,13 @@ export async function drawExportFrameCached(time: number, canvas: HTMLCanvasElem
 
     // Cache the fully composited frame for subsequent ticks with identical word/overlays
     if (canUseCompositeCache) {
+        const maxStaticCache = getAdaptiveMemoryProfile(canvas.width, canvas.height).maxStaticCacheFrames;
         const fullOff = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(canvas.width, canvas.height) : document.createElement('canvas');
         if (fullOff instanceof HTMLCanvasElement) { fullOff.width = canvas.width; fullOff.height = canvas.height; }
-        const fullCtx = fullOff.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: false });
+        const fullCtx = fullOff.getContext('2d', { alpha: false, desynchronized: false, willReadFrequently: false });
         if (fullCtx) {
             fullCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
-            while (_staticCompositeCache.size >= MAX_STATIC_FRAME_CACHE) {
+            while (_staticCompositeCache.size >= maxStaticCache) {
                 const oldestKey = _staticCompositeCache.keys().next().value;
                 if (oldestKey === undefined) break;
                 const oldEntry = _staticCompositeCache.get(oldestKey);

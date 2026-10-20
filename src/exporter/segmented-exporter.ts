@@ -654,7 +654,7 @@ export async function encodeSingleSegmentToFile(
         exportCanvas.width = width;
         exportCanvas.height = height;
     }
-    const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true });
+    const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: false });
     if (!exportCtx) throw new Error("Could not initialize canvas context.");
 
     const totalSegFrames = segment.frameCount;

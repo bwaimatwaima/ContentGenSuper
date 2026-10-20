@@ -658,6 +658,47 @@ export function cleanupRenderer() {
   resetRendererStats();
 }
 
+let postFxScratchCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+let postFxScratchCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+
+function getPostFxSnapshot(sourceCanvas: HTMLCanvasElement | OffscreenCanvas, w: number, h: number) {
+  if (!postFxScratchCanvas) {
+    postFxScratchCanvas = typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(w, h)
+      : document.createElement('canvas');
+    postFxScratchCtx = postFxScratchCanvas.getContext('2d', { alpha: false }) as any;
+  }
+  if (postFxScratchCanvas.width !== w || postFxScratchCanvas.height !== h) {
+    postFxScratchCanvas.width = w;
+    postFxScratchCanvas.height = h;
+  }
+  postFxScratchCtx?.drawImage(sourceCanvas as any, 0, 0, w, h);
+  return postFxScratchCanvas;
+}
+
+const bokehSpriteCache = new Map<string, HTMLCanvasElement | OffscreenCanvas>();
+function getBokehSprite(rgb: string): HTMLCanvasElement | OffscreenCanvas {
+  let sprite = bokehSpriteCache.get(rgb);
+  if (sprite) return sprite;
+  const size = 64;
+  const half = size / 2;
+  sprite = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(size, size) : document.createElement('canvas');
+  if (sprite instanceof HTMLCanvasElement) { sprite.width = size; sprite.height = size; }
+  const sctx = sprite.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  if (sctx) {
+    const grad = sctx.createRadialGradient(half, half, 0, half, half, half);
+    grad.addColorStop(0, `rgba(${rgb}, 1)`);
+    grad.addColorStop(0.5, `rgba(${rgb}, 0.4)`);
+    grad.addColorStop(1, `rgba(${rgb}, 0)`);
+    sctx.fillStyle = grad;
+    sctx.beginPath();
+    sctx.arc(half, half, half, 0, Math.PI * 2);
+    sctx.fill();
+  }
+  bokehSpriteCache.set(rgb, sprite);
+  return sprite;
+}
+
 /**
  * Renders cinematic post-processing overlays (grain, vignette, light leaks, chromatic aberration, dust & scratches, color filters, sparkles, rain, dust particles, snow)
  */
@@ -783,6 +824,7 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
   const clarity = effects.clarity || 0;
   const vibrance = effects.vibrance || 0;
   if (clarity > 0 || vibrance > 0) {
+    const snap = getPostFxSnapshot(ctx.canvas, w, h);
     ctx.save();
     ctx.globalCompositeOperation = clarity >= vibrance ? 'overlay' : 'soft-light';
     ctx.globalAlpha = Math.min(0.55, Math.max(clarity * 0.48, vibrance * 0.42));
@@ -790,32 +832,34 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     const bPct = 100 - Math.round(clarity * 4);
     const sPct = 100 + Math.round(vibrance * 65);
     ctx.filter = `contrast(${cPct}%) brightness(${bPct}%) saturate(${sPct}%)`;
-    ctx.drawImage(ctx.canvas, 0, 0, w, h);
+    ctx.drawImage(snap as any, 0, 0, w, h);
     ctx.restore();
   }
 
-  // 1f. Optical Micro-Edge Sharpening (2-tap diagonal high-pass instead of 4 full-canvas copies)
+  // 1f. Optical Micro-Edge Sharpening
   const sharpening = effects.sharpening || 0;
   if (sharpening > 0) {
+    const snap = getPostFxSnapshot(ctx.canvas, w, h);
     const sharpAlpha = Math.min(0.55, sharpening * 0.5);
     const px = 1.0;
     ctx.save();
     ctx.globalCompositeOperation = 'overlay';
     ctx.globalAlpha = sharpAlpha * 0.45;
-    ctx.drawImage(ctx.canvas, -px, -px, w, h, 0, 0, w, h);
-    ctx.drawImage(ctx.canvas, px, px, w, h, 0, 0, w, h);
+    ctx.drawImage(snap as any, -px, -px, w, h, 0, 0, w, h);
+    ctx.drawImage(snap as any, px, px, w, h, 0, 0, w, h);
     ctx.restore();
   }
 
   // 2. Chromatic Aberration
   if (effects.chromaticAberration > 0) {
+    const snap = getPostFxSnapshot(ctx.canvas, w, h);
     const offset = effects.chromaticAberration * 4;
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
     ctx.globalAlpha = 0.28 * effects.chromaticAberration;
-    ctx.drawImage(ctx.canvas, offset, 0, w, h, 0, 0, w, h);
+    ctx.drawImage(snap as any, offset, 0, w, h, 0, 0, w, h);
     ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(ctx.canvas, -offset, 0, w, h, 0, 0, w, h);
+    ctx.drawImage(snap as any, -offset, 0, w, h, 0, 0, w, h);
     ctx.restore();
   }
 
@@ -913,11 +957,19 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
       ctx.globalCompositeOperation = 'screen';
       ctx.globalAlpha = alpha;
 
-      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 2.5);
       const hue = (i * 37) % 360;
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.2, `hsla(${hue}, 80%, 75%, ${alpha})`);
-      grad.addColorStop(1, 'transparent');
+      const roundedAlpha = Math.round(alpha * 20) / 20;
+      const roundedSize = Math.max(1, Math.round(size * 2.5));
+      const gradKey = `${hue}_${roundedAlpha}_${roundedSize}`;
+      let grad = sparkleGradCache.get(gradKey);
+      if (!grad) {
+        if (sparkleGradCache.size > 200) sparkleGradCache.clear();
+        grad = ctx.createRadialGradient(0, 0, 0, 0, 0, roundedSize);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.2, `hsla(${hue}, 80%, 75%, ${roundedAlpha})`);
+        grad.addColorStop(1, 'transparent');
+        sparkleGradCache.set(gradKey, grad);
+      }
 
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -1005,18 +1057,11 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
       const size = (3 + (i % 6) * 3) * (Math.min(w, h) / 720) * dustSizeMult;
       const alpha = (0.2 + pulse * 0.4) * effects.dustParticles;
 
-      const grad = ctx.createRadialGradient(curX, curY, 0, curX, curY, size * 2);
       const isGold = i % 2 === 0;
-      const col = isGold ? `255, 215, 130` : `230, 240, 255`;
-
-      grad.addColorStop(0, `rgba(${col}, ${alpha})`);
-      grad.addColorStop(0.5, `rgba(${col}, ${alpha * 0.4})`);
-      grad.addColorStop(1, 'transparent');
-
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(curX, curY, size * 2, 0, Math.PI * 2);
-      ctx.fill();
+      const sprite = getBokehSprite(isGold ? '255, 215, 130' : '230, 240, 255');
+      const r = size * 2;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(sprite as any, curX - r, curY - r, r * 2, r * 2);
     }
     ctx.restore();
   }
@@ -1048,14 +1093,11 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
 
       if (i % 8 === 0) {
         const fgSize = size * 2.5;
-        const grad = ctx.createRadialGradient(curX, curY, 0, curX, curY, fgSize);
-        grad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.8})`);
-        grad.addColorStop(0.5, `rgba(240, 248, 255, ${alpha * 0.3})`);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(curX, curY, fgSize, 0, Math.PI * 2);
-        ctx.fill();
+        const sprite = getBokehSprite('255, 255, 255');
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.8;
+        ctx.drawImage(sprite as any, curX - fgSize, curY - fgSize, fgSize * 2, fgSize * 2);
+        ctx.restore();
       } else {
         ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
         ctx.beginPath();
@@ -1066,7 +1108,7 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.restore();
   }
 
-  // 11. 📺 CRT / Retro TV Screen Effect (Scanlines, Aperture Grille RGB Triads, Glass Curvature, Signal Sync Flicker & Sheen Glare)
+  // 11. 📺 CRT / Retro TV Screen Effect
   const crtVal = Math.max(effects.crtEffect || 0, effects.colorFilter === 'crt' ? 0.65 : 0);
   if (crtVal > 0) {
     ctx.save();
@@ -1078,9 +1120,11 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.fillStyle = `rgba(0, 0, 0, ${scanlineOpacity})`;
     const scanlineSpacing = 3;
     const scrollOffset = Math.floor((time * 40) % scanlineSpacing);
+    ctx.beginPath();
     for (let y = scrollOffset; y < h; y += scanlineSpacing) {
-      ctx.fillRect(0, y, w, 1);
+      ctx.rect(0, y, w, 1);
     }
+    ctx.fill();
     ctx.restore();
 
     // 11b. Aperture Grille RGB Subpixel Triad Mask
@@ -1088,14 +1132,22 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
     ctx.globalCompositeOperation = 'overlay';
     ctx.globalAlpha = 0.14 * crtVal;
     const stripeW = Math.max(1, Math.floor(w / 400));
-    for (let x = 0; x < w; x += stripeW * 3) {
-      ctx.fillStyle = 'rgba(255, 0, 0, 1)';
-      ctx.fillRect(x, 0, stripeW, h);
-      ctx.fillStyle = 'rgba(0, 255, 0, 1)';
-      ctx.fillRect(x + stripeW, 0, stripeW, h);
-      ctx.fillStyle = 'rgba(0, 0, 255, 1)';
-      ctx.fillRect(x + stripeW * 2, 0, stripeW, h);
-    }
+    
+    ctx.fillStyle = 'rgba(255, 0, 0, 1)';
+    ctx.beginPath();
+    for (let x = 0; x < w; x += stripeW * 3) ctx.rect(x, 0, stripeW, h);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(0, 255, 0, 1)';
+    ctx.beginPath();
+    for (let x = 0; x < w; x += stripeW * 3) ctx.rect(x + stripeW, 0, stripeW, h);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(0, 0, 255, 1)';
+    ctx.beginPath();
+    for (let x = 0; x < w; x += stripeW * 3) ctx.rect(x + stripeW * 2, 0, stripeW, h);
+    ctx.fill();
+
     ctx.restore();
 
     // 11c. CRT Barrel Distortion & Bezel Edge Darkening
@@ -2323,18 +2375,28 @@ function drawVideoFrameImpl(
       ctx.translate(-(dX + dW / 2), -(dY + dH / 2));
     }
 
-    // Sequentially decoded video frames during export attach .videoWidth/.readyState to an OffscreenCanvas
-    const isDecodedVideoFrame = Boolean((media as any)?.videoWidth && (media as any)?.readyState === 4) || Boolean(activeClip?.videoElement && media === activeClip._exportVideoFrame);
-    const isVideoMedia = media instanceof HTMLVideoElement || isDecodedVideoFrame;
+    // Sequentially decoded B-roll video frames in export are OffscreenCanvases tagged with .videoWidth & .readyState === 4
+    const isDecodedVideoCanvas =
+      Boolean((media as any)?.videoWidth && (media as any)?.readyState === 4) ||
+      Boolean(
+        activeClip &&
+        (media === activeClip._exportVideoFrame ||
+         media === activeClip._exportTalkingHeadFrame ||
+         media === activeClip._exportSecondaryFrame)
+      );
+    const isVideoMedia = media instanceof HTMLVideoElement || isDecodedVideoCanvas;
+    const isHtmlImageWithSrc = media instanceof HTMLImageElement && Boolean(image.src);
 
-    if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isVideoMedia && image.src) {
+    if (!cameraKeyframes && movement === 'static' && alpha === 1 && isHtmlImageWithSrc) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
       ctx.drawImage(cached, dX, dY);
     } else if (!cameraKeyframes && movement === 'static') {
       ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
     } else {
+      // Whip pan: smear a couple of trailing offset copies during the fast middle
+      // section of the move (velocity peaks around progress ~0.3–0.7 with cubic easing).
       if ((movement === 'whip_pan' || cameraKeyframes?.easing === 'whip') && fgProgress > 0.15 && fgProgress < 0.85) {
-        const velocity = Math.sin(fgProgress * Math.PI);
+        const velocity = Math.sin(fgProgress * Math.PI); // 0 at ends, 1 at midpoint
         const smearPx = velocity * dW * 0.02;
         ctx.save();
         ctx.globalAlpha = alpha * 0.25 * velocity;
@@ -2344,7 +2406,7 @@ function drawVideoFrameImpl(
         ctx.restore();
       }
 
-      // 2.5D Depth Parallax using WebGL (works for both HTMLImageElement and prescaled export ImageBitmaps, but skips video frames)
+      // 2.5D Depth Parallax using WebGL (runs for both HTMLImageElement and prescaled _exportOptimizedImage bitmaps, never for video frames)
       const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image
         ? drawWebGLParallax(
             image, Math.round(dW), Math.round(dH), bg, fg, movement, progress, focalPoint,

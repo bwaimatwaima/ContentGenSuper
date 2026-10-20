@@ -2323,21 +2323,18 @@ function drawVideoFrameImpl(
       ctx.translate(-(dX + dW / 2), -(dY + dH / 2));
     }
 
-    // B-roll video frames are decoded into OffscreenCanvas which has no .src property.
-    // We must bypass getCachedScaledImage for them, otherwise they all cache under the key 'nosrc' and freeze on frame 1.
-    const isCanvasMedia = media instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && media instanceof OffscreenCanvas) || (typeof ImageBitmap !== 'undefined' && media instanceof ImageBitmap);
-    const isVideoMedia = media instanceof HTMLVideoElement || isCanvasMedia;
+    // Sequentially decoded video frames during export attach .videoWidth/.readyState to an OffscreenCanvas
+    const isDecodedVideoFrame = Boolean((media as any)?.videoWidth && (media as any)?.readyState === 4) || Boolean(activeClip?.videoElement && media === activeClip._exportVideoFrame);
+    const isVideoMedia = media instanceof HTMLVideoElement || isDecodedVideoFrame;
 
-    if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isCanvasMedia && image.src) {
+    if (!cameraKeyframes && movement === 'static' && alpha === 1 && !isVideoMedia && image.src) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
       ctx.drawImage(cached, dX, dY);
     } else if (!cameraKeyframes && movement === 'static') {
       ctx.drawImage(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
     } else {
-      // Whip pan: smear a couple of trailing offset copies during the fast middle
-      // section of the move (velocity peaks around progress ~0.3–0.7 with cubic easing).
       if ((movement === 'whip_pan' || cameraKeyframes?.easing === 'whip') && fgProgress > 0.15 && fgProgress < 0.85) {
-        const velocity = Math.sin(fgProgress * Math.PI); // 0 at ends, 1 at midpoint
+        const velocity = Math.sin(fgProgress * Math.PI);
         const smearPx = velocity * dW * 0.02;
         ctx.save();
         ctx.globalAlpha = alpha * 0.25 * velocity;
@@ -2347,8 +2344,8 @@ function drawVideoFrameImpl(
         ctx.restore();
       }
 
-      // 2.5D Depth Parallax using WebGL (only for still image files with a valid src, never for video frames)
-      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image && image.src
+      // 2.5D Depth Parallax using WebGL (works for both HTMLImageElement and prescaled export ImageBitmaps, but skips video frames)
+      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image
         ? drawWebGLParallax(
             image, Math.round(dW), Math.round(dH), bg, fg, movement, progress, focalPoint,
             fg.speedFactor,            // kept for signature compatibility; blur no longer depends on it

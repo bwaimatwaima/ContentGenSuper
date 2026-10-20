@@ -460,26 +460,24 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const memProfile = getAdaptiveMemoryProfile(estW, estH);
     const exportMinutes = exportDuration / 60;
 
-    // Automatically switch to chunked audio only when timeline exceeds the device tier's safe continuous audio ceiling
-    const useChunkedAudio = !useLongElectronSegmentedPipeline && format !== 'mp4-ffmpeg' && hasAnyAudioSources && exportMinutes > memProfile.maxContinuousAudioMinutes;
-    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio;
+    // NEVER chunk audio during muxing: audio lives on its own continuous track, and
+    // mid-export OfflineAudioContext chunking stalls the hardware VideoEncoder on long exports.
+    const useChunkedAudio = false;
+    const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline;
+    const audioSegmentProvider = undefined;
 
-    const audioSegmentProvider = useChunkedAudio
-        ? async (startSec: number, durSec: number) => {
-              startExportStage('audio-mix');
-              try {
-                  return await mixSegmentAudio(
-                      startSec,
-                      Math.min(exportDuration, startSec + durSec),
-                      TARGET_SAMPLE_RATE
-                  );
-              } finally {
-                  endExportStage('audio-mix');
-              }
-          }
-        : undefined;
+    const hasSecondaryAudioBuses = hasOriginalAudio || hasClipSfx || hasGraphicsSfx || hasBgAudio || hasDroneAudio;
+    const hasSoloOrMutedClips = (timelineState.clips || []).some((c: any) => c.soloAudio || c.muteNarration);
+    const canUseMasterAudioDirectly =
+        hasMasterAudio &&
+        !hasSecondaryAudioBuses &&
+        !hasSoloOrMutedClips &&
+        state.autoNormalizeAudio === false;
 
-    if (shouldBuildFullAudioMix && hasAnyAudioSources) {
+    if (canUseMasterAudioDirectly) {
+        audioBuffer = timelineState.masterAudioBuffer;
+        mixedBuffer = timelineState.masterAudioBuffer;
+    } else if (shouldBuildFullAudioMix && hasAnyAudioSources) {
         ui.updateProcessingProgress(5, 'Mastering audio tracks & multi-bus mixing...');
 
         const mixCacheParts = [

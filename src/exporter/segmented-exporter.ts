@@ -26,6 +26,7 @@ import { audioBufferToWavBlob } from '../utils-core';
 import { stretchAudioBufferPreservePitch, softClipAudioBuffer } from './wsola-stretcher';
 import { getExportFlags } from './export-flags';
 import { sliceAudioBuffer } from '../audioBufferUtils';
+import { withExportTimeout } from './muxer';
 
 export interface TimelineSegment {
     index: number;
@@ -733,10 +734,28 @@ export async function encodeSingleSegmentToFile(
             const isAbs = timelineState.mode === 'audio_locked';
             const match = findClipAtExportTime(globalTime, isAbs);
             const currentShotIndex = match?.clipIndex ?? 0;
-            await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || []);
+            await withExportTimeout(
+              () => prepareFrameImageWindow(
+                currentShotIndex,
+                videoRenderContext?.clips || timelineState.clips || [],
+                width,
+                height
+              ),
+              10_000,
+              `Preparing images at segment frame ${localFrameIdx}`
+            );
 
-            await syncVideosForExportTime(globalTime, fps, height);
-            await drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any);
+            await withExportTimeout(
+              () => syncVideosForExportTime(globalTime, fps, height),
+              12_000,
+              `Synchronizing video at segment frame ${localFrameIdx}`
+            );
+
+            await withExportTimeout(
+              () => drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any),
+              15_000,
+              `Rendering segment frame ${localFrameIdx}`
+            );
 
             let frame: VideoFrame | null = null;
             try {

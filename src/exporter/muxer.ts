@@ -22,6 +22,21 @@ import { getExportFlags } from './export-flags';
 import { getAdaptiveMemoryProfile } from './adaptive-memory';
 
 
+export function withExportTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    let timer: any = null;
+    return Promise.race([
+        fn().then((res) => {
+            if (timer) clearTimeout(timer);
+            return res;
+        }),
+        new Promise<T>((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`[EXPORT TIMEOUT] ${label} exceeded ${timeoutMs}ms limit.`));
+            }, timeoutMs);
+        })
+    ]);
+}
+
 export type AudioSegmentProvider = (startTimeSec: number, durationSec: number) => Promise<AudioBuffer | null>;
 
 export async function encodeToMuxer(
@@ -245,15 +260,42 @@ export async function encodeToMuxer(
                 const isAbs = timelineState.mode === 'audio_locked';
                 const match = findClipAtExportTime(currentTimeSec, isAbs);
                 const currentShotIndex = match?.clipIndex ?? 0;
-                await prepareFrameImageWindow(currentShotIndex, videoRenderContext?.clips || timelineState.clips || [], width, height);
+                await withExportTimeout(
+                  () => prepareFrameImageWindow(
+                    currentShotIndex,
+                    videoRenderContext?.clips || timelineState.clips || [],
+                    width,
+                    height
+                  ),
+                  10_000,
+                  `Preparing images at frame ${videoFrameIndex}`
+                );
 
                 startExportStage('video-sync');
-                await syncVideosForExportTime(currentTimeSec, fps, height);
-                endExportStage('video-sync');
+                try {
+                    await withExportTimeout(
+                      () => syncVideosForExportTime(currentTimeSec, fps, height),
+                      12_000,
+                      `Synchronizing video at frame ${videoFrameIndex}`
+                    );
+                } finally {
+                    endExportStage('video-sync');
+                }
 
                 startExportStage('frame-render');
-                await drawExportFrameCached(currentTimeSec, exportCanvas as any, exportCtx as any);
-                endExportStage('frame-render');
+                try {
+                    await withExportTimeout(
+                      () => drawExportFrameCached(
+                        currentTimeSec,
+                        exportCanvas as any,
+                        exportCtx as any
+                      ),
+                      15_000,
+                      `Rendering frame ${videoFrameIndex}`
+                    );
+                } finally {
+                    endExportStage('frame-render');
+                }
                 
                 let frame: VideoFrame | null = null;
                 try {

@@ -3305,3 +3305,157 @@ export function applyColorGradeTemplate(filterName: string) {
   drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
 }
 
+// --- Smart Negative Space Caption Placement ---
+import { analyzeClipOccupiedRegions } from './smart-caption-vision';
+import { chooseSmartSubtitlePlacement, getClipLongestPhrase } from './smart-caption-placement';
+import { SubtitleEngine } from './subtitle-engine';
+
+export function updateSmartCaptionStatusUI() {
+    if (!dom.smartCaptionStatus) return;
+    const clips = timelineState.clips || [];
+    const smartClips = clips.filter(c => c.subtitlePlacement && c.subtitlePlacement.source === 'smart');
+
+    if (state.smartCaptionPlacementEnabled || smartClips.length > 0) {
+        dom.smartCaptionStatus.textContent = `🎯 Smart placement active on ${smartClips.length}/${clips.length} clips.`;
+        dom.smartCaptionStatus.className = 'text-[10px] text-indigo-300 font-medium leading-tight';
+        if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = true;
+        state.smartCaptionPlacementEnabled = true;
+    } else {
+        dom.smartCaptionStatus.textContent = 'Smart placement off - centered manually';
+        dom.smartCaptionStatus.className = 'text-[10px] text-gray-400 leading-tight';
+        if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = false;
+        state.smartCaptionPlacementEnabled = false;
+    }
+}
+
+export async function runSmartCaptionAnalysisForTimeline() {
+    const clips = timelineState.clips || [];
+    if (clips.length === 0) {
+        ui.showStatus('No video clips found on timeline to analyze.', true, 3000);
+        return;
+    }
+
+    if (dom.btnAnalyzeSmartCaptions) {
+        dom.btnAnalyzeSmartCaptions.disabled = true;
+        dom.btnAnalyzeSmartCaptions.innerHTML = '<span>⏳</span> Analyzing vision...';
+    }
+    if (dom.smartCaptionStatus) {
+        dom.smartCaptionStatus.textContent = 'Analyzing video negative space with Gemini Vision...';
+        dom.smartCaptionStatus.className = 'text-[10px] text-amber-300 leading-tight animate-pulse';
+    }
+
+    let analyzedCount = 0;
+    let previousPlacement = null;
+    const isLetterboxed = Boolean((state as any).enableLetterbox || (timelineState as any).cinematicLetterbox);
+
+    try {
+        for (let i = 0; i < clips.length; i++) {
+            const clip = clips[i];
+            const phrase = getClipLongestPhrase(clip.text, clip.subtitles);
+            const regions = await analyzeClipOccupiedRegions(clip);
+
+            const placement = chooseSmartSubtitlePlacement(
+                phrase,
+                regions,
+                previousPlacement,
+                isLetterboxed
+            );
+
+            clip.subtitlePlacement = placement;
+            previousPlacement = placement;
+            analyzedCount++;
+
+            if (dom.smartCaptionStatus) {
+                dom.smartCaptionStatus.textContent = `Analyzed ${analyzedCount}/${clips.length} clips...`;
+            }
+        }
+
+        state.smartCaptionPlacementEnabled = true;
+        if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = true;
+        SubtitleEngine.clearBitmapCache();
+        updateSmartCaptionStatusUI();
+        if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+
+        ui.showStatus(`🎯 Smart Placement applied to ${analyzedCount} clips in negative space!`, false, 4000);
+    } catch (err) {
+        console.error('[Smart Caption Analysis] Error:', err);
+        ui.showStatus('Smart caption analysis encountered an error.', true, 3000);
+    } finally {
+        if (dom.btnAnalyzeSmartCaptions) {
+            dom.btnAnalyzeSmartCaptions.disabled = false;
+            dom.btnAnalyzeSmartCaptions.innerHTML = '<span>🎯</span> Analyze & Place Captions';
+        }
+    }
+}
+
+export function resetSmartCaptionPlacements() {
+    const clips = timelineState.clips || [];
+    clips.forEach(c => {
+        delete c.subtitlePlacement;
+    });
+    state.smartCaptionPlacementEnabled = false;
+    if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = false;
+    SubtitleEngine.clearBitmapCache();
+    updateSmartCaptionStatusUI();
+    if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+    ui.showStatus('Reset subtitles to manual center position.', false, 2500);
+}
+
+export function initSmartCaptionListeners() {
+    if (dom.videoSubtitleStyleSelect) {
+        dom.videoSubtitleStyleSelect.addEventListener('change', () => {
+            if (dom.videoSubtitleStyleSelect) {
+                timelineState.setVideoSubtitleStyle(dom.videoSubtitleStyleSelect.value as any);
+                SubtitleEngine.clearBitmapCache();
+                if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+            }
+        });
+    }
+
+    if (dom.videoSubtitlePositionSelect) {
+        dom.videoSubtitlePositionSelect.addEventListener('change', () => {
+            if (dom.videoSubtitlePositionSelect) {
+                timelineState.setVideoSubtitlePosition(dom.videoSubtitlePositionSelect.value as any);
+                if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+            }
+        });
+    }
+
+    if (dom.videoSubtitlesCheckbox) {
+        dom.videoSubtitlesCheckbox.addEventListener('change', () => {
+            timelineState.setShowSubtitles(dom.videoSubtitlesCheckbox.checked);
+            if (dom.videoSubtitleStyleSelect) dom.videoSubtitleStyleSelect.disabled = !timelineState.showSubtitles;
+            if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.disabled = !timelineState.showSubtitles;
+            if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.disabled = !timelineState.showSubtitles;
+            if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.disabled = !timelineState.showSubtitles;
+            if (dom.btnAnalyzeSmartCaptions) dom.btnAnalyzeSmartCaptions.disabled = !timelineState.showSubtitles;
+            if (dom.btnResetSmartCaptions) dom.btnResetSmartCaptions.disabled = !timelineState.showSubtitles;
+            if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+        });
+    }
+
+    if (dom.videoSmartCaptionToggle) {
+        dom.videoSmartCaptionToggle.addEventListener('change', () => {
+            state.smartCaptionPlacementEnabled = dom.videoSmartCaptionToggle.checked;
+            updateSmartCaptionStatusUI();
+            SubtitleEngine.clearBitmapCache();
+            if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+        });
+    }
+
+    if (dom.btnAnalyzeSmartCaptions) {
+        dom.btnAnalyzeSmartCaptions.addEventListener('click', () => {
+            runSmartCaptionAnalysisForTimeline();
+        });
+    }
+
+    if (dom.btnResetSmartCaptions) {
+        dom.btnResetSmartCaptions.addEventListener('click', () => {
+            resetSmartCaptionPlacements();
+        });
+    }
+
+    updateSmartCaptionStatusUI();
+}
+
+

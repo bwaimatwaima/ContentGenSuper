@@ -94,6 +94,7 @@ export async function exportProjectArchive(onProgress?: (percent: number, messag
             videoSubtitlePosition: timelineState.videoSubtitlePosition,
             videoSubtitleFont: timelineState.videoSubtitleFont,
             videoSubtitleColors: state.videoSubtitleColors,
+            smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
             customFonts: state.customFonts,
             timelineMode: timelineState.mode,
             graphics: timelineState.graphics,
@@ -697,6 +698,7 @@ export async function importProjectArchive(file: File) {
             refreshCustomFontSelect();
         }
         state.videoSubtitleColors = importedState.videoSubtitleColors || {};
+        state.smartCaptionPlacementEnabled = Boolean(importedState.smartCaptionPlacementEnabled);
         timelineState.setMode(importedState.timelineMode || 'free');
         timelineState.setGraphics(importedState.graphics || []);
 

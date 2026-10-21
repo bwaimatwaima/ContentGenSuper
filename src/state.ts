@@ -176,6 +176,7 @@ export const state = {
     playbackStartOffset: 0,    // videoPauseTime when playback started
     lastRenderedTime: 0,       // Last time value passed to drawVideoFrame()
     videoSubtitleColors: {} as Record<string, any>,
+    smartCaptionPlacementEnabled: false,
     customFonts: [] as { name: string; format?: string; dataUrl?: string }[],
     lastProductionMetrics: null as {
         shotCount: number;

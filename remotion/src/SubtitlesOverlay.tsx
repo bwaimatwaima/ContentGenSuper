@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
-import { SubtitleStyleConfig, SubtitleCue } from './types';
+import { SubtitleStyleConfig, SubtitleCue, SubtitlePlacement, TimelineClipProp } from './types';
 import { useCurrentFrame, useVideoConfig, delayRender, continueRender } from 'remotion';
 import { buildChunks, Cue, Chunk } from './subtitleChunks';
 import { loadFontByName } from './fonts';
@@ -20,7 +20,8 @@ const CanvasSubtitle: React.FC<{
   chunk: Chunk | null;
   currentTimeSec: number;
   styleConfig: SubtitleStyleConfig;
-}> = ({ styleName, chunk, currentTimeSec, styleConfig }) => {
+  placement?: SubtitlePlacement | null;
+}> = ({ styleName, chunk, currentTimeSec, styleConfig, placement }) => {
   const { width, height } = useVideoConfig();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pending = useRef<number | null>(null);
@@ -87,6 +88,7 @@ const CanvasSubtitle: React.FC<{
       width,
       height,
       position: pos.includes('top') ? 'top' : pos.includes('center') ? 'center' : 'bottom',
+      placement: placement ?? null,
       clipTime: currentTimeSec,
       userColors: styleConfig.colors || null,
       requestedFont: styleConfig.fontFamily,
@@ -110,6 +112,8 @@ export interface SubtitlesOverlayProps {
   durationSec?: number;
   styleConfig?: SubtitleStyleConfig;
   timeOffsetSec?: number;
+  placement?: SubtitlePlacement | null;
+  clips?: TimelineClipProp[];
 }
 
 export const SubtitlesOverlay: React.FC<SubtitlesOverlayProps> = ({
@@ -118,10 +122,23 @@ export const SubtitlesOverlay: React.FC<SubtitlesOverlayProps> = ({
   durationSec = 5,
   styleConfig = {},
   timeOffsetSec = 0,
+  placement,
+  clips,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const currentTimeSec = frame / fps + timeOffsetSec;
+
+  const activeClip = useMemo(() => {
+    if (!clips || clips.length === 0) return null;
+    return clips.find((c) => {
+      const start = typeof c.startTime === 'number' ? c.startTime : 0;
+      const end = typeof c.endTime === 'number' ? c.endTime : start + (c.duration || 5);
+      return currentTimeSec >= start && currentTimeSec <= end;
+    }) || null;
+  }, [clips, currentTimeSec]);
+
+  const activePlacement = activeClip?.subtitlePlacement ?? placement;
 
   const rawPreset = (styleConfig.preset || 'classic').toLowerCase().replace(/[-_]/g, '');
   const position = (styleConfig.position || 'bottom').toLowerCase();
@@ -129,7 +146,21 @@ export const SubtitlesOverlay: React.FC<SubtitlesOverlayProps> = ({
   const highlightColor = styleConfig.highlightColor || '#facc15';
   const bgColor = styleConfig.bgColor || 'rgba(0, 0, 0, 0.75)';
 
-  const positionStyles: React.CSSProperties = {
+  const positionStyles: React.CSSProperties = activePlacement ? {
+    position: 'absolute',
+    left: `${Math.round((activePlacement.x ?? 0.5) * 100)}%`,
+    top: `${Math.round((activePlacement.y ?? 0.8) * 100)}%`,
+    textAlign: activePlacement.align || 'center',
+    zIndex: 60,
+    pointerEvents: 'none',
+    fontFamily: styleConfig.fontFamily || 'Montserrat, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    display: 'flex',
+    justifyContent: activePlacement.align === 'left' ? 'flex-start' : activePlacement.align === 'right' ? 'flex-end' : 'center',
+    alignItems: 'center',
+    opacity: 1,
+    transform: activePlacement.align === 'left' ? 'translate(0%, -50%)' : activePlacement.align === 'right' ? 'translate(-100%, -50%)' : 'translate(-50%, -50%)',
+    transition: 'opacity 0.15s ease, transform 0.15s ease',
+  } : {
     position: 'absolute',
     left: '5%',
     right: '5%',
@@ -180,6 +211,7 @@ export const SubtitlesOverlay: React.FC<SubtitlesOverlayProps> = ({
         chunk={active}
         currentTimeSec={currentTimeSec}
         styleConfig={styleConfig}
+        placement={activePlacement}
       />
     );
   }

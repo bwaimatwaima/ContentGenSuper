@@ -1404,6 +1404,7 @@ export const MODAL_TEMPLATES = `
                                         <label for="video-subtitle-style-select" class="block text-[10px] uppercase font-mono text-gray-400 mb-1">Style</label>
                                         <select id="video-subtitle-style-select" class="w-full bg-zinc-800 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:ring-1 focus:ring-indigo-500 outline-none cursor-pointer disabled:opacity-50" disabled title="Subtitle Style">
                                             <option value="kinetic_gold" selected>Kinetic Gold (Doc Highlight)</option>
+                                            <option value="aesthetic_serif">Aesthetic Serif (Romantic Lyric)</option>
                                             <option value="anime">Anime</option>
                                             <option value="karaoke">Karaoke</option>
                                             <option value="hormozi">Hormozi Pop</option>
@@ -1425,6 +1426,26 @@ export const MODAL_TEMPLATES = `
                                             <option value="center">Center</option>
                                             <option value="top">Top</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                <!-- Smart Negative Space Placement -->
+                                <div class="p-2.5 rounded bg-zinc-800/60 border border-white/10 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                                            <input type="checkbox" id="video-smart-caption-toggle" class="rounded bg-zinc-800 border-white/10 text-indigo-500 focus:ring-0 cursor-pointer">
+                                            <span class="text-xs font-semibold text-gray-200">Smart Negative Space Placement</span>
+                                        </label>
+                                        <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">AI Vision</span>
+                                    </div>
+                                    <p id="smart-caption-status" class="text-[10px] text-gray-400 leading-tight">Places captions in unoccupied negative space avoiding subject overlap.</p>
+                                    <div class="flex items-center gap-1.5 pt-1">
+                                        <button type="button" id="btn-analyze-smart-captions" class="flex-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-[11px] font-semibold py-1.5 px-2.5 rounded transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <span>🎯</span> Analyze & Place Captions
+                                        </button>
+                                        <button type="button" id="btn-reset-smart-captions" class="bg-zinc-700 hover:bg-zinc-600 active:scale-95 text-gray-300 hover:text-white text-[11px] font-medium py-1.5 px-2 rounded transition-all cursor-pointer disabled:opacity-50" title="Reset to manual center position">
+                                            Reset
+                                        </button>
                                     </div>
                                 </div>
 

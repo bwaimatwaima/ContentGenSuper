@@ -84,6 +84,11 @@ export const SubtitleColorPresets = {
         inactive: "#FFFFFF",
         outline: "rgba(0, 0, 0, 0.90)",
     },
+    aesthetic_serif: {
+        text: '#F6D8E4',          // soft blush pink
+        shadow: 'rgba(0, 0, 0, 0.88)',
+        outline: 'rgba(0, 0, 0, 0.35)',
+    },
 };
 
 /* -----------------------------------------------------------
@@ -710,3 +715,36 @@ export const KineticGoldRenderer: SubtitleStyle = {
         ctx.restore();
     }
 };
+
+/* -----------------------------------------------------------
+   STYLE: AESTHETIC SERIF (Romantic Lyric & Editorial Blush)
+----------------------------------------------------------- */
+
+export const AestheticSerifRenderer: SubtitleStyle = {
+    draw(ctx, layout, _progress, options) {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+
+        // Keep the shadow subtle. Avoid large blur values because this renderer runs per frame.
+        ctx.shadowColor = options.colors.shadow || 'rgba(0, 0, 0, 0.88)';
+        ctx.shadowBlur = Math.min(7, Math.max(2, options.fontSize * 0.075));
+        ctx.shadowOffsetX = Math.max(1, options.fontSize * 0.018);
+        ctx.shadowOffsetY = Math.max(2, options.fontSize * 0.055);
+
+        ctx.lineWidth = Math.max(1, options.fontSize * 0.018);
+        ctx.strokeStyle = options.colors.outline || 'rgba(0, 0, 0, 0.35)';
+        ctx.fillStyle = options.colors.text || '#F6D8E4';
+
+        for (const line of layout.lines) {
+            for (const word of line.words) {
+                ctx.strokeText(word.text, word.x, word.y);
+                ctx.fillText(word.text, word.x, word.y);
+            }
+        }
+
+        ctx.restore();
+    },
+};
+

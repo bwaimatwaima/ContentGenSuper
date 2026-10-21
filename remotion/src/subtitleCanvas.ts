@@ -27,14 +27,29 @@ import {
   MinimalEditorialRenderer,
   TerminalRenderer,
   BilingualRenderer,
+import {
+  KaraokeRenderer,
+  CinematicRenderer,
+  YellowBoxRenderer,
+  TikTokRenderer,
+  AnimeRenderer,
+  NeonRenderer,
+  TypewriterRenderer,
+  HormoziRenderer,
+  MrBeastRenderer,
+  MinimalEditorialRenderer,
+  TerminalRenderer,
+  BilingualRenderer,
   KineticGoldRenderer,
+  AestheticSerifRenderer,
   SubtitleColorPresets,
 } from '../../src/subtitle-styles';
 import type { SubtitleLayout, LayoutWord, StyleTypography, SubtitleStyle } from '../../src/subtitle-engine';
+import type { SubtitlePlacement } from '../../src/smart-caption-placement';
 
 export type LocalSubtitleStyle =
   | 'karaoke' | 'cinematic' | 'yellow_box' | 'tiktok' | 'anime' | 'neon' | 'typewriter'
-  | 'hormozi' | 'mrbeast' | 'minimal_editorial' | 'terminal' | 'bilingual' | 'kinetic_gold';
+  | 'hormozi' | 'mrbeast' | 'minimal_editorial' | 'terminal' | 'bilingual' | 'kinetic_gold' | 'aesthetic_serif';
 
 const RENDERERS: Record<LocalSubtitleStyle, SubtitleStyle> = {
   karaoke: KaraokeRenderer,
@@ -50,6 +65,7 @@ const RENDERERS: Record<LocalSubtitleStyle, SubtitleStyle> = {
   terminal: TerminalRenderer,
   bilingual: BilingualRenderer,
   kinetic_gold: KineticGoldRenderer,
+  aesthetic_serif: AestheticSerifRenderer,
 };
 
 const DEFAULT_COLORS: Record<LocalSubtitleStyle, Record<string, string>> = {
@@ -66,6 +82,7 @@ const DEFAULT_COLORS: Record<LocalSubtitleStyle, Record<string, string>> = {
   terminal: SubtitleColorPresets.terminal,
   bilingual: SubtitleColorPresets.bilingual,
   kinetic_gold: SubtitleColorPresets.kinetic_gold,
+  aesthetic_serif: SubtitleColorPresets.aesthetic_serif,
 };
 
 const MONO = '"JetBrains Mono", "Fira Code", "Courier New", ui-monospace, monospace';
@@ -85,6 +102,7 @@ export const STYLE_TYPOGRAPHY: Record<LocalSubtitleStyle, StyleTypography> = {
   terminal: { fontFamily: MONO, fontWeight: 600, sizeScale: 0.88, letterSpacing: '0.02em' },
   bilingual: { fontWeight: 700, sizeScale: 0.95 },
   kinetic_gold: { fontFamily: '"Montserrat", "Inter", system-ui, sans-serif', fontWeight: 800, sizeScale: 1.02, transform: 'none' },
+  aesthetic_serif: { fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 700, sizeScale: 1.02, letterSpacing: '0.005em', transform: 'none' },
 };
 
 /** Maps any preset spelling used in project files / UI to the engine's style name. */
@@ -102,6 +120,9 @@ const ALIASES: Record<string, LocalSubtitleStyle> = {
   terminal: 'terminal',
   bilingual: 'bilingual',
   kineticgold: 'kinetic_gold', kinetic: 'kinetic_gold',
+  aestheticserif: 'aesthetic_serif',
+  romanticlyric: 'aesthetic_serif',
+  editorialpink: 'aesthetic_serif',
 };
 
 export function resolveLocalSubtitleStyle(preset?: string): LocalSubtitleStyle | null {
@@ -113,7 +134,8 @@ export function resolveLocalSubtitleStyle(preset?: string): LocalSubtitleStyle |
 export function fontsForStyle(style: LocalSubtitleStyle, requestedFont?: string, text = ''): string[] {
   const out = new Set<string>();
   const t = STYLE_TYPOGRAPHY[style];
-  if (t.fontFamily?.includes('JetBrains')) out.add('JetBrains Mono');
+  if (t.fontFamily?.includes('Playfair')) out.add('Playfair Display');
+  else if (t.fontFamily?.includes('JetBrains')) out.add('JetBrains Mono');
   else if (t.fontFamily?.includes('Montserrat')) out.add('Montserrat');
   else {
     out.add(requestedFont || 'Montserrat');
@@ -176,7 +198,8 @@ export function precomputeLayout(
   needsCharWidths: boolean = false,
   fontFamily?: string,
   emphasisMap?: boolean[],
-  typography?: StyleTypography
+  typography?: StyleTypography,
+  placement?: SubtitlePlacement | null
 ): SubtitleLayout {
   const words = text.split(/\s+/).filter(Boolean);
   const sizeScale = typography?.sizeScale ?? 1.0;
@@ -203,7 +226,19 @@ export function precomputeLayout(
 
   while (fontSize >= minFontSize) {
     lineHeight = fontSize * 1.2;
-    const maxWidth = width * 0.8;
+
+    let maxWidth = width * 0.8;
+    if (placement) {
+      if (placement.align === 'left') {
+        maxWidth = Math.max(width * 0.25, width * 0.945 - width * placement.x);
+      } else if (placement.align === 'right') {
+        maxWidth = Math.max(width * 0.25, width * placement.x - width * 0.055);
+      } else {
+        const distToEdge = Math.min(placement.x - 0.055, 0.945 - placement.x);
+        maxWidth = Math.max(width * 0.25, width * 2 * distToEdge);
+      }
+    }
+
     ctx.font = `${weight} ${fontSize}px ${family}`;
     const spaceWidth = ctx.measureText(' ').width;
 
@@ -249,14 +284,36 @@ export function precomputeLayout(
       }
       const totalHeight = layout.lines.length * lineHeight;
       let y: number;
-      if (position === 'top') y = height * 0.12 + fontSize / 2;
-      else if (position === 'center') y = height * 0.5 - totalHeight / 2 + fontSize / 2;
-      else y = height * 0.8 - totalHeight / 2;
+      if (placement) {
+        y = height * placement.y - totalHeight / 2 + fontSize / 2;
+      } else if (position === 'top') {
+        y = height * 0.12 + fontSize / 2;
+      } else if (position === 'center') {
+        y = height * 0.5 - totalHeight / 2 + fontSize / 2;
+      } else {
+        y = height * 0.8 - totalHeight / 2;
+      }
 
       for (const line of layout.lines) {
         line.y = y;
         const lineWidth = line.words.reduce((s, w) => s + w.width, 0) + spaceWidth * (line.words.length - 1);
-        let x = Math.max(width * 0.05, width / 2 - lineWidth / 2);
+
+        let lineLeft: number;
+        if (placement) {
+          const anchorX = width * placement.x;
+          if (placement.align === 'left') lineLeft = anchorX;
+          else if (placement.align === 'right') lineLeft = anchorX - lineWidth;
+          else lineLeft = anchorX - lineWidth / 2;
+        } else {
+          lineLeft = width / 2 - lineWidth / 2;
+        }
+
+        // Critical Fix #3: Clamp both left and right edges
+        const minLeft = width * 0.055;
+        const maxRight = width * 0.945;
+        lineLeft = Math.max(minLeft, Math.min(lineLeft, maxRight - lineWidth));
+
+        let x = lineLeft;
         for (const word of line.words) {
           word.x = x + word.width / 2;
           word.y = y;
@@ -286,11 +343,12 @@ export interface DrawSubtitleArgs {
   /** state.videoSubtitleColors: either { [styleName]: {...} } or a flat colour object. */
   userColors?: Record<string, any> | null;
   requestedFont?: string;
+  placement?: SubtitlePlacement | null;
 }
 
 /** Mirror of the per-frame part of SubtitleEngine.draw(). */
 export function drawSubtitleChunk(ctx: CanvasRenderingContext2D, a: DrawSubtitleArgs): void {
-  const { style, width, height } = a;
+  const { style, width, height, placement } = a;
   const position = a.position === 'top' || a.position === 'center' ? a.position : 'bottom';
   const rawText = a.words.join(' ').replace(/\s+/g, ' ').trim();
   if (!rawText) return;
@@ -318,7 +376,7 @@ export function drawSubtitleChunk(ctx: CanvasRenderingContext2D, a: DrawSubtitle
     ? Math.min(3, Math.max(2, Math.ceil(wordsInChunk / 2.2)))
     : Math.min(2, Math.max(1, Math.ceil(wordsInChunk / 3.5)));
 
-  const layout = precomputeLayout(ctx, displayText, width, height, maxLinesNeeded, position, style === 'typewriter', a.requestedFont, emphasisMap, typography);
+  const layout = precomputeLayout(ctx, displayText, width, height, maxLinesNeeded, position, style === 'typewriter', a.requestedFont, emphasisMap, typography, placement);
 
   ctx.font = `${weight} ${layout.fontSize}px ${family}`;
   if (typography.letterSpacing && 'letterSpacing' in ctx) (ctx as any).letterSpacing = typography.letterSpacing;

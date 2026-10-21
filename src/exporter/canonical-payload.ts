@@ -10,6 +10,7 @@
  */
 
 import { mediaAspectOf } from '../pip-layout';
+import type { SubtitlePlacement } from '../smart-caption-placement';
 
 export interface CanonicalClipPayload {
   id: string;
@@ -17,6 +18,7 @@ export interface CanonicalClipPayload {
   endTime: number;
   duration: number;
   text: string;
+  subtitlePlacement?: SubtitlePlacement | null;
   imageUrl?: string;
   videoUrl?: string;
   overlayImageUrl?: string;
@@ -251,6 +253,7 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       endTime,
       duration,
       text: c.text || '',
+      subtitlePlacement: c.subtitlePlacement ? structuredClone(c.subtitlePlacement) : undefined,
       imageUrl,
       videoUrl,
       overlayImageUrl,

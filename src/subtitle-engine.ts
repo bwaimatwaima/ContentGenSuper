@@ -16,11 +16,13 @@ import {
     TerminalRenderer,
     BilingualRenderer,
     KineticGoldRenderer,
+    AestheticSerifRenderer,
     SubtitleColorPresets
 } from './subtitle-styles';
 import { LRUCache } from './lru-cache';
 import { chunkSubtitleText, chunkSubtitleTextTimed, SubtitleChunk } from './subtitle-chunker';
 import { timelineState } from './state-timeline';
+import type { SubtitlePlacement } from './smart-caption-placement';
 
 export { SubtitleColorPresets };
 
@@ -110,6 +112,7 @@ export interface SubtitleDrawOptions {
     clipTime?: number;
     wordTimestamps?: { word: string; start: number; end: number }[] | null;
     isPlaying?: boolean;
+    placement?: SubtitlePlacement | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +124,7 @@ const chunkCache = new LRUCache<string, SubtitleChunk[]>(200);
 const heightOffsetCache = new LRUCache<string, number>(50);
 
 // Static styles with no per-word active animation that can be cached to offscreen bitmaps
-const STATIC_STYLES = new Set(['cinematic', 'anime', 'yellow_box']);
+const STATIC_STYLES = new Set(['cinematic', 'anime', 'yellow_box', 'aesthetic_serif']);
 
 // Note on resolution / DPR: Bitmap cache is keyed on width, height, position, font, and color signature.
 // Preview and export resolutions receive separate cached entries.
@@ -220,7 +223,8 @@ function precomputeLayout(
     needsCharWidths: boolean = false,
     fontFamily?: string,
     emphasisMap?: boolean[],
-    typography?: StyleTypography
+    typography?: StyleTypography,
+    placement?: SubtitlePlacement | null
 ): SubtitleLayout {
     const words = text.split(/\s+/).filter(Boolean);
 
@@ -256,7 +260,18 @@ function precomputeLayout(
 
     while (fontSize >= minFontSize) {
         lineHeight = fontSize * 1.2;
-        const maxWidth = width * 0.8;
+
+        let maxWidth = width * 0.8;
+        if (placement) {
+            if (placement.align === 'left') {
+                maxWidth = Math.max(width * 0.25, width * 0.945 - width * placement.x);
+            } else if (placement.align === 'right') {
+                maxWidth = Math.max(width * 0.25, width * placement.x - width * 0.055);
+            } else {
+                const distToEdge = Math.min(placement.x - 0.055, 0.945 - placement.x);
+                maxWidth = Math.max(width * 0.25, width * 2 * distToEdge);
+            }
+        }
 
         ctx.font = `${weight} ${fontSize}px ${family}`;
         const spaceWidth = ctx.measureText(" ").width;
@@ -349,7 +364,9 @@ function precomputeLayout(
 
             const totalHeight = layout.lines.length * lineHeight;
             let y: number;
-            if (position === 'top') {
+            if (placement) {
+                y = height * placement.y - totalHeight / 2 + fontSize / 2;
+            } else if (position === 'top') {
                 y = (height * 0.12) + (fontSize / 2);
             } else if (position === 'center') {
                 y = (height * 0.50) - (totalHeight / 2) + (fontSize / 2);
@@ -364,7 +381,22 @@ function precomputeLayout(
                     line.words.reduce((sum, w) => sum + w.width, 0) +
                     spaceWidth * (line.words.length - 1);
 
-                let x = Math.max(width * 0.05, (width / 2) - lineWidth / 2);
+                let lineLeft: number;
+                if (placement) {
+                    const anchorX = width * placement.x;
+                    if (placement.align === 'left') lineLeft = anchorX;
+                    else if (placement.align === 'right') lineLeft = anchorX - lineWidth;
+                    else lineLeft = anchorX - lineWidth / 2;
+                } else {
+                    lineLeft = (width / 2) - lineWidth / 2;
+                }
+
+                // Critical Fix #3: Clamp both left and right edges
+                const minLeft = width * 0.055;
+                const maxRight = width * 0.945;
+                lineLeft = Math.max(minLeft, Math.min(lineLeft, maxRight - lineWidth));
+
+                let x = lineLeft;
                 for (const word of line.words) {
                     word.x = x + word.width / 2;
                     word.y = y;
@@ -493,6 +525,7 @@ export const SubtitleEngine = {
         isPlaying: boolean = false
     ) {
         let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | any;
+        let placement: SubtitlePlacement | null = null;
         const isOptionsObject = ctxOrOptions && typeof ctxOrOptions === 'object' && 'ctx' in ctxOrOptions && 'text' in ctxOrOptions;
         if (isOptionsObject) {
             const opts = ctxOrOptions as SubtitleDrawOptions;
@@ -509,6 +542,7 @@ export const SubtitleEngine = {
             clipTime = opts.clipTime ?? 0;
             wordTimestamps = opts.wordTimestamps ?? null;
             isPlaying = opts.isPlaying ?? false;
+            placement = opts.placement ?? null;
         } else {
             ctx = ctxOrOptions as any;
         }
@@ -638,7 +672,8 @@ export const SubtitleEngine = {
         const weight = typography?.fontWeight ?? 800;
         const family = typography?.fontFamily ?? resolveSubtitleFont(displayText, currentFont);
         const typoKey = `${weight}-${typography?.sizeScale ?? 1}-${family}-${typography?.letterSpacing ?? ''}`;
-        const cacheKey = `${displayText}-${width}-${height}-${position}-${styleName}-${typoKey}${emphasisSig ? `-${emphasisSig}` : ''}`;
+        const placementKey = placement ? `${placement.x.toFixed(3)}:${placement.y.toFixed(3)}:${placement.align}` : '';
+        const cacheKey = `${displayText}-${width}-${height}-${position}-${styleName}-${typoKey}${emphasisSig ? `-${emphasisSig}` : ''}${placementKey ? `-${placementKey}` : ''}`;
         let layout = layoutCache.get(cacheKey);
 
         if (layout) {
@@ -661,7 +696,8 @@ export const SubtitleEngine = {
                 styleName === 'typewriter',
                 currentFont,
                 emphasisMap,
-                typography
+                typography,
+                placement
             );
             layoutCache.set(cacheKey, layout);
         }
@@ -859,5 +895,12 @@ SubtitleEngine.registerStyle("kinetic_gold", KineticGoldRenderer, SubtitleColorP
     fontFamily: '"Montserrat", "Inter", system-ui, sans-serif',
     fontWeight: 800,
     sizeScale: 1.02,
+    transform: "none",
+});
+SubtitleEngine.registerStyle("aesthetic_serif", AestheticSerifRenderer, SubtitleColorPresets.aesthetic_serif, {
+    fontFamily: '"Playfair Display", Georgia, serif',
+    fontWeight: 700,
+    sizeScale: 1.02,
+    letterSpacing: "0.005em",
     transform: "none",
 });

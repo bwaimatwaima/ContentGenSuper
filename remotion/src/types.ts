@@ -18,6 +18,8 @@ export interface SubtitleCue {
   [key: string]: any;
 }
 
+import type { SubtitlePlacement } from '../../src/smart-caption-placement';
+
 export interface TimelineClipProp {
   id: string;
   startTime: number;  // in seconds
@@ -27,6 +29,7 @@ export interface TimelineClipProp {
   colorMood?: string;
   prompt?: string;
   text?: string;
+  subtitlePlacement?: SubtitlePlacement | null;
   hasVideo?: boolean;
   hasImage?: boolean;
   imageUrl?: string;

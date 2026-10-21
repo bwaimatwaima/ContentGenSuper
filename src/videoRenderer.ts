@@ -2961,6 +2961,7 @@ function drawVideoFrameImpl(
           forcedWordIndex: wordIndex,
           hasTimestamps,
           position: timelineState.videoSubtitlePosition,
+          placement: (cur as any).subtitlePlacement ?? null,
           clipTime: tIn,
           wordTimestamps: hasTimestamps ? cur.wordTimestamps! : null,
           isPlaying: state.isVideoPlaying
@@ -3171,6 +3172,7 @@ export function drawExportOverlayLayer(
           forcedWordIndex: wordIndex,
           hasTimestamps,
           position: timelineState.videoSubtitlePosition,
+          placement: (cur as any).subtitlePlacement ?? null,
           clipTime: tIn,
           wordTimestamps: hasTimestamps ? cur.wordTimestamps! : null,
           isPlaying: state.isVideoPlaying

@@ -556,6 +556,7 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
           durationSec={durationInFrames / fps}
           timeOffsetSec={(timelineFrameOffset || 0) / fps}
           styleConfig={subtitleStyle}
+          placement={clip.subtitlePlacement}
         />
       )}
     </AbsoluteFill>

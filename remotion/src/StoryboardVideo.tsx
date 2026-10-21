@@ -281,6 +281,7 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
           <SubtitlesOverlay
             subtitles={subtitles}
             styleConfig={subtitleStyle}
+            clips={clips}
           />
         ) : (
           computedClips.map((item) => {
@@ -300,6 +301,7 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
                   subtitles={clip.subtitles}
                   durationSec={item.durSec}
                   styleConfig={subtitleStyle}
+                  placement={clip.subtitlePlacement}
                 />
               </Sequence>
             );

@@ -271,6 +271,7 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
         videoSubtitlePosition: timelineState.videoSubtitlePosition,
         videoSubtitleFont: timelineState.videoSubtitleFont,
         videoSubtitleColors: state.videoSubtitleColors,
+        smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
         customFonts: state.customFonts,
         timelineMode: timelineState.mode,
         graphics: timelineState.graphics,
@@ -857,6 +858,7 @@ export async function loadProject() {
                 refreshCustomFontSelect();
             }
             state.videoSubtitleColors = projectData.videoSubtitleColors || {};
+            state.smartCaptionPlacementEnabled = Boolean(projectData.smartCaptionPlacementEnabled);
             timelineState.setMode(projectData.timelineMode || 'free');
             timelineState.setGraphics(projectData.graphics || []);
             timelineState.setAudioSplits(projectData.audioSplits || []);

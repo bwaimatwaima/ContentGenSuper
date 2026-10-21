@@ -17,11 +17,13 @@ import { openMapStudioModal } from './map-studio';
 import { removeSecondaryMedia } from './memoryManager';
 import { mountInspectorPositionGlyphs, mountInspectorSpeedChips } from './director-workspace';
 import { focusTransitionForClip } from './transitions-studio-panel';
+import { isVillainFoilClip } from './constants';
 
 export let activeShotId: string | null = null;
 
 export function getFilterLabel(filter: string): string {
     switch (filter) {
+        case 'nostalgic_warmth': return '🌾 Nostalgic Warmth';
         case 'noir': return '🌑 Noir B&W';
         case 'noir_grain': return '📽️ Noir + Grain';
         case 'vintage': return '📼 70s Retro';
@@ -728,6 +730,17 @@ export function openInspectorForShot(shotId?: string) {
     const matchingTimelineClip = timelineState.clips?.find((c: any) => c.id === target.shot.id);
     const shotTrans = matchingTimelineClip?.transitionToNext || target.shot.transitionToNext || target.shot.transition || 'cut';
 
+    // Villain / Foil Shot Checkbox Synchronization
+    const villainCb = document.getElementById('inspector-villain-shot-checkbox') as HTMLInputElement | null;
+    if (villainCb) {
+        const isVillain = shot.isVillainShot !== undefined
+            ? Boolean(shot.isVillainShot)
+            : (matchingTimelineClip?.isVillainShot !== undefined
+                ? Boolean(matchingTimelineClip.isVillainShot)
+                : isVillainFoilClip(shot));
+        villainCb.checked = isVillain;
+    }
+
     if (transSelect) {
         transSelect.value = shotTrans;
         transSelect.disabled = isLastShot;
@@ -1048,9 +1061,17 @@ export function saveInspectorMetadata() {
     shot.colorFilter = selectedFilter;
     shot.colorFilterIntensity = selectedIntensity;
 
+    const villainCb = document.getElementById('inspector-villain-shot-checkbox') as HTMLInputElement | null;
+    if (villainCb) {
+        shot.isVillainShot = villainCb.checked;
+    }
+
     // Update corresponding clip in timeline
     const clip = timelineState.clips?.find((c: any) => c.id === shot.id);
     if (clip) {
+        if (villainCb) {
+            clip.isVillainShot = villainCb.checked;
+        }
         clip.displayMode = displayMode;
         clip.pipPosition = pipPosition;
         clip.pipAnimation = pipAnimation;
@@ -1519,6 +1540,26 @@ export function initInspectorHandlers() {
         dom.inspectorColorFilterSelect.addEventListener('change', () => {
             const filter = dom.inspectorColorFilterSelect.value;
             applyFilterToActiveShot(filter);
+        });
+    }
+
+    // Villain / Modern Foil Shot Checkbox Change
+    const villainCb = document.getElementById('inspector-villain-shot-checkbox') as HTMLInputElement | null;
+    if (villainCb) {
+        villainCb.addEventListener('change', () => {
+            if (!activeShotId) return;
+            const allShots = getAllStoryboardShots();
+            const targetItem = allShots.find(item => item.shot.id === activeShotId);
+            if (!targetItem) return;
+
+            targetItem.shot.isVillainShot = villainCb.checked;
+            const clip = timelineState.clips?.find((c: any) => c.id === targetItem.shot.id);
+            if (clip) {
+                clip.isVillainShot = villainCb.checked;
+            }
+            if (timelineState.videoGenerated && !state.isVideoPlaying) {
+                drawVideoFrame(state.videoPauseTime || 0);
+            }
         });
     }
 

@@ -79,6 +79,9 @@ class TimelineState {
         crtEffect: number;
         blendMode: string;
         enableBackgroundBlur: boolean;
+        warmthKelvin?: number;
+        villainDesaturate?: boolean;
+        cinematicVignette?: boolean;
     } = {
         grain: 0.05,
         vignette: 0.15,

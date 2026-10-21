@@ -393,25 +393,8 @@ export async function handleEmailLogin() {
             return;
         }
         if (error?.code === 'auth/operation-not-allowed' || (typeof error?.message === 'string' && error.message.includes('operation-not-allowed'))) {
-            const projectId = firebaseConfig.projectId || 'paidproject-505110';
-            const providersUrl = `https://console.firebase.google.com/project/${projectId}/authentication/providers`;
             showAuthError(
-                `⚠️ Email/Password Provider is Disabled in Firebase Console\n\n` +
-                `Firebase requires the Email/Password sign-in method to be enabled in your Firebase project.\n\n` +
-                `How to fix in 30 seconds:\n` +
-                `1. Open Firebase Console: ${providersUrl}\n` +
-                `2. Under "Sign-in providers", click "Email/Password"\n` +
-                `3. Toggle "Enable" to ON and click "Save".\n\n` +
-                `💡 You can also log in via Google or Continue as Guest in the meantime.`
-            );
-            ui.showConfirmation(
-                'Firebase: Enable Email/Password Provider',
-                `Firebase Email/Password authentication is currently disabled in your Firebase project (${projectId}).\n\n` +
-                `Would you like to open Firebase Console > Authentication > Sign-in method to enable it now?`,
-                () => {
-                    window.open(providersUrl, '_blank');
-                },
-                () => {}
+                "Password login is currently disabled. Please contact the administrator and ask them to enable password login.\n\n💡 You can also log in via Google or Continue as Guest in the meantime."
             );
             return;
         }
@@ -502,25 +485,8 @@ export async function handleEmailSignup() {
             error?.code === 'auth/invalid-api-key' ||
             (typeof error?.message === 'string' && (error.message.includes('api-key-not-found') || error.message.includes('API Key not found') || error.message.includes('API key not valid')));
         if (error?.code === 'auth/operation-not-allowed' || (typeof error?.message === 'string' && error.message.includes('operation-not-allowed'))) {
-            const projectId = firebaseConfig.projectId || 'paidproject-505110';
-            const providersUrl = `https://console.firebase.google.com/project/${projectId}/authentication/providers`;
             showAuthError(
-                `⚠️ Email/Password Provider Disabled in Firebase Console\n\n` +
-                `Registration requires the Email/Password sign-in method to be turned ON in your Firebase project.\n\n` +
-                `How to fix:\n` +
-                `1. Open Firebase Console: ${providersUrl}\n` +
-                `2. Under "Sign-in providers", click "Email/Password"\n` +
-                `3. Enable "Email/Password" and click Save.\n\n` +
-                `💡 You can also sign in via Google or Continue as Guest in the meantime.`
-            );
-            ui.showConfirmation(
-                'Firebase: Enable Email/Password Provider',
-                `Registration with Email/Password requires the provider to be enabled in Firebase Console (${projectId}).\n\n` +
-                `Would you like to open Firebase Console to enable it now?`,
-                () => {
-                    window.open(providersUrl, '_blank');
-                },
-                () => {}
+                "Account registration via password is currently disabled. Please contact the administrator and ask them to enable password login.\n\n💡 You can also sign in via Google or Continue as Guest in the meantime."
             );
             return;
         }

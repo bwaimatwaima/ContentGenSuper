@@ -10,6 +10,7 @@ export interface CinematicCustomEffectsParams {
   clarity?: number;
   vibrance?: number;
   sharpening?: number;
+  isVillainShot?: boolean;
 }
 
 /**
@@ -22,7 +23,7 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
   documentationLink: null,
   backend: '2d',
   calculateKey: (params) => {
-    return `fx-${params.filterName || 'none'}-${params.grain || 0}-${params.vignette || 0}-${params.chromaticAberration || 0}-${params.hdrBalance || 0}-${params.clarity || 0}-${params.vibrance || 0}-${params.sharpening || 0}-${params.seed || 0}`;
+    return `fx-${params.filterName || 'none'}-${params.grain || 0}-${params.vignette || 0}-${params.chromaticAberration || 0}-${params.hdrBalance || 0}-${params.clarity || 0}-${params.vibrance || 0}-${params.sharpening || 0}-${params.seed || 0}-${params.isVillainShot ? 1 : 0}`;
   },
   setup: () => null,
   apply: ({ source, target, width, height, params }) => {
@@ -43,7 +44,42 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
       clarity = 0,
       vibrance = 0,
       sharpening = 0,
-    } = params;
+      isVillainShot = false,
+    } = params as CinematicCustomEffectsParams & { isVillainShot?: boolean };
+
+    // ─── NEW: "Nostalgic Warmth" Heritage LUT vs. "Villain Foil" Grade ───
+    if (filterName === 'nostalgic_warmth') {
+      if (isVillainShot) {
+        // Desaturated "Villain" Shot: sterile, cold, uninviting (-35% sat, cool blue-slate tint)
+        ctx.save();
+        ctx.filter = 'saturate(62%) contrast(106%) brightness(97%)';
+        ctx.drawImage(source, 0, 0, width, height);
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'color';
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = '#64748b'; // Cold clinical slate
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      } else {
+        // 1. Golden Hour Warmth (+400K amber midtones & warm highlights)
+        ctx.save();
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = '#d9822b'; // Golden-amber push
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+
+        // 2. Deep Heritage Greens & Earth Tone Richness (prevents neon greens)
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.globalAlpha = 0.08;
+        ctx.fillStyle = '#3b2f1e'; // Rich earth/wood shadow anchor
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      }
+    }
 
     // 0a. HDR Exposure Balance
     if (hdrBalance > 0) {

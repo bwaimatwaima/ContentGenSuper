@@ -81,7 +81,9 @@ app.use('/api/*', (_req: express.Request, res: express.Response) => {
 // Serve Built Frontend & Vite Dev Middleware
 async function startServer() {
     // 1. Electron supplies a dynamic PORT. Cloud Run supplies PORT=8080 at runtime.
-    const targetPort = Number(process.env.PORT) || 3000;
+    const portArgIdx = process.argv.findIndex(arg => arg === '--port' || arg === '-p');
+    const cliPort = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? Number(process.argv[portArgIdx + 1]) : null;
+    const targetPort = cliPort || Number(process.env.PORT) || 3000;
     const bindHost = process.env.IS_DESKTOP === 'true' ? '127.0.0.1' : '0.0.0.0';
 
     // 2. Start HTTP server IMMEDIATELY so Cloud Run port checks & probes pass in <10ms

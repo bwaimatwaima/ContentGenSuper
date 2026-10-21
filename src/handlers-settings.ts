@@ -12,6 +12,7 @@ import type { SavedCustomVoice } from './types';
 import { saveVersion } from './handlers-project';
 import { drawVideoFrame } from './videoRenderer';
 import { syncEffectsToUI } from './handlers-effects';
+import { NOSTALGIC_WARMTH_TEMPLATE } from './constants';
 import { fetchAndPopulateVoices, fetchAndPopulateElevenLabsModels } from './audioPipeline';
 import { db, auth } from './firebase';
 import { currentUser, isGuest, isCookieAuthAllowedForCurrentUser } from './auth';
@@ -3248,3 +3249,59 @@ export function handleGraphicsThemeChange(event: Event) {
 }
 
 registerRestoreApiKeysFromCloudOrDB(restoreApiKeysFromCloudOrDB);
+
+export function applyColorGradeTemplate(filterName: string) {
+  state.activeFilterName = filterName;
+
+  if (filterName === 'nostalgic_warmth') {
+    state.cinematicVignette = true;
+    state.videoEffects = {
+      ...(state.videoEffects || {}),
+      ...NOSTALGIC_WARMTH_TEMPLATE.videoEffects,
+    };
+    timelineState.setVideoEffects({
+      ...(timelineState.videoEffects || {}),
+      colorFilter: 'nostalgic_warmth',
+      cinematicVignette: true,
+      vignette: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vignette,
+      grain: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.grain,
+      vibrance: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vibrance,
+      clarity: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.clarity,
+      hdrBalance: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.hdrBalance,
+      sharpening: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.sharpening,
+      warmthKelvin: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.warmthKelvin,
+      villainDesaturate: NOSTALGIC_WARMTH_TEMPLATE.videoEffects.villainDesaturate,
+    });
+
+    // Sync UI sliders if present in DOM
+    const vigSlider = (document.getElementById('effect-vignette-slider') || document.getElementById('vfx-vignette-slider')) as HTMLInputElement | null;
+    const grainSlider = (document.getElementById('effect-grain-slider') || document.getElementById('vfx-grain-slider')) as HTMLInputElement | null;
+    const vibSlider = (document.getElementById('effect-vibrance-slider') || document.getElementById('vfx-vibrance-slider') || document.getElementById('cinema-hdr-vibrance-slider')) as HTMLInputElement | null;
+    const claritySlider = (document.getElementById('effect-clarity-slider') || document.getElementById('vfx-clarity-slider') || document.getElementById('cinema-hdr-clarity-slider')) as HTMLInputElement | null;
+
+    if (vigSlider) {
+      vigSlider.value = vigSlider.max === '100' ? String(Math.round(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vignette * 100)) : String(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vignette);
+      vigSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (grainSlider) {
+      grainSlider.value = grainSlider.max === '100' ? String(Math.round(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.grain * 100)) : String(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.grain);
+      grainSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (vibSlider) {
+      vibSlider.value = vibSlider.max === '100' ? String(Math.round(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vibrance * 100)) : String(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.vibrance);
+      vibSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (claritySlider) {
+      claritySlider.value = claritySlider.max === '100' ? String(Math.round(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.clarity * 100)) : String(NOSTALGIC_WARMTH_TEMPLATE.videoEffects.clarity);
+      claritySlider.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    const vfxSelect = document.getElementById('vfx-color-filter-select') as HTMLSelectElement | null;
+    if (vfxSelect) {
+      vfxSelect.value = 'nostalgic_warmth';
+    }
+  }
+
+  drawVideoFrame(state.lastRenderedTime || state.videoPauseTime || 0);
+}
+

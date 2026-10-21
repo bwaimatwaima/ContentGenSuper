@@ -301,6 +301,10 @@ function buildEffectsStudioPanel(): HTMLElement {
         <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #78350f, #a16207);"></div>
         <span class="vs-lut-label">Vintage 35mm</span>
       </div>
+      <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="nostalgic-warmth">
+        <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #d9822b, #3b2f1e);"></div>
+        <span class="vs-lut-label">Nostalgic Warmth</span>
+      </div>
       <div class="vs-lut-tile" role="radio" aria-checked="false" data-preset="hdr-crisp-nature">
         <div class="vs-lut-swatch" style="background: linear-gradient(135deg, #10b981, #0284c7);"></div>
         <span class="vs-lut-label">Crisp HDR</span>

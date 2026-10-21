@@ -23,6 +23,9 @@ export interface TimelineClipProp {
   startTime: number;  // in seconds
   endTime: number;    // in seconds
   duration: number;   // in seconds
+  isVillainShot?: boolean;
+  colorMood?: string;
+  prompt?: string;
   text?: string;
   hasVideo?: boolean;
   hasImage?: boolean;

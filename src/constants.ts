@@ -395,3 +395,54 @@ export const styleIntentMap: Record<string, StyleIntent> = {
     'High-end editorial vector illustration, isometric perspective. Sophisticated color palette of deep navy, muted gold, and crisp white. Visual metaphors for financial timeframes and invisible tax mechanisms: a glowing window slowly closing, abstract steps representing income thresholds, and layered translucent blocks representing the tax code. Clean geometry, subtle digital gradients, balanced composition suitable for a premium financial publication like The Economist or Wall Street Journal. Uncluttered, intelligent, highly readable, and authoritative atmosphere. [scene]': StyleIntent.ABSTRACT,
     'High-resolution digital illustration, concept art style. Sleek rendering with sharp, clean edges and dramatic perspective. Intense volumetric lighting, high contrast cinematic chiaroscuro effect. Vibrant neon color palette of cyan, magenta, electric blue, and deep purples against dark backgrounds. Intricate details on futuristic technology, complex urban landscapes, or advanced costumes. Clean, polished aesthetic reminiscent of octane rendering, with lens flares and motion blur elements. Capturing action, intensity, and future tech themes. [scene]': StyleIntent.ABSTRACT,
 };
+
+// ─── COLOR GRADE TEMPLATES & AUTOMATIC FOIL DETECTION ───
+
+export interface ColorGradeTemplate {
+  id: string;
+  label: string;
+  description: string;
+  activeFilterName: string;
+  cinematicVignette: boolean;
+  videoEffects: {
+    vignette: number;       // 0.23 * 0.65 ≈ 15% edge opacity
+    grain: number;          // Light 35mm grain
+    hdrBalance: number;     // Soft highlight roll-off
+    clarity: number;        // Wood grain & earth texture emphasis
+    vibrance: number;       // Deepens botanical greens
+    sharpening: number;
+    warmthKelvin: number;   // +400K golden hour push
+    villainDesaturate: boolean; // Auto-cool & desaturate "modern foil" shots
+  };
+}
+
+export const NOSTALGIC_WARMTH_TEMPLATE: ColorGradeTemplate = {
+  id: 'nostalgic_warmth',
+  label: '🌾 Nostalgic Warmth (Heritage LUT)',
+  description: 'Golden-hour amber midtones, deep botanical greens, 15% soft vignette, 35mm grain, and desaturated commercial foil shots.',
+  activeFilterName: 'nostalgic_warmth',
+  cinematicVignette: true,
+  videoEffects: {
+    vignette: 0.24,         // Renders ~15% opacity dark radial falloff
+    grain: 0.35,            // Light 35mm film grain overlay
+    hdrBalance: 0.25,       // Warm highlight protection
+    clarity: 0.20,          // Emphasizes wood grains and earth tones
+    vibrance: 0.35,         // Pushes deep greens (collards, pastures, foliage)
+    sharpening: 0.15,
+    warmthKelvin: 400,      // +400K golden hour shift
+    villainDesaturate: true,
+  },
+};
+
+// Keywords in a clip's narration or prompt that trigger the sterile "Villain / Modern Foil" grade
+export const VILLAIN_FOIL_REGEX = /\b(chemical|synthetic|pesticide|spray truck|commercial|contract|factory|sterile|poison|canned|baking soda|overboiled|army blanket|toxic)\b/i;
+
+export function isVillainFoilClip(clip: any): boolean {
+  if (!clip) return false;
+  if (clip.isVillainShot === true) return true;
+  if (clip.isVillainShot === false) return false;
+  if (clip.colorMood === 'villain_foil' || clip.isVillainShot) return true;
+  const text = `${clip.text || ''} ${clip.text_reference || ''} ${clip.line_text || ''} ${clip.prompt || ''}`;
+  return VILLAIN_FOIL_REGEX.test(text);
+}
+

@@ -8,6 +8,7 @@ import { drawVideoFrame, getPreviewDimensions } from './videoRenderer';
 import { state } from './state';
 import { showStatus } from './ui';
 import { saveVersion } from './handlers-project';
+import { NOSTALGIC_WARMTH_TEMPLATE } from './constants';
 
 export function getActiveAspectRatio(): string {
   return (
@@ -476,6 +477,17 @@ export function updateEffectsFromUI() {
     blendMode
   });
 
+  if (colorFilter === 'nostalgic_warmth') {
+    state.activeFilterName = 'nostalgic_warmth';
+    state.cinematicVignette = true;
+    state.videoEffects = {
+      ...(state.videoEffects || {}),
+      ...NOSTALGIC_WARMTH_TEMPLATE.videoEffects,
+    };
+  } else if (state.activeFilterName === 'nostalgic_warmth') {
+    state.activeFilterName = 'none';
+  }
+
   // Draw main video frame & modal preview
   drawVideoFrame(state.lastRenderedTime || 0);
   renderVfxPreviewCanvas();
@@ -494,6 +506,32 @@ export function applyPreset(presetKey: string) {
       colorFilter: 'none',
       blendMode: 'normal'
     },
+    'nostalgic-warmth': {
+      vignette: 0.24,
+      grain: 0.35,
+      hdrBalance: 0.25,
+      clarity: 0.20,
+      vibrance: 0.35,
+      sharpening: 0.15,
+      colorFilter: 'nostalgic_warmth',
+      blendMode: 'normal',
+      warmthKelvin: 400,
+      villainDesaturate: true,
+      hdrMaster: 0.25,
+    },
+    'nostalgic_warmth': {
+      vignette: 0.24,
+      grain: 0.35,
+      hdrBalance: 0.25,
+      clarity: 0.20,
+      vibrance: 0.35,
+      sharpening: 0.15,
+      colorFilter: 'nostalgic_warmth',
+      blendMode: 'normal',
+      warmthKelvin: 400,
+      villainDesaturate: true,
+      hdrMaster: 0.25,
+    },
     'cinematic-35mm': { grain: 0.35, vignette: 0.30, dustAndScratches: 0.15, lightLeaks: 0.1, colorFilter: 'vintage', blendMode: 'normal', hdrMaster: 0, hdrBalance: 0, clarity: 0, vibrance: 0, sharpening: 0 },
     'cyberpunk-neon': { chromaticAberration: 0.40, colorFilter: 'cyberpunk', sparkles: 0.2, sparklesSize: 0.6, sparklesCount: 0.8, blendMode: 'overlay', vignette: 0.25, hdrMaster: 0, hdrBalance: 0, clarity: 0, vibrance: 0, sharpening: 0 },
     'film-noir': { grain: 0.45, vignette: 0.50, colorFilter: 'noir', dustAndScratches: 0.25, blendMode: 'normal', hdrMaster: 0, hdrBalance: 0, clarity: 0, vibrance: 0, sharpening: 0 },
@@ -507,6 +545,12 @@ export function applyPreset(presetKey: string) {
   };
 
   const choice = presets[presetKey] || presets['clean-default'];
+  if (presetKey === 'nostalgic-warmth' || presetKey === 'nostalgic_warmth') {
+    state.activeFilterName = 'nostalgic_warmth';
+    state.cinematicVignette = true;
+  } else if (state.activeFilterName === 'nostalgic_warmth') {
+    state.activeFilterName = 'none';
+  }
   timelineState.setVideoEffects(choice);
   syncEffectsToUI();
   drawVideoFrame(state.lastRenderedTime || 0);
@@ -636,6 +680,14 @@ export function initVisualEffectsHandlers() {
     ctrl?.addEventListener('input', updateEffectsFromUI);
     ctrl?.addEventListener('change', updateEffectsFromUI);
   });
+
+  if (dom.vfxColorFilterSelect) {
+    dom.vfxColorFilterSelect.addEventListener('change', () => {
+      if (dom.vfxColorFilterSelect?.value === 'nostalgic_warmth') {
+        applyPreset('nostalgic-warmth');
+      }
+    });
+  }
 
   // Weather Dropdown & Dynamic Size/Quantity Sliders
   if (dom.vfxWeatherSelect) {

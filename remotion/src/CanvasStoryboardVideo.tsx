@@ -10,6 +10,7 @@ import React from 'react';
 import { StoryboardVideo } from './StoryboardVideo';
 import { StoryboardVideoProps, TimelineClipProp, SubtitleCue, TextOverlayProp } from './types';
 import { resolveClipTransition } from './transitions';
+import { isVillainFoilClip } from '../../src/constants';
 
 export interface CanvasStoryboardVideoProps {
   payload?: any;
@@ -78,6 +79,7 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
       cornerCalloutLabel: c.cornerCalloutLabel,
       cornerCalloutCoords: c.cornerCalloutCoords,
       isPreMixedAudio: Boolean(c.isPreMixedAudio ?? isPreMixedAudio),
+      isVillainShot: Boolean(c.isVillainShot || isVillainFoilClip(c)),
     };
   });
 
@@ -153,10 +155,13 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
     masterAudioUrl: raw?.masterAudioUrl || raw?.narrationAudioUrl,
     backgroundMusicUrl: raw?.backgroundMusicUrl,
     backgroundMusicVolume: typeof raw?.backgroundMusicVolume === 'number' ? raw?.backgroundMusicVolume : 0.25,
-    videoEffects: raw?.videoEffects || {
-      cinematicVignette: Boolean(raw?.cinematicVignette),
-      grain: raw?.filmGrain ? 0.3 : 0,
-      vignette: raw?.cinematicVignette ? 0.6 : 0,
+    videoEffects: {
+      ...(raw?.videoEffects || {}),
+      cinematicVignette: Boolean(raw?.videoEffects?.cinematicVignette ?? raw?.cinematicVignette),
+      grain: raw?.videoEffects?.grain ?? (raw?.filmGrain ? 0.3 : 0),
+      vignette: raw?.videoEffects?.vignette ?? (raw?.cinematicVignette ? 0.6 : 0),
+      colorFilter: raw?.videoEffects?.colorFilter || raw?.activeFilterName || 'none',
+      activeFilterName: raw?.videoEffects?.activeFilterName || raw?.activeFilterName || 'none',
     },
     graphics: Array.isArray(raw?.graphics) ? raw.graphics : (Array.isArray(raw?._graphics) ? raw._graphics : []),
     graphicsAccentColor: raw?.graphicsAccentColor || '#F5C542',

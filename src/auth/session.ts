@@ -186,7 +186,7 @@ export function formatAuthErrorMessage(error: any, action?: 'login' | 'signup' |
         return 'Network connection to Firebase Auth failed. This usually occurs if an ad blocker or privacy extension (e.g. uBlock, Brave Shields) is blocking Google authentication endpoints, or if your connection dropped. Please check your internet, disable ad blocking for this page, or click "Continue as Guest".';
     }
     if (code === 'auth/operation-not-allowed' || message.includes('auth/operation-not-allowed')) {
-        return 'Email/Password sign-in provider is disabled in Firebase Console. Please enable "Email/Password" under Firebase Console > Authentication > Sign-in method. You can also sign in with Google or Continue as Guest.';
+        return 'Password login is currently disabled. Please contact the administrator and ask them to enable password login. You can also sign in with Google or Continue as Guest.';
     }
     if (code === 'auth/email-already-in-use') {
         return 'This email is already registered. Please enter your password and click "Log In", or click "Forgot password?".';

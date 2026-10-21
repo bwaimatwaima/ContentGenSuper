@@ -196,6 +196,16 @@ export function initKeyboardShortcuts() {
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
 
+        // Escape: Close Video Director and return to storyboard
+        if (key === 'escape') {
+            const modal = dom.videoDirectorModal || (document.getElementById('video-director-modal') as HTMLElement | null);
+            if (modal && !modal.classList.contains('hidden') && modal.style.display !== 'none') {
+                e.preventDefault();
+                import('./videoController').then(m => m.handleCloseVideoDirectorModal());
+                return;
+            }
+        }
+
         // Undo / Redo
         if (mod && key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndoTimeline(); return; }
         if ((mod && key === 'z' && e.shiftKey) || (mod && key === 'y')) { e.preventDefault(); handleRedoTimeline(); return; }

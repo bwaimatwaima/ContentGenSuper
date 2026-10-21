@@ -60,6 +60,7 @@ import {
   mountExportStudioCard,
   initStudioCommandPalette,
 } from './src/director-workspace';
+import { initClassicDirectorMenus } from './src/classic-director-menus';
 
 // Auto-recover from stale dynamic chunk hash mismatches on new deployments
 if (typeof window !== 'undefined') {
@@ -141,6 +142,9 @@ function registerEventListeners() {
     initVisualEffectsHandlers();
     initCameraKeyframesUI();
     
+    // Classic Video Director Menus (File, View, Tools, Workflow, Help)
+    initClassicDirectorMenus();
+
     // Keyboard shortcuts
     initKeyboardShortcuts();
 
@@ -1135,6 +1139,13 @@ function registerEventListeners() {
 
     // Video Director Modal & Editors
     dom.closeVideoDirectorModalBtn?.addEventListener('click', videoController.handleCloseVideoDirectorModal);
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement | null;
+        if (target?.closest('#close-video-director-modal-btn') || target?.closest('#vd-menu-close-item') || target?.closest('#vs-close-director-btn') || target?.closest('#vs-back-to-storyboard-btn')) {
+            e.preventDefault();
+            videoController.handleCloseVideoDirectorModal();
+        }
+    });
     dom.directVideoAudioFirstBtn?.addEventListener('click', audioFirstDirector.handleDirectVideoAudioFirst);
     dom.uploadAudioBtn?.addEventListener('click', audioUploadDirector.handleUploadAudioClick);
     dom.sidebarUploadAudioBtn?.addEventListener('click', audioUploadDirector.handleUploadAudioClick);

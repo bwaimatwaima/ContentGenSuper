@@ -412,18 +412,7 @@ export async function handleSetOrUpdatePassword() {
         console.error("Failed to set/update password:", e);
         let errorMsg = e.message || "Failed to set password.";
         if (e.code === 'auth/operation-not-allowed' || (typeof e.message === 'string' && e.message.includes('operation-not-allowed'))) {
-            const projectId = firebaseConfig.projectId || 'paidproject-505110';
-            const providersUrl = `https://console.firebase.google.com/project/${projectId}/authentication/providers`;
-            errorMsg = "Email/Password sign-in provider is disabled in your Firebase project. In Firebase Console > Authentication > Sign-in method, please enable 'Email/Password'.";
-            ui.showConfirmation(
-                'Enable Email/Password in Firebase',
-                `Firebase blocked setting an email password because the "Email/Password" sign-in provider is currently disabled in your Firebase project (${projectId}).\n\n` +
-                `Would you like to open Firebase Console > Authentication > Sign-in method to turn it ON now?`,
-                () => {
-                    window.open(providersUrl, '_blank');
-                },
-                () => {}
-            );
+            errorMsg = "Password login is currently disabled. Please contact the administrator and ask them to enable password login.";
         } else if (e.code === 'auth/requires-recent-login') {
             errorMsg = "For security reasons, this action requires recent authentication. Please log out and sign back in, then try again.";
         } else if (e.code === 'auth/weak-password') {

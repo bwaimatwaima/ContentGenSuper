@@ -6,6 +6,7 @@ import { state } from './state';
 import { timelineState } from './state-timeline';
 import * as dom from './dom';
 import * as utils from './utils';
+import { isVillainFoilClip } from './constants';
 import { SubtitleEngine } from './subtitle-engine';
 import { drawGraphics, drawElementBuild } from './graphics-engine';
 import type { WordTimestamp, ElementRevealEvent, DeviceTag } from './types';
@@ -143,6 +144,8 @@ export function getShotFilterCss(filter?: string, intensity: number = 1.0): stri
       return `saturate(${Math.round(100 + 15 * norm)}%) hue-rotate(${Math.round(85 * norm)}deg) contrast(${Math.round(100 + 15 * norm)}%) brightness(${Math.round(100 - 4 * norm)}%)`;
     case 'crt':
       return `contrast(${Math.round(100 + 20 * norm)}%) saturate(${Math.round(100 + 20 * norm)}%) brightness(${Math.round(100 + 5 * norm)}%)`;
+    case 'nostalgic_warmth':
+      return `contrast(${Math.round(100 + 4 * norm)}%) saturate(${Math.round(100 + 10 * norm)}%)`;
     default:
       return 'none';
   }
@@ -283,6 +286,57 @@ export function applyShotOverlays(
     ctx.restore();
   }
   ctx.restore();
+}
+
+export function applyNostalgicWarmthLut(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | any,
+  width: number,
+  height: number,
+  activeClip?: any
+) {
+  const filterActive = state.activeFilterName === 'nostalgic_warmth' ||
+                       timelineState.videoEffects?.colorFilter === 'nostalgic_warmth' ||
+                       activeClip?.colorFilter === 'nostalgic_warmth';
+  if (!filterActive) return;
+
+  const isVillain = Boolean(
+    state.videoEffects?.villainDesaturate !== false &&
+    timelineState.videoEffects?.villainDesaturate !== false &&
+    isVillainFoilClip(activeClip)
+  );
+
+  if (isVillain) {
+    // Sterile, cold commercial foil look
+    ctx.save();
+    ctx.globalCompositeOperation = 'saturation' as GlobalCompositeOperation;
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = 0.20;
+    ctx.fillStyle = '#64748b'; // Cold slate tint
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  } else {
+    // 1. +400K Golden Hour Warm Highlights & Amber Midtones
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#d9822b';
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+
+    // 2. Deep Botanical Greens & Earthy Browns
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = '#3b2f1e';
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
 }
 
 export function drawRotated(
@@ -770,6 +824,9 @@ function applyPostEffects(ctx: CanvasRenderingContext2D, w: number, h: number, t
         ctx.globalCompositeOperation = 'soft-light';
         ctx.fillStyle = 'rgba(100, 200, 255, 0.1)';
         ctx.fillRect(0, 0, w, h);
+        break;
+      case 'nostalgic_warmth':
+        // Per-clip LUT pass is handled in drawFrameMedia
         break;
     }
     ctx.restore();
@@ -2405,6 +2462,7 @@ function drawVideoFrameImpl(
         const srcH = safeSource instanceof HTMLCanvasElement ? safeSource.height : mediaH;
         drawRotated(ctx, safeSource, 0, 0, srcW, srcH, dX, dY, dW, dH, rotate);
         ctx.filter = 'none';
+        applyNostalgicWarmthLut(ctx, cvW, cvH, activeClip);
         if (shotFilter !== 'none') {
           applyShotOverlays(ctx, shotFilter, shotFilterIntensity, dX, dY, dW, dH, time);
         }
@@ -2508,6 +2566,8 @@ function drawVideoFrameImpl(
         safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
       }
     }
+    
+    applyNostalgicWarmthLut(ctx, cvW, cvH, activeClip);
     
     if (timelineState.videoEffects.autoColorMatch) {
       const stats = getImageStats(image);

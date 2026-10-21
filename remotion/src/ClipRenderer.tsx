@@ -65,11 +65,14 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   const grain = videoEffects?.grain ?? 0;
   const chromaticAberration = videoEffects?.chromaticAberration ?? 0;
   const vignette = videoEffects?.vignette ?? (videoEffects?.cinematicVignette ? 0.6 : 0);
-  const filterName = videoEffects?.colorFilter ?? 'none';
+  const filterName = (clip as any)?.colorFilter && (clip as any)?.colorFilter !== 'none'
+    ? (clip as any).colorFilter
+    : (videoEffects?.colorFilter ?? (videoEffects as any)?.activeFilterName ?? 'none');
   const hdrBalance = videoEffects?.hdrBalance ?? 0;
   const clarity = videoEffects?.clarity ?? 0;
   const vibrance = videoEffects?.vibrance ?? 0;
   const sharpening = videoEffects?.sharpening ?? 0;
+  const isVillainShot = Boolean(clip.isVillainShot);
   const cssFilter = getCssFilter(filterName);
 
   const customEffects = useMemo(() => {
@@ -84,9 +87,10 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
         vibrance,
         sharpening,
         seed: timelineFrame,
+        isVillainShot,
       }),
     ];
-  }, [grain, chromaticAberration, vignette, filterName, hdrBalance, clarity, vibrance, sharpening, timelineFrame]);
+  }, [grain, chromaticAberration, vignette, filterName, hdrBalance, clarity, vibrance, sharpening, timelineFrame, isVillainShot]);
 
   const { fps, width: vw, height: vh } = useVideoConfig();
 

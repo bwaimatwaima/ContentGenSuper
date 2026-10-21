@@ -531,123 +531,206 @@ export const MODAL_TEMPLATES = `
 </div>
 
 <!-- AI Video Director Modal -->
-<div id="video-director-modal" class="fixed inset-0 bg-black/95 flex items-center justify-center p-0 z-[60] hidden">
+<div id="video-director-modal" class="video-director-modal fixed inset-0 bg-black/95 flex items-center justify-center p-0 z-[60] hidden">
     <div id="video-director-main-view" class="relative w-full h-full flex flex-col bg-gray-900">
-        <!-- Header -->
-        <div class="flex flex-wrap items-center justify-between px-3 sm:px-4 py-2 border-b border-white/10 bg-[#0c0d12] z-20 gap-2 sm:gap-3 select-none">
-            <!-- Left: Studio & Workspace Setup -->
-            <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-                <div class="flex items-center gap-1.5 sm:gap-2 pr-1">
+        <!-- Header: Classic NLE Menu Bar & Clean Control Strip -->
+        <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/10 bg-[#0c0d12] z-50 gap-2 sm:gap-3 select-none relative" style="overflow: visible;">
+            <!-- Left: Studio Logo & Full Classic Menu Bar -->
+            <div class="flex items-center gap-2 sm:gap-3 shrink-0" id="vd-menubar-container">
+                <!-- Branding -->
+                <div class="flex items-center gap-1.5 pr-2 border-r border-white/10">
                     <span class="text-base select-none">🎬</span>
-                    <div class="flex items-center gap-1.5">
-                        <h2 class="text-xs font-bold text-white tracking-wide uppercase whitespace-nowrap">Video Director</h2>
-                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 text-indigo-400 bg-indigo-950/80 border border-indigo-500/30 rounded">PRO</span>
-                    </div>
-                </div>
-                
-                <div class="h-4 w-px bg-white/10 hidden sm:block"></div>
-                
-                <!-- Studio Tools Dock -->
-                <div class="flex items-center bg-zinc-950/80 rounded-lg border border-white/10 p-0.5 gap-0.5 shadow-inner">
-                    <!-- Sequence Timeline Drawer Toggle -->
-                    <button id="toggle-timeline-btn-modal" class="bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors flex items-center gap-1.5 border border-white/5 hover:border-white/20 shadow-xs cursor-pointer whitespace-nowrap" title="Toggle Dedicated Sequence Timeline Track">
-                        <span>🎞️</span>
-                        <span class="hidden lg:inline">Sequence Track</span>
-                    </button>
-
-                    <!-- VFX Studio Launcher -->
-                    <button id="vfx-studio-video-director-btn" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold text-purple-200 bg-purple-950/50 hover:bg-purple-900/70 border border-purple-500/30 hover:border-purple-400/50 transition-colors shadow-xs cursor-pointer whitespace-nowrap" title="Open Visual Effects & Color Grade Studio">
-                        <span>✨</span>
-                        <span class="hidden lg:inline">FX Studio</span>
-                    </button>
+                    <h2 class="text-xs font-bold text-white tracking-wide uppercase whitespace-nowrap">Video Director</h2>
+                    <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 text-indigo-400 bg-indigo-950/80 border border-indigo-500/30 rounded">PRO</span>
                 </div>
 
-                <!-- Framing & Preview Resolution Dock -->
-                <div class="flex items-center bg-zinc-950/80 rounded-lg border border-white/10 p-0.5 gap-1 shadow-inner">
-                    <!-- Aspect Ratio Switcher -->
-                    <div class="flex items-center px-1.5 py-0.5 gap-1 hover:text-white transition-colors" title="Switch Video Aspect Ratio Preview & Framing">
-                        <span class="text-[10px] text-zinc-400 font-semibold select-none">📐</span>
-                        <select id="video-director-aspect-select" class="bg-transparent text-zinc-200 border-none text-xs font-medium outline-none cursor-pointer pr-1">
-                            <option value="16:9" class="bg-zinc-900 text-white">16:9 Landscape</option>
-                            <option value="9:16" class="bg-zinc-900 text-white">9:16 Vertical (Shorts/Reels)</option>
-                            <option value="1:1" class="bg-zinc-900 text-white">1:1 Square</option>
-                            <option value="4:3" class="bg-zinc-900 text-white">4:3 Standard</option>
-                            <option value="3:4" class="bg-zinc-900 text-white">3:4 Portrait</option>
-                        </select>
-                    </div>
-
-                    <div class="h-3.5 w-px bg-white/10 hidden md:block"></div>
-
-                    <!-- Responsive Preview Mode Toggle -->
-                    <label class="hidden md:flex items-center px-1.5 py-0.5 gap-1.5 cursor-pointer hover:text-white transition-colors" title="Responsive Preview: Smooth real-time scrubbing and dragging by streamlining decorative effects during interaction">
-                        <input type="checkbox" id="video-responsive-preview-toggle" class="w-3 h-3 rounded bg-zinc-800 border-white/20 text-indigo-500 focus:ring-0">
-                        <span class="text-[10px] text-zinc-300 font-medium select-none">Responsive</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Center: Production Workflow Segmented Controls -->
-            <div class="flex items-center justify-center flex-wrap sm:flex-nowrap gap-1 order-last xl:order-none w-full xl:w-auto my-1 xl:my-0">
-                <div class="flex items-center bg-zinc-950/90 rounded-xl border border-white/10 p-1 gap-1 shadow-inner">
-                    <!-- Visual-First Mode -->
-                    <div class="flex items-center bg-zinc-900/90 rounded-lg border border-white/5 p-0.5">
-                        <button id="direct-video-visual-first-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap" title="Direct video using visuals as primary rhythm">
-                            <span>Visual-First</span>
+                <!-- Desktop Menu Bar Items -->
+                <nav class="flex items-center gap-0.5 relative" role="menubar" aria-label="Director Menus">
+                    <!-- File Menu -->
+                    <div class="relative">
+                        <button type="button" id="vd-menu-file-trigger" data-vd-menu-trigger="file" class="vd-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                            <span>File</span>
+                            <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                         </button>
-                        
-                        <div class="flex items-center gap-1.5 px-2 border-l border-white/10 ml-1">
-                            <label class="flex items-center gap-1 cursor-pointer group" title="Automatically generate narration from scene descriptions">
-                                <input type="checkbox" id="visual-first-audio-toggle" class="w-3 h-3 rounded bg-zinc-800 border-white/10 text-indigo-500 focus:ring-0">
-                                <span class="text-[10px] font-medium text-zinc-400 group-hover:text-zinc-200 transition-colors whitespace-nowrap">Auto-Voice</span>
-                            </label>
-                            <div class="flex items-center gap-1" title="Target duration (minutes)">
-                                <span class="text-[10px] text-zinc-500 font-mono">Min:</span>
-                                <input type="number" id="visual-first-duration-override" class="w-11 bg-zinc-800/90 text-white border border-white/10 rounded py-0.5 px-1 text-[10px] font-mono text-center focus:ring-1 focus:ring-indigo-500 focus:outline-none" placeholder="AUTO" min="0.01" step="0.01">
-                            </div>
+                        <div id="vd-menu-file-dropdown" data-vd-menu-dropdown="file" class="vd-menu-dropdown hidden w-56">
+                            <button type="button" id="vd-menu-save-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>💾</span><span>Save Project</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">Ctrl+S</span>
+                            </button>
+                            <button type="button" id="vd-menu-import-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>📥</span><span>Import Archive</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">.cgproj</span>
+                            </button>
+                            <button type="button" id="vd-menu-archive-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>📦</span><span>Export Bundle</span></span>
+                                <span class="text-[10px] font-mono text-teal-400 font-semibold">.cgproj</span>
+                            </button>
+                            <div class="my-1 border-t border-white/10"></div>
+                            <button type="button" id="vd-menu-export-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span class="text-indigo-400">🎬</span><span class="text-indigo-300 font-semibold">Render Video...</span></span>
+                                <span class="text-[10px] font-mono text-indigo-400">Ctrl+M</span>
+                            </button>
+                            <div class="my-1 border-t border-white/10"></div>
+                            <button type="button" id="vd-menu-history-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>⏱️</span><span>Version History</span></span>
+                                <span class="text-[10px] text-zinc-500">Snapshots</span>
+                            </button>
+                            <div class="my-1 border-t border-white/10"></div>
+                            <button type="button" id="vd-menu-close-item" class="vd-menu-item danger">
+                                <span class="flex items-center gap-2"><span>✕</span><span>Close Director</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">Esc</span>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="h-4 w-px bg-white/10 mx-0.5 hidden xs:block"></div>
+                    <!-- View Menu -->
+                    <div class="relative">
+                        <button type="button" id="vd-menu-view-trigger" data-vd-menu-trigger="view" class="vd-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                            <span>View</span>
+                            <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                        <div id="vd-menu-view-dropdown" data-vd-menu-dropdown="view" class="vd-menu-dropdown hidden w-64">
+                            <button type="button" id="vd-menu-seq-track-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>🎞️</span><span>Toggle Sequence Track</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">T</span>
+                            </button>
+                            <div class="my-1 border-t border-white/10"></div>
+                            <button type="button" id="vd-menu-studio-ui-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>✨</span><span>Switch to Studio UI</span></span>
+                                <span class="text-[10px] font-mono text-indigo-400 font-semibold">Pro</span>
+                            </button>
+                        </div>
+                    </div>
 
-                    <!-- Upload Audio Mode (High Visibility Amber Button) -->
-                    <button id="upload-audio-btn" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 border border-amber-500/40 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer whitespace-nowrap" title="Upload pre-recorded audio track or voiceover (MP3, WAV, M4A, MP4, MOV)">
-                        <span class="text-amber-400">📁</span>
-                        <span>Upload Audio</span>
-                    </button>
-                    <input type="file" id="audio-upload-input" class="hidden" accept="audio/*,video/*">
-                </div>
+                    <!-- Tools Menu -->
+                    <div class="relative">
+                        <button type="button" id="vd-menu-tools-trigger" data-vd-menu-trigger="tools" class="vd-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                            <span>Tools</span>
+                            <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                        <div id="vd-menu-tools-dropdown" data-vd-menu-dropdown="tools" class="vd-menu-dropdown hidden w-60">
+                            <button type="button" id="vd-menu-vfx-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span class="text-purple-400">✨</span><span>Visual Effects Studio</span></span>
+                                <span class="text-[10px] text-purple-400 font-mono">LUTs</span>
+                            </button>
+                            <button type="button" id="vd-menu-cmd-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>🔍</span><span>Command Palette</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">⌘K</span>
+                            </button>
+                            <button type="button" id="vd-menu-keyframes-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>🤖</span><span>Camera Keyframes</span></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Workflow Menu -->
+                    <div class="relative">
+                        <button type="button" id="vd-menu-workflow-trigger" data-vd-menu-trigger="workflow" class="vd-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                            <span>Workflow</span>
+                            <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                        <div id="vd-menu-workflow-dropdown" data-vd-menu-dropdown="workflow" class="vd-menu-dropdown hidden w-72">
+                            <button type="button" id="vd-menu-vf-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span class="text-indigo-400">⚡</span><span>Visual-First Production</span></span>
+                                <span class="text-[9px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30 font-semibold">Mode</span>
+                            </button>
+                            
+                            <!-- Workflow Configuration Sub-dock -->
+                            <div class="px-2.5 py-2 my-1 bg-zinc-900/90 rounded-md border border-white/5 space-y-2 vd-keep-open">
+                                <div class="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Visual-First Options</div>
+                                <label class="flex items-center justify-between gap-2 cursor-pointer hover:text-white transition-colors text-xs" title="Automatically generate narration from scene descriptions">
+                                    <span class="text-zinc-300">Auto-Voice Narration</span>
+                                    <input type="checkbox" id="visual-first-audio-toggle" class="w-3.5 h-3.5 rounded bg-zinc-800 border-white/20 text-indigo-500 focus:ring-0">
+                                </label>
+                                <div class="flex items-center justify-between gap-2 text-xs" title="Target duration in minutes">
+                                    <span class="text-zinc-300">Target Duration (min)</span>
+                                    <input type="number" id="visual-first-duration-override" class="w-16 bg-zinc-800 text-white border border-white/10 rounded py-0.5 px-1.5 text-xs font-mono text-center focus:ring-1 focus:ring-indigo-500 focus:outline-none" placeholder="AUTO" min="0.01" step="0.01">
+                                </div>
+                            </div>
+
+                            <div class="my-1 border-t border-white/10"></div>
+                            <button type="button" id="vd-menu-upload-audio-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span class="text-amber-400">📁</span><span>Upload Audio Track</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">MP3/WAV</span>
+                            </button>
+                            <button type="button" id="vd-menu-narration-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span class="text-emerald-400">🎙️</span><span>Generate Narration Audio</span></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Help Menu -->
+                    <div class="relative">
+                        <button type="button" id="vd-menu-help-trigger" data-vd-menu-trigger="help" class="vd-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                            <span>Help</span>
+                            <svg class="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                        <div id="vd-menu-help-dropdown" data-vd-menu-dropdown="help" class="vd-menu-dropdown hidden w-56">
+                            <button type="button" id="vd-menu-shortcuts-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>⌨️</span><span>Keyboard Shortcuts</span></span>
+                                <span class="text-[10px] font-mono text-zinc-500">Ctrl+/</span>
+                            </button>
+                            <button type="button" id="vd-menu-academy-item" class="vd-menu-item">
+                                <span class="flex items-center gap-2"><span>🎓</span><span>Academy & Courses</span></span>
+                            </button>
+                        </div>
+                    </div>
+                </nav>
             </div>
 
-            <!-- Right: Project Persistence & Delivery -->
-            <div class="flex items-center gap-2 sm:gap-2.5 shrink-0">
-                <!-- Project Management Group -->
-                <div class="flex items-center bg-zinc-950/80 rounded-lg border border-white/10 p-0.5 gap-0.5 shadow-inner">
-                    <input type="file" id="import-project-input" class="hidden" accept=".cgproj">
-                    <button id="import-project-video-btn" class="p-1.5 rounded-md hover:bg-white/10 text-zinc-400 hover:text-white transition-colors flex items-center justify-center cursor-pointer" title="Import Project Archive (.cgproj)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    </button>
-                    <button id="save-project-video-btn" class="px-2.5 py-1.5 rounded-md text-zinc-200 hover:text-emerald-300 hover:bg-emerald-950/50 font-medium text-xs transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap" title="Save Project & Timeline (Storage)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6a1 1 0 10-2 0v5.586L7.707 10.293zM3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"></path></svg>
-                        <span class="hidden sm:inline">Save</span>
-                    </button>
-                    <button id="export-project-archive-video-btn" class="px-2 py-1.5 rounded-md text-zinc-300 hover:text-teal-200 hover:bg-teal-950/40 font-medium text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap" title="Export Full Project Archive (.cgproj with assets and timeline)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l4-4m0 0L8 4m8 4v12"></path></svg>
-                        <span class="hidden xl:inline">Archive</span>
-                    </button>
+            <!-- Center: Project Canvas Framing & Resolution Dock -->
+            <div class="flex items-center gap-2 overflow-visible">
+                <div class="flex items-center bg-zinc-950/80 rounded-lg border border-white/10 px-2 py-1 gap-1.5 shadow-inner" title="Switch Video Aspect Ratio Preview & Framing">
+                    <span class="text-[11px] text-zinc-400 font-semibold select-none">📐</span>
+                    <select id="video-director-aspect-select" class="bg-transparent text-zinc-200 border-none text-xs font-medium outline-none cursor-pointer pr-1">
+                        <option value="16:9" class="bg-zinc-900 text-white">16:9 Landscape</option>
+                        <option value="9:16" class="bg-zinc-900 text-white">9:16 Vertical (Shorts/Reels)</option>
+                        <option value="1:1" class="bg-zinc-900 text-white">1:1 Square</option>
+                        <option value="4:3" class="bg-zinc-900 text-white">4:3 Standard</option>
+                        <option value="3:4" class="bg-zinc-900 text-white">3:4 Portrait</option>
+                    </select>
                 </div>
 
-                <!-- Primary CTA: Export Video -->
-                <button id="video-export-btn" class="bg-gradient-to-r from-indigo-500 via-purple-600 to-indigo-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold px-3.5 sm:px-4 py-1.5 rounded-lg shadow-lg shadow-indigo-950/50 transition-all flex items-center gap-1.5 text-xs uppercase tracking-wider disabled:opacity-35 disabled:cursor-not-allowed border border-indigo-400/40 cursor-pointer active:scale-95 whitespace-nowrap" disabled title="Render & Export Finished Video (MP4/WebM)">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    <span>Export Video</span>
+                <!-- Responsive Preview Mode Toggle -->
+                <label class="hidden lg:flex items-center px-2 py-1 bg-zinc-950/80 rounded-lg border border-white/10 gap-1.5 cursor-pointer hover:text-white transition-colors text-xs" title="Responsive Preview: Smooth real-time scrubbing and dragging by streamlining decorative effects during interaction">
+                    <input type="checkbox" id="video-responsive-preview-toggle" class="w-3.5 h-3.5 rounded bg-zinc-800 border-white/20 text-indigo-500 focus:ring-0">
+                    <span class="text-[11px] text-zinc-300 font-medium select-none">Responsive</span>
+                </label>
+            </div>
+
+            <!-- Right: Studio Workspace Switcher, Primary Render CTA & Close -->
+            <div class="flex items-center gap-2 shrink-0 ml-auto">
+                <!-- Studio UI Switcher Toggle Button -->
+                <button id="cg-open-studio-ui-btn" type="button" class="vs-inline-toggle bg-indigo-950/90 hover:bg-indigo-900/90 text-indigo-200 hover:text-white font-bold px-2.5 sm:px-3 py-1.5 rounded-lg border border-indigo-500/40 transition-all flex items-center gap-1.5 text-xs shadow-md cursor-pointer active:scale-95 whitespace-nowrap shrink-0" title="Switch to Modern Studio UI Workspace">
+                    <span>✨</span>
+                    <span class="hidden sm:inline">Studio UI</span>
                 </button>
 
-                <div class="h-4 w-px bg-white/10"></div>
+                <!-- Primary CTA: Export Video -->
+                <button id="video-export-btn" class="bg-gradient-to-r from-indigo-500 via-purple-600 to-indigo-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold px-3.5 sm:px-4 py-1.5 rounded-lg shadow-lg shadow-indigo-950/50 transition-all flex items-center gap-1.5 text-xs uppercase tracking-wider disabled:opacity-35 disabled:cursor-not-allowed border border-indigo-400/40 cursor-pointer active:scale-95 whitespace-nowrap shrink-0" disabled title="Render & Export Finished Video (MP4/WebM)">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Export</span>
+                </button>
+
+                <div class="h-4 w-px bg-white/10 shrink-0"></div>
 
                 <!-- Close Modal -->
-                <button id="close-video-director-modal-btn" class="text-zinc-400 hover:text-white hover:bg-white/10 transition-colors p-1.5 rounded-lg cursor-pointer" title="Close Video Director">
+                <button id="close-video-director-modal-btn" class="text-zinc-400 hover:text-white hover:bg-white/10 transition-colors p-1.5 rounded-lg cursor-pointer shrink-0" title="Close Video Director">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
+
+                <!-- Hidden DOM Elements / Legacy Action Proxies (Maintains 100% compatibility with event listeners & file upload inputs) -->
+                <div id="vd-legacy-action-proxies" class="hidden" aria-hidden="true" style="display:none;">
+                    <input type="file" id="import-project-input" accept=".cgproj">
+                    <input type="file" id="audio-upload-input" accept="audio/*,video/*">
+                    <button id="import-project-video-btn" type="button"></button>
+                    <button id="save-project-video-btn" type="button"></button>
+                    <button id="export-project-archive-video-btn" type="button"></button>
+                    <button id="toggle-timeline-btn-modal" type="button"></button>
+                    <button id="vfx-studio-video-director-btn" type="button"></button>
+                    <button id="direct-video-visual-first-btn" type="button"></button>
+                    <button id="upload-audio-btn" type="button"></button>
+                </div>
             </div>
         </div>
 
@@ -777,7 +860,7 @@ export const MODAL_TEMPLATES = `
                 </div>
 
                 <!-- Dedicated Timeline Drawer (Flex Sibling below Preview) -->
-                <div id="timeline-editor-container" class="w-full shrink-0 z-30 bg-[#0d0d12]/95 backdrop-blur-2xl border-t border-indigo-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] transition-all duration-300 hidden flex-col max-h-[380px]">
+                <div id="timeline-editor-container" class="w-full shrink-0 z-30 bg-[#0d0d12]/95 backdrop-blur-2xl border-t border-indigo-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] transition-all duration-300 hidden flex-col max-h-[480px]">
                     <div class="flex items-center justify-between bg-[#111218] border-b border-white/10 px-2 sm:px-3 py-1.5 shrink-0 gap-2.5 select-none relative z-40 overflow-x-auto custom-scrollbar no-scrollbar w-full">
                         <!-- ZONE 1: Left - Sequence Info, Prominent ⚡ AI Director Hub & Media Insertion -->
                         <div class="flex items-center gap-1.5 shrink-0">
@@ -3087,6 +3170,7 @@ export const MODAL_TEMPLATES = `
         <div class="insp-row-control">
           <select id="inspector-color-filter-select" class="select">
             <option value="none">None (Project Default)</option>
+            <option value="nostalgic_warmth">🌾 Nostalgic Warmth (Heritage LUT)</option>
             <option value="cinematic_teal_orange">Teal & Orange</option>
             <option value="kodak_2383">Film Print 2383</option>
             <option value="bleach_bypass">Bleach Bypass</option>
@@ -3102,6 +3186,15 @@ export const MODAL_TEMPLATES = `
         <div class="insp-row-control">
           <input type="range" id="inspector-filter-intensity-slider" min="0" max="100" step="1" value="100" />
           <span id="inspector-filter-intensity-val" class="num-readout">100%</span>
+        </div>
+      </div>
+
+      <div class="insp-row" style="align-items: center; justify-content: space-between;">
+        <label class="field-label" for="inspector-villain-shot-checkbox" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="Sterile, cold commercial foil look (overrides golden hour LUT)">
+          <span>🦹 Villain / Foil Shot</span>
+        </label>
+        <div class="insp-row-control" style="width: auto;">
+          <input type="checkbox" id="inspector-villain-shot-checkbox" class="checkbox cursor-pointer" style="width:16px; height:16px; accent-color: #64748b;" />
         </div>
       </div>
 

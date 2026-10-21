@@ -1045,8 +1045,10 @@ export function openVideoPromptModal(prompt: string) {
   if (dom.videoPromptModal) dom.videoPromptModal.classList.remove("hidden");
 }
 export function openVideoDirectorModal() {
-  if (dom.videoDirectorModal) {
-    dom.videoDirectorModal.classList.remove("hidden");
+  const modal = dom.videoDirectorModal || (document.getElementById('video-director-modal') as HTMLDivElement | null);
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
     document.body.classList.add("overflow-hidden");
     window.dispatchEvent(new Event('contentgen:video-director-opened'));
 
@@ -1056,9 +1058,14 @@ export function openVideoDirectorModal() {
       dom.saveProjectVideoBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6a1 1 0 10-2 0v5.586L7.707 10.293zM3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"></path></svg><span>Save</span>`;
     }
 
+    if (dom.videoExportBtn && (timelineState.clips?.length > 0 || state.uploadedVideoElement || timelineState.masterAudioBuffer || state.uploadedAudioBuffer || (state.currentScenes && state.currentScenes.length > 0))) {
+      dom.videoExportBtn.disabled = false;
+    }
+
     // Sync aspect ratio classes and dimensions after unhiding modal
     updateAspectRatioState();
 
+    import('./classic-director-menus').then((m) => m.initClassicDirectorMenus()).catch(() => {});
     import('./handlers-settings').then((m) => m.syncAutoOverlaySfxUI()).catch(() => {});
 
     // Aggressively free up memory for the video player
@@ -1097,9 +1104,11 @@ export function openVideoDirectorModal() {
 }
 
 export function closeVideoDirectorModal() {
-  if (dom.videoDirectorModal) {
+  const modal = dom.videoDirectorModal || (document.getElementById('video-director-modal') as HTMLDivElement | null);
+  if (modal) {
     window.dispatchEvent(new Event('contentgen:video-director-closing'));
-    dom.videoDirectorModal.classList.add("hidden");
+    modal.classList.add("hidden");
+    modal.style.display = "none";
     document.body.classList.remove("overflow-hidden");
 
     // Automatically restore Storyboard media textures and element sources
@@ -1400,24 +1409,24 @@ export function renderBrollEditor(
         <div class="flex flex-col h-full w-full relative select-none overflow-hidden">
             <div class="flex flex-grow w-full relative overflow-hidden min-h-0">
                 <!-- Track Header Labels Sidebar (CapCut / HyperFrames Studio Style) -->
-                <div id="timeline-track-headers" class="track-headers flex flex-col w-32 sm:w-44 bg-[#0e0e16] border-r border-white/10 text-[10px] font-semibold text-gray-300 flex-shrink-0 z-30 shadow-xl h-full overflow-hidden">
+                <div id="timeline-track-headers" class="track-headers flex flex-col w-32 sm:w-44 bg-[#0e0e16] border-r border-white/10 text-[10px] font-semibold text-gray-300 flex-shrink-0 z-30 shadow-xl h-full overflow-hidden pb-6">
                 </div>
                 
                 <!-- Scrollable Multi-Track Container -->
                 <div id="timeline-multi-track-scroll" class="flex-grow overflow-auto p-0 custom-scrollbar bg-[#07070c] relative h-full">
-                    <div id="timeline-multi-track-container" class="timeline-track timeline-multi-track-container relative flex flex-col shrink-0 min-h-full" style="width: ${trackWidth}px">
+                    <div id="timeline-multi-track-container" class="timeline-track timeline-multi-track-container relative flex flex-col shrink-0 min-h-full pb-6" style="width: ${trackWidth}px">
                         <!-- Top Time Ruler (Sticky) -->
                         <div id="timeline-ruler" class="timeline-ruler sticky top-0 z-30 h-7 bg-[#11121d]/95 border-b border-white/10 cursor-pointer backdrop-blur-md relative overflow-hidden" title="Click or drag to scrub playhead"></div>
                         <div id="track-overlays-container" class="timeline-track-row relative border-b border-white/10 bg-black/20 overflow-visible shrink-0"></div>
                         <div id="track-video-container" class="timeline-track-row relative h-16 border-b border-white/10 bg-black/30 flex items-center shrink-0"></div>
                         <div id="track-captions-container" class="timeline-track-row relative h-10 border-b border-white/10 bg-black/20 flex items-center overflow-hidden shrink-0"></div>
-                        <div id="track-audio-container" class="timeline-track-row relative h-10 border-b border-white/10 bg-black/40 flex items-center overflow-hidden shrink-0">
+                        <div id="track-audio-container" class="timeline-track-row relative h-12 border-b border-white/10 bg-black/40 flex items-center overflow-hidden shrink-0">
                             <canvas id="timeline-waveform" class="absolute top-0 left-0 h-full pointer-events-none opacity-50 z-0"></canvas>
                         </div>
-                        <div id="track-music-container" class="timeline-track-row relative h-10 border-b border-white/10 bg-black/30 flex items-center overflow-hidden shrink-0">
+                        <div id="track-music-container" class="timeline-track-row relative h-12 border-b border-white/10 bg-black/30 flex items-center overflow-hidden shrink-0">
                             <canvas id="timeline-music-waveform" class="absolute top-0 left-0 h-full pointer-events-none opacity-50 z-0"></canvas>
                         </div>
-                        <div id="track-sfx-container" class="timeline-track-row relative h-10 bg-black/40 flex items-center overflow-hidden shrink-0"></div>
+                        <div id="track-sfx-container" class="timeline-track-row relative h-12 bg-black/40 flex items-center overflow-hidden shrink-0"></div>
                         <!-- Full-Height Playhead with Glowing Diamond Needle -->
                         <div id="timeline-playhead" class="timeline-playhead absolute top-0 bottom-0 z-40 pointer-events-none w-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]">
                             <div class="w-3 h-3 bg-cyan-400 rotate-45 -ml-1.25 -mt-1 shadow-md"></div>
@@ -1535,8 +1544,8 @@ export function renderBrollEditor(
 
       // Adjust timeline container height to fit active tracks dynamically (no empty black space)
       if (dom.timelineEditorContainer && !dom.timelineEditorContainer.classList.contains('is-collapsed')) {
-        const activeHeight = 36 + 28 + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 40 : 0) + (hasMusic ? 40 : 0) + (hasSfx ? 40 : 0) + 16;
-        dom.timelineEditorContainer.style.height = `${Math.min(380, Math.max(140, activeHeight))}px`;
+        const activeHeight = 36 + 28 + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 48 : 0) + (hasMusic ? 48 : 0) + (hasSfx ? 48 : 0) + 36;
+        dom.timelineEditorContainer.style.height = `${Math.min(480, Math.max(160, activeHeight))}px`;
       }
 
       // Update Header HTML (N-Track support with CapCut / HyperFrames Studio Controls)
@@ -1598,7 +1607,7 @@ export function renderBrollEditor(
               </div>` : '';
 
         const audioHeaderHtml = hasAudio ? `
-              <div class="h-10 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/30 transition-colors">
+              <div class="h-12 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/30 transition-colors">
                   <div class="flex items-center gap-1.5 truncate">
                       <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
                       <span class="truncate font-semibold text-[11px] text-emerald-200">A1 Voiceover</span>
@@ -1615,7 +1624,7 @@ export function renderBrollEditor(
               </div>` : '';
 
         const musicHeaderHtml = hasMusic ? `
-              <div class="h-10 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-purple-300 bg-purple-950/20 hover:bg-purple-950/30 transition-colors">
+              <div class="h-12 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-purple-300 bg-purple-950/20 hover:bg-purple-950/30 transition-colors">
                   <div class="flex items-center gap-1.5 truncate">
                       <span class="w-2 h-2 rounded-full bg-purple-400 shrink-0"></span>
                       <span class="truncate font-semibold text-[11px] text-purple-200">A2 Music</span>
@@ -1632,7 +1641,7 @@ export function renderBrollEditor(
               </div>` : '';
 
         const sfxHeaderHtml = hasSfx ? `
-              <div class="h-10 shrink-0 flex items-center justify-between px-2.5 sm:px-3 text-amber-300 bg-amber-950/20 hover:bg-amber-950/30 transition-colors">
+              <div class="h-12 shrink-0 flex items-center justify-between px-2.5 sm:px-3 text-amber-300 bg-amber-950/20 hover:bg-amber-950/30 transition-colors">
                   <div class="flex items-center gap-1.5 truncate">
                       <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
                       <span class="truncate font-semibold text-[11px] text-amber-200">A3 Sound Effects</span>
@@ -2186,7 +2195,7 @@ export function renderBrollEditor(
       waveformCanvas.style.left = `${canvasStartX}px`;
       waveformCanvas.width = canvasWidth;
       waveformCanvas.style.width = `${canvasWidth}px`;
-      waveformCanvas.height = 40;
+      waveformCanvas.height = 48;
 
       const ctx = waveformCanvas.getContext("2d", { alpha: true });
       if (ctx && canvasWidth > 0) {
@@ -2203,8 +2212,8 @@ export function renderBrollEditor(
           const progress = i / audioWidthPx;
           const bucketIdx = Math.min(buckets - 1, Math.max(0, Math.floor(progress * buckets)));
           const norm = peaks[bucketIdx] || 0.05;
-          const h = Math.max(2, Math.min(38, Math.round(norm * 38)));
-          const y = Math.floor((40 - h) / 2);
+          const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
+          const y = Math.floor((48 - h) / 2);
           ctx.rect(localX, y, 1, h);
         }
         ctx.fill();
@@ -2290,7 +2299,7 @@ export function renderBrollEditor(
         musicCanvas.style.left = `${canvasStartX}px`;
         musicCanvas.width = canvasWidth;
         musicCanvas.style.width = `${canvasWidth}px`;
-        musicCanvas.height = 40;
+        musicCanvas.height = 48;
 
         const ctx = musicCanvas.getContext("2d", { alpha: true });
         if (ctx && canvasWidth > 0) {
@@ -2307,13 +2316,13 @@ export function renderBrollEditor(
             const progress = (i % musicWidthPx) / musicWidthPx;
             const bucketIdx = Math.min(buckets - 1, Math.max(0, Math.floor(progress * buckets)));
             const norm = peaks[bucketIdx] || 0.05;
-            const h = Math.max(2, Math.min(38, Math.round(norm * 38)));
-            const y = Math.floor((40 - h) / 2);
+            const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
+            const y = Math.floor((48 - h) / 2);
             ctx.rect(localX, y, 1, h);
 
             // Draw subtle loop boundary separator
             if (musicWidthPx > 10 && i > 0 && Math.floor(i % musicWidthPx) === 0) {
-              ctx.rect(localX, 0, 1, 40);
+              ctx.rect(localX, 0, 1, 48);
             }
           }
           ctx.fill();

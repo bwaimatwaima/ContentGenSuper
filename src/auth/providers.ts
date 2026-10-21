@@ -143,21 +143,11 @@ export async function handleLogin() {
         }
     } catch (error: any) {
         const host = typeof window !== 'undefined' ? window.location.hostname : 'your deployment domain';
-        const projectId = firebaseConfig.projectId || 'paidproject-505110';
-        const consoleSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
-        const providersUrl = `https://console.firebase.google.com/project/${projectId}/authentication/providers`;
-        const gcpCredentialsUrl = `https://console.cloud.google.com/apis/credentials?project=${projectId}`;
-        const redirectHandler = `https://${projectId}.firebaseapp.com/__/auth/handler`;
 
         if (error?.code === 'auth/cancelled-popup-request' || error?.code === 'auth/popup-closed-by-user') {
             console.log("Login popup request was cancelled or closed by user.");
             showAuthError(
-                `ℹ️ Google Login was closed or blocked.\n` +
-                `If Google displayed "flowName=GeneralOAuthFlow" or a redirect/access error inside the popup:\n` +
-                `1. Check Firebase Sign-In Providers: ensure Google is enabled.\n` +
-                `2. In Google Cloud Console Credentials, verify Authorized redirect URIs has:\n` +
-                `   ${redirectHandler}\n` +
-                `3. Or sign in instantly using Email/Password, Desktop Studio, or Continue as Guest!`
+                `Google Login popup was closed or cancelled.\n\n💡 You can sign in using Email/Password, Desktop Studio, or Continue as Guest!`
             );
             return;
         }
@@ -199,47 +189,16 @@ export async function handleLogin() {
             ))
         ) {
             showAuthError(
-                `⚠️ Google OAuth Configuration Issue (flowName=GeneralOAuthFlow)\n\n` +
-                `Google blocked the login request because your project's OAuth client is missing authorized redirect URIs or the Google provider is disabled in Firebase.\n\n` +
-                `Quick Fix:\n` +
-                `1. In Firebase Console (${providersUrl}), ensure "Google" is enabled.\n` +
-                `2. In Google Cloud Console Credentials (${gcpCredentialsUrl}):\n` +
-                `   Under OAuth 2.0 Client IDs, add this Authorized redirect URI:\n` +
-                `   ${redirectHandler}\n` +
-                `3. Add domain "${host}" to Firebase Authorized domains.\n\n` +
-                `💡 Instant Access: You can log in with Email/Password or Continue as Guest right now!`
+                `Google Sign-In is temporarily unavailable due to a configuration setting. Please contact the administrator to verify login settings.\n\n💡 You can sign in using Email/Password or Continue as Guest in the meantime.`
             );
             return;
         }
 
         if (error?.code === 'auth/unauthorized-domain' || (typeof error?.message === 'string' && error.message.includes('unauthorized-domain'))) {
-            console.error(`[Firebase Auth] Domain unauthorized: "${host}". Add to Firebase Console Authorized Domains.`);
+            console.error(`[Firebase Auth] Domain unauthorized: "${host}".`);
 
             showAuthError(
-                `⚠️ Unauthorized Domain (${host})\n` +
-                `Google Sign-In is blocked by Firebase because this deployment domain has not been added to your Firebase Authorized Domains.\n\n` +
-                `How to fix in 1 minute:\n` +
-                `1. Open Firebase Console:\n   ${consoleSettingsUrl}\n` +
-                `2. Under "Authorized domains", click "Add domain"\n` +
-                `3. Paste: ${host} and save.\n\n` +
-                `💡 Tip: You can log in with Email/Password or Continue as Guest right now without domain authorization!`
-            );
-
-            ui.showConfirmation(
-                'Firebase Auth: Add Authorized Domain',
-                `Google Sign-In is blocked by Firebase because your deployment domain "${host}" is not on the Authorized Domains list.\n\n` +
-                `Click "Open Firebase Console" to copy "${host}" and go to settings where you can add it.\n\n` +
-                `(Email/Password sign-in and Guest access work immediately without domain authorization)`,
-                () => {
-                    try {
-                        if (navigator.clipboard && navigator.clipboard.writeText) {
-                            navigator.clipboard.writeText(host);
-                            ui.showStatus(`Copied "${host}"! Opening Firebase settings...`, false, 5000);
-                        }
-                    } catch {}
-                    window.open(consoleSettingsUrl, '_blank');
-                },
-                () => {}
+                `Google Sign-In is not currently authorized for this domain. Please contact the administrator, or sign in using Email/Password or Continue as Guest.`
             );
             return;
         }

@@ -176,8 +176,8 @@ export function formatAuthErrorMessage(error: any, action?: 'login' | 'signup' |
     const code = error?.code || '';
     const message = error?.message || '';
     if (code === 'auth/unauthorized-domain' || message.includes('auth/unauthorized-domain') || message.includes('unauthorized-domain')) {
-        const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your Google Cloud URL';
-        return `Firebase Auth: Unauthorized Domain (${currentHost}). Google Sign-In requires your app domain to be added to Firebase Console > Authentication > Settings > Authorized domains. To resolve: click the link in the notification to add "${currentHost}". Alternatively, you can log in with Email/Password or Continue as Guest immediately.`;
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your domain';
+        return `Google Sign-In is not currently authorized for this domain (${currentHost}). Please contact the administrator, or log in with Email/Password or Continue as Guest immediately.`;
     }
     if (code === 'auth/api-key-not-found' || code.includes('api-key-not-found') || message.includes('api-key-not-found') || message.includes('API Key not found') || message.includes('API key not valid')) {
         return 'Firebase Authentication API key is not recognized or restricted by Google Cloud (Identity Toolkit API not enabled for this key). Enter your email and click Log In to enter offline, or click "Launch Desktop Creator Studio" or "Continue as Guest".';

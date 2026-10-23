@@ -36,7 +36,20 @@ export interface EditableTimelineClip {
     [k: string]: any;
 }
 
-type TimelineClip = EditableTimelineClip;
+export type TimelineClip = EditableTimelineClip;
+
+export interface AudioSegment {
+    id: string;
+    trackId: 'a1-voice' | 'a2-music';
+    startTime: number;
+    endTime: number;
+    duration: number;
+    sourceIn: number;
+    sourceOut: number;
+    muted?: boolean;
+    volume?: number;
+    linkedGroupId?: string;
+}
 
 export interface TimelineSnapshot {
     clips: any[];
@@ -46,6 +59,7 @@ export interface TimelineSnapshot {
     globalWordTimestamps: any[] | null;
     globalSilences: { start: number; end: number }[] | null;
     audioSplits?: number[];
+    audioSegments?: AudioSegment[];
 }
 
 class TimelineState {
@@ -63,6 +77,8 @@ class TimelineState {
     private _globalSilences: { start: number; end: number }[] | null = null;
     private _audioSplits: number[] = [];
     private _selectedAudioSplitIndex: number | null = null;
+    private _audioSegments: AudioSegment[] = [];
+    private _selectedAudioSegmentId: string | null = null;
     private _selectedGraphicId: string | null = null;
     private _videoGenerated: boolean = false;
     private _savedVideoTimelineMetadata: any[] | null = null;
@@ -218,6 +234,77 @@ class TimelineState {
         this.emitSettingChange();
     }
 
+    get audioSegments(): AudioSegment[] { return this._audioSegments; }
+    get selectedAudioSegmentId(): string | null { return this._selectedAudioSegmentId; }
+
+    setSelectedAudioSegmentId(id: string | null) {
+        this._selectedAudioSegmentId = id;
+        if (id !== null) {
+            this._selectedClipId = null;
+            this._selectedGraphicId = null;
+        }
+        this.emitSettingChange();
+    }
+
+    setAudioSegments(segments: AudioSegment[], notify = true) {
+        this._audioSegments = (segments || []).map((seg, idx) => {
+            const start = Math.max(0, Number(seg.startTime) || 0);
+            const dur = Math.max(0.05, Number(seg.duration) || ((Number(seg.endTime) || start + 1) - start));
+            const end = start + dur;
+            const sourceIn = Math.max(0, Number(seg.sourceIn) ?? start);
+            return {
+                ...seg,
+                id: seg.id || `aud_seg_${idx}`,
+                trackId: seg.trackId || 'a1-voice',
+                startTime: start,
+                endTime: end,
+                duration: dur,
+                sourceIn,
+                sourceOut: sourceIn + dur,
+                muted: Boolean(seg.muted),
+                volume: typeof seg.volume === 'number' ? seg.volume : 1.0,
+            };
+        }).sort((a, b) => a.startTime - b.startTime);
+
+        if (notify) this.emitClipChange();
+    }
+
+    /**
+     * Automatically builds or reconciles non-destructive AudioSegments from
+     * masterAudioBuffer and legacy audioSplits when segments haven't been initialized.
+     */
+    ensureAudioSegments(): AudioSegment[] {
+        if (!this._masterAudioBuffer) {
+            this._audioSegments = [];
+            return this._audioSegments;
+        }
+        if (this._audioSegments.length > 0) {
+            return this._audioSegments;
+        }
+        const totalDur = this._masterAudioBuffer.duration;
+        const points = [0, ...(this._audioSplits || []).filter(p => p > 0.01 && p < totalDur - 0.01), totalDur]
+            .sort((a, b) => a - b);
+        const built: AudioSegment[] = [];
+        for (let i = 0; i < points.length - 1; i++) {
+            const s = points[i];
+            const e = points[i + 1];
+            if (e - s < 0.02) continue;
+            built.push({
+                id: `aud_seg_${i}_${Math.round(s * 1000)}`,
+                trackId: 'a1-voice',
+                startTime: s,
+                endTime: e,
+                duration: e - s,
+                sourceIn: s,
+                sourceOut: e,
+                muted: false,
+                volume: 1.0,
+            });
+        }
+        this._audioSegments = built;
+        return this._audioSegments;
+    }
+
     setSelectedGraphicId(id: string | null) {
         this._selectedGraphicId = id;
         if (id !== null) {
@@ -272,11 +359,13 @@ class TimelineState {
             globalWordTimestamps: this._globalWordTimestamps, // Immutable reference
             globalSilences: this._globalSilences,             // Immutable reference
             audioSplits: [...this._audioSplits],
+            audioSegments: this._audioSegments.map(s => ({ ...s })),
         };
         if (this._undoStack.length > 0) {
             const last = this._undoStack[this._undoStack.length - 1];
             if (last.clips.length === snapshot.clips.length &&
                 last.graphics.length === snapshot.graphics.length &&
+                (last.audioSegments?.length || 0) === (snapshot.audioSegments?.length || 0) &&
                 last.mode === snapshot.mode &&
                 last.masterAudioBuffer === snapshot.masterAudioBuffer) {
                 // Quick shallow change check
@@ -296,6 +385,18 @@ class TimelineState {
                         if (last.graphics[i].id !== snapshot.graphics[i].id ||
                             last.graphics[i].start !== snapshot.graphics[i].start ||
                             last.graphics[i].end !== snapshot.graphics[i].end) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                if (!changed && last.audioSegments && snapshot.audioSegments) {
+                    for (let i = 0; i < last.audioSegments.length; i++) {
+                        if (last.audioSegments[i].id !== snapshot.audioSegments[i].id ||
+                            last.audioSegments[i].startTime !== snapshot.audioSegments[i].startTime ||
+                            last.audioSegments[i].endTime !== snapshot.audioSegments[i].endTime ||
+                            last.audioSegments[i].sourceIn !== snapshot.audioSegments[i].sourceIn ||
+                            last.audioSegments[i].muted !== snapshot.audioSegments[i].muted) {
                             changed = true;
                             break;
                         }
@@ -326,6 +427,7 @@ class TimelineState {
             globalWordTimestamps: this._globalWordTimestamps,
             globalSilences: this._globalSilences,
             audioSplits: [...this._audioSplits],
+            audioSegments: this._audioSegments.map(s => ({ ...s })),
         };
         this._redoStack.push(currentSnapshot);
         const prev = this._undoStack.pop()!;
@@ -336,6 +438,8 @@ class TimelineState {
         this._globalWordTimestamps = prev.globalWordTimestamps;
         this._globalSilences = prev.globalSilences;
         this._audioSplits = prev.audioSplits || [];
+        this._audioSegments = (prev.audioSegments || []).map(s => ({ ...s }));
+        this._selectedAudioSegmentId = null;
         this._selectedAudioSplitIndex = null;
         state.uploadedAudioBuffer = this._masterAudioBuffer;
         state.masterAudioTranscript = this._globalWordTimestamps;
@@ -356,6 +460,7 @@ class TimelineState {
             globalWordTimestamps: this._globalWordTimestamps,
             globalSilences: this._globalSilences,
             audioSplits: [...this._audioSplits],
+            audioSegments: this._audioSegments.map(s => ({ ...s })),
         };
         this._undoStack.push(currentSnapshot);
         const next = this._redoStack.pop()!;
@@ -366,6 +471,8 @@ class TimelineState {
         this._globalWordTimestamps = next.globalWordTimestamps;
         this._globalSilences = next.globalSilences;
         this._audioSplits = next.audioSplits || [];
+        this._audioSegments = (next.audioSegments || []).map(s => ({ ...s }));
+        this._selectedAudioSegmentId = null;
         this._selectedAudioSplitIndex = null;
         state.uploadedAudioBuffer = this._masterAudioBuffer;
         state.masterAudioTranscript = this._globalWordTimestamps;
@@ -501,9 +608,15 @@ class TimelineState {
     }
     
     setMasterAudioBuffer(buffer: AudioBuffer | null) {
+        const isNewBuffer = buffer !== this._masterAudioBuffer;
         this._masterAudioBuffer = buffer;
+        if (!buffer) {
+            this._audioSegments = [];
+        } else if (isNewBuffer && this._audioSegments.length === 0) {
+            this.ensureAudioSegments();
+        }
         try { invalidateSpectrumCache(); } catch {}
-        this.emitClipChange(); // Affects duration and mode
+        this.emitClipChange();
     }
 
     setMasterAudioAssetId(id: string | null) {

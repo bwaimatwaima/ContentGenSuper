@@ -98,6 +98,16 @@ let overlayOriginalEnd = 0;
 let overlayOriginalStartOffset = 0;
 let overlayResizeEdge: 'left' | 'right' | null = null;
 
+let isDraggingAudioSeg = false;
+let isResizingAudioSeg = false;
+let activeAudioSegId: string | null = null;
+let audioSegDragStartX = 0;
+let audioSegOriginalStart = 0;
+let audioSegOriginalEnd = 0;
+let audioSegOriginalSourceIn = 0;
+let audioSegResizeEdge: 'left' | 'right' | null = null;
+let dragAudioSegEl: HTMLElement | null = null;
+
 let lastDrawTime = 0;
 const DRAW_THROTTLE = 16; // ~60fps
 const SNAP_THRESHOLD_SECONDS = 0.01;
@@ -512,6 +522,42 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     }
   }
 
+  // Track A1 Voiceover Segment interactions (Drag, Trim, Slip)
+  const audioSegClip = target.closest('.audio-clip-overlay') as HTMLElement | null;
+  if (audioSegClip && !timelineState.isTrackLocked('audio')) {
+    const segId = audioSegClip.dataset.audioSegId;
+    const segIdx = audioSegClip.dataset.audioSegIndex ? parseInt(audioSegClip.dataset.audioSegIndex, 10) : null;
+    const segments = timelineState.ensureAudioSegments();
+    const seg = segments.find(s => s.id === segId) || (segIdx !== null ? segments[segIdx] : null);
+
+    if (seg) {
+      timelineState.saveSnapshot();
+      activeAudioSegId = seg.id;
+      timelineState.setSelectedAudioSegmentId(seg.id);
+      if (segIdx !== null) timelineState.setSelectedAudioSplitIndex(segIdx);
+
+      audioSegDragStartX = e.clientX;
+      audioSegOriginalStart = seg.startTime;
+      audioSegOriginalEnd = seg.endTime;
+      audioSegOriginalSourceIn = seg.sourceIn;
+
+      if (target.classList.contains('resize-handle')) {
+        isResizingAudioSeg = true;
+        audioSegResizeEdge = target.classList.contains('left-handle') ? 'left' : 'right';
+        document.body.style.cursor = 'col-resize';
+      } else {
+        isDraggingAudioSeg = true;
+        document.body.style.cursor = timelineState.editMode === 'slip' ? 'ew-resize' : 'grabbing';
+      }
+
+      dragAudioSegEl = audioSegClip;
+      document.addEventListener('mousemove', onTimelineMouseMove);
+      document.addEventListener('mouseup', handleTimelineMouseUp);
+      ui.renderTimelineEditor();
+      return;
+    }
+  }
+
   const transBtn = target.closest('.timeline-transition-btn') as HTMLElement;
   if (transBtn) {
     const clipId = transBtn.dataset.clipId;
@@ -682,6 +728,81 @@ function handleTimelineMouseMove(e: MouseEvent) {
         if (timeBadge) timeBadge.textContent = `${(ev.start ?? 0).toFixed(1)}s - ${(ev.end ?? 0).toFixed(1)}s`;
       }
       if (videoRenderContext) drawVideoFrame(state.videoPauseTime);
+    }
+    return;
+  }
+
+  if ((isResizingAudioSeg || isDraggingAudioSeg) && activeAudioSegId) {
+    const segments = timelineState.ensureAudioSegments();
+    const segIdx = segments.findIndex(s => s.id === activeAudioSegId);
+    const seg = segments[segIdx];
+    const maxAudioDur = timelineState.masterAudioBuffer?.duration ?? Infinity;
+
+    if (seg) {
+      const deltaX = e.clientX - audioSegDragStartX;
+      const pps = getPixelsPerSecond();
+      const deltaSec = deltaX / pps;
+      const minDur = 0.08;
+      const prevSeg = segIdx > 0 ? segments[segIdx - 1] : null;
+      const nextSeg = segIdx < segments.length - 1 ? segments[segIdx + 1] : null;
+
+      if (isResizingAudioSeg) {
+        if (timelineState.editMode === 'slip') {
+          const clipDur = audioSegOriginalEnd - audioSegOriginalStart;
+          const maxIn = Math.max(0, maxAudioDur - clipDur);
+          seg.sourceIn = Math.max(0, Math.min(maxIn, audioSegOriginalSourceIn - deltaSec));
+          seg.sourceOut = seg.sourceIn + clipDur;
+        } else if (audioSegResizeEdge === 'right') {
+          let rawEnd = audioSegOriginalEnd + deltaSec;
+          if (timelineState.snappingEnabled) rawEnd = getSnappedTime(rawEnd, cachedDragSnapPoints);
+          const maxEndByMedia = audioSegOriginalStart + (maxAudioDur - seg.sourceIn);
+          const maxEndByNeighbor = timelineState.editMode === 'ripple' ? Infinity : (nextSeg ? nextSeg.startTime : Infinity);
+          seg.endTime = Math.max(seg.startTime + minDur, Math.min(rawEnd, maxEndByMedia, maxEndByNeighbor));
+          seg.duration = seg.endTime - seg.startTime;
+          seg.sourceOut = seg.sourceIn + seg.duration;
+        } else if (audioSegResizeEdge === 'left') {
+          let rawStart = audioSegOriginalStart + deltaSec;
+          if (timelineState.snappingEnabled) rawStart = getSnappedTime(rawStart, cachedDragSnapPoints);
+          const minStartByMedia = Math.max(0, audioSegOriginalStart - audioSegOriginalSourceIn);
+          const minStartByNeighbor = prevSeg ? prevSeg.endTime : 0;
+          const newStart = Math.max(minStartByMedia, minStartByNeighbor, Math.min(audioSegOriginalEnd - minDur, rawStart));
+          const shift = newStart - audioSegOriginalStart;
+          seg.startTime = newStart;
+          seg.duration = audioSegOriginalEnd - newStart;
+          seg.sourceIn = Math.max(0, audioSegOriginalSourceIn + shift);
+          seg.sourceOut = seg.sourceIn + seg.duration;
+        }
+      } else if (isDraggingAudioSeg) {
+        const dur = audioSegOriginalEnd - audioSegOriginalStart;
+        if (timelineState.editMode === 'slip') {
+          const maxIn = Math.max(0, maxAudioDur - dur);
+          seg.sourceIn = Math.max(0, Math.min(maxIn, audioSegOriginalSourceIn - deltaSec));
+          seg.sourceOut = seg.sourceIn + dur;
+        } else {
+          let newStart = Math.max(0, audioSegOriginalStart + deltaSec);
+          if (timelineState.snappingEnabled) {
+            newStart = getSnappedTime(newStart, cachedDragSnapPoints);
+          }
+          // Prevent overlapping adjacent audio segments during lift drag
+          if (timelineState.editMode !== 'ripple') {
+            if (prevSeg) newStart = Math.max(prevSeg.endTime, newStart);
+            if (nextSeg) newStart = Math.min(nextSeg.startTime - dur, newStart);
+          }
+          newStart = Math.max(0, newStart);
+          seg.startTime = newStart;
+          seg.endTime = newStart + dur;
+        }
+      }
+
+      const el = (dragAudioSegEl && dragAudioSegEl.isConnected)
+        ? dragAudioSegEl
+        : (dom.timelineClipsContainer.querySelector(`[data-audio-seg-id="${activeAudioSegId}"]`) as HTMLElement);
+      if (el) {
+        el.style.left = `${seg.startTime * pps}px`;
+        el.style.width = `${seg.duration * pps}px`;
+        const badge = el.querySelector('.audio-time-badge');
+        if (badge) badge.textContent = `${seg.startTime.toFixed(1)}s–${seg.endTime.toFixed(1)}s`;
+      }
     }
     return;
   }
@@ -932,6 +1053,30 @@ function handleTimelineMouseUp() {
     if (videoRenderContext) drawVideoFrame(state.videoPauseTime);
   }
 
+  if (isDraggingAudioSeg || isResizingAudioSeg) {
+    const segments = [...timelineState.ensureAudioSegments()];
+    const idx = segments.findIndex(s => s.id === activeAudioSegId);
+    if (idx !== -1 && timelineState.editMode === 'ripple') {
+      const seg = segments[idx];
+      if (isResizingAudioSeg && audioSegResizeEdge === 'right') {
+        const deltaEnd = seg.endTime - audioSegOriginalEnd;
+        for (let i = idx + 1; i < segments.length; i++) {
+          segments[i].startTime = Math.max(0, segments[i].startTime + deltaEnd);
+          segments[i].endTime = segments[i].startTime + segments[i].duration;
+        }
+      }
+    }
+    isDraggingAudioSeg = false;
+    isResizingAudioSeg = false;
+    activeAudioSegId = null;
+    audioSegResizeEdge = null;
+    dragAudioSegEl = null;
+    document.body.style.cursor = 'default';
+    timelineState.setAudioSegments(segments, false);
+    updateVideoContext();
+    ui.renderTimelineEditor();
+  }
+
   if (isDraggingClip && draggedClipId) {
     dom.timelineClipsContainer.querySelector('.dragging')?.classList.remove('dragging');
     const movedClip = findClipById(draggedClipId);
@@ -1130,15 +1275,139 @@ export function updateReplayUI(isEnded: boolean) {
     }
 }
 
+let activePreviewAudioSegId: string | null = null;
+let previewVoiceGainNode: GainNode | null = null;
+
+export function resolveActiveAudioSegmentAtTime(timelineTime: number) {
+  const segments = timelineState.ensureAudioSegments?.() || [];
+  if (!segments.length) return null;
+  return (
+    segments.find(
+      (s) => !s.muted && timelineTime >= s.startTime && timelineTime < s.endTime - 0.005
+    ) || null
+  );
+}
+
+export function stopPreviewMasterAudio() {
+  activePreviewAudioSegId = null;
+  if (state.videoAudioSource) {
+    try {
+      state.videoAudioSource.onended = null;
+      state.videoAudioSource.stop();
+      state.videoAudioSource.disconnect();
+    } catch {}
+    state.videoAudioSource = null;
+  }
+}
+
+/**
+ * Synchronizes live WebAudio voiceover playback with the current timeline playhead
+ * and non-destructive AudioSegments (supporting gaps, trims, and shifted sourceIn offsets).
+ */
+export function syncPreviewMasterAudioAtTime(timelineTime: number) {
+  if (
+    !state.isVideoPlaying ||
+    !timelineState.masterAudioBuffer ||
+    timelineState.isTrackHidden('audio')
+  ) {
+    stopPreviewMasterAudio();
+    return;
+  }
+
+  // Check if any active video clip at `timelineTime` has soloAudio / muteNarration enabled
+  const soloActive = (timelineState.clips || []).some(
+    (c: any) =>
+      (c.soloAudio || c.muteNarration) &&
+      timelineTime >= (c.startTime ?? 0) &&
+      timelineTime < (c.endTime ?? (c.startTime ?? 0) + c.duration)
+  );
+  if (soloActive) {
+    stopPreviewMasterAudio();
+    return;
+  }
+
+  const segments = timelineState.ensureAudioSegments?.() || [];
+
+  // Legacy fallback if no segments exist
+  if (segments.length === 0) {
+    if (!state.videoAudioSource && timelineTime < timelineState.masterAudioBuffer.duration) {
+      const audioCtx = utils.getAudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+      const src = audioCtx.createBufferSource();
+      src.buffer = timelineState.masterAudioBuffer;
+      src.connect(audioCtx.destination);
+      src.start(0, timelineTime);
+      state.videoAudioSource = src;
+    }
+    return;
+  }
+
+  const activeSeg = resolveActiveAudioSegmentAtTime(timelineTime);
+
+  // If playhead is over a gap, silent space, or muted segment:
+  if (!activeSeg) {
+    if (activePreviewAudioSegId !== null) {
+      stopPreviewMasterAudio();
+    }
+    return;
+  }
+
+  // If already playing this exact segment, let it run
+  if (activePreviewAudioSegId === activeSeg.id && state.videoAudioSource) {
+    return;
+  }
+
+  // Switch to the new segment
+  stopPreviewMasterAudio();
+  activePreviewAudioSegId = activeSeg.id;
+
+  const audioCtx = utils.getAudioContext();
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = timelineState.masterAudioBuffer;
+
+  if (!previewVoiceGainNode) {
+    previewVoiceGainNode = audioCtx.createGain();
+    previewVoiceGainNode.connect(audioCtx.destination);
+  }
+  const segVol = activeSeg.volume !== undefined ? activeSeg.volume : 1;
+  previewVoiceGainNode.gain.setValueAtTime(segVol, audioCtx.currentTime);
+
+  source.connect(previewVoiceGainNode);
+  state.videoAudioSource = source;
+
+  // Calculate segment source offset and remaining duration from current playhead
+  const segOffset = Math.max(0, timelineTime - activeSeg.startTime);
+  const sourceOffset = activeSeg.sourceIn + segOffset;
+  const remainingDuration = Math.max(0.01, activeSeg.endTime - timelineTime);
+
+  source.onended = () => {
+    // Only clear if this source is still the active one
+    if (activePreviewAudioSegId === activeSeg.id) {
+      activePreviewAudioSegId = null;
+      state.videoAudioSource = null;
+    }
+  };
+
+  try {
+    source.start(0, sourceOffset, remainingDuration);
+  } catch (err) {
+    console.warn('Audio segment start notice:', err);
+  }
+}
+
 export function forcePausePlayback(timeOverride?: number, silent: boolean = false) {
     state.isVideoPlaying = false;
     if (dom.videoPlayIcon) dom.videoPlayIcon.classList.remove('hidden');
     if (dom.videoPauseIcon) dom.videoPauseIcon.classList.add('hidden');
     if (dom.bigPlayBtn) dom.bigPlayBtn.classList.remove('hidden');
-    if (state.videoAudioSource) {
-        try { state.videoAudioSource.stop(); } catch (e) { console.warn('Audio source stop failed:', e); }
-        try { state.videoAudioSource.disconnect(); } catch (e) { console.warn('Audio source disconnect failed:', e); }
-        state.videoAudioSource = null;
+    stopPreviewMasterAudio();
+    if (previewVoiceGainNode) {
+        try { previewVoiceGainNode.disconnect(); } catch (e) { console.warn('Preview voice gain disconnect failed:', e); }
+        previewVoiceGainNode = null;
     }
     if (state.videoMasterGainNode) {
         try { state.videoMasterGainNode.disconnect(); } catch (e) { console.warn('Master gain disconnect failed:', e); }
@@ -1526,26 +1795,8 @@ export function handleVideoPlayPause() {
     // Playback status notification
     ui.showStatus(wasAtEnd ? 'Replaying from start' : 'Started playback', false, 1000);
     
-    let audioStartContextTime = 0;
-    if (timelineState.masterAudioBuffer) {
-        state.videoAudioSource = audioCtx.createBufferSource();
-        state.videoAudioSource.buffer = timelineState.masterAudioBuffer;
-        const masterGain = audioCtx.createGain();
-        state.videoMasterGainNode = masterGain;
-        state.videoAudioSource.connect(masterGain);
-        masterGain.connect(audioCtx.destination);
-        try {
-            audioStartContextTime = audioCtx.currentTime;
-            state.videoAudioSource.start(0, state.videoPauseTime);
-        } catch (e) {
-            state.videoPauseTime = 0;
-            state.playbackStartOffset = 0;
-            audioStartContextTime = audioCtx.currentTime;
-            state.videoAudioSource.start(0, 0);
-        }
-    } else {
-        audioStartContextTime = audioCtx.currentTime;
-    }
+    let audioStartContextTime = audioCtx.currentTime;
+    syncPreviewMasterAudioAtTime(state.videoPauseTime || 0);
 
     state.sfxAudioSources = [];
     for (const clip of timelineState.clips) {
@@ -1662,18 +1913,7 @@ export function handleVideoPlayPause() {
             }
             
             state.lastRenderedTime = curT;
-            if (state.videoMasterGainNode && timelineState.clips) {
-                narrationIndex.ensure(timelineState.clips, timelineState.clipsVersion);
-                const ni = narrationIndex.find(curT);
-                const activeClip = ni >= 0 ? timelineState.clips[ni] : undefined;
-                const isAudioTrackHidden = timelineState.isTrackHidden('audio');
-                const shouldMuteVoiceover = isAudioTrackHidden || !!(activeClip?.soloAudio || activeClip?.muteNarration);
-                const currentGain = state.videoMasterGainNode.gain.value;
-                const targetGain = shouldMuteVoiceover ? 0 : 1.0;
-                if (Math.abs(currentGain - targetGain) > 0.01) {
-                    state.videoMasterGainNode.gain.setValueAtTime(targetGain, audioCtx.currentTime);
-                }
-            }
+            syncPreviewMasterAudioAtTime(curT);
             if (state.bgAudioGain) {
                 const isMusicHidden = timelineState.isTrackHidden('music');
                 const curBgGain = state.bgAudioGain.gain.value;
@@ -2462,23 +2702,48 @@ export function handleSplitClip() {
       return;
     }
 
-    if (timelineState.selectedAudioSplitIndex !== null && timelineState.masterAudioBuffer) {
-        const splits = timelineState.audioSplits || [];
-        const allPoints = [0, ...splits, timelineState.masterAudioBuffer.duration];
-        const isTooClose = allPoints.some(p => Math.abs(p - time) < 0.1);
-        if (isTooClose) {
-            ui.showStatus('Split point too close to edge.', true, 3000);
+    if ((timelineState.selectedAudioSegmentId !== null || timelineState.selectedAudioSplitIndex !== null) && timelineState.masterAudioBuffer) {
+        const segments = [...timelineState.ensureAudioSegments()];
+        const segIdx = segments.findIndex(s =>
+            s.id === timelineState.selectedAudioSegmentId ||
+            (time >= s.startTime && time <= s.endTime)
+        );
+        if (segIdx === -1) {
+            ui.showStatus('Place playhead inside the selected voice segment to split.', true, 2500);
             return;
         }
+        const seg = segments[segIdx];
+        const splitOffset = time - seg.startTime;
+        if (splitOffset < 0.08 || seg.duration - splitOffset < 0.08) {
+            ui.showStatus('Split point too close to audio segment edge.', true, 2500);
+            return;
+        }
+
         timelineState.saveSnapshot();
-        const newSplits = [...splits, time].sort((a, b) => a - b);
-        timelineState.setAudioSplits(newSplits);
-        
-        // Select the new segment immediately after the split point
-        const splitPos = newSplits.findIndex(s => s === time);
-        timelineState.setSelectedAudioSplitIndex(splitPos >= 0 ? splitPos + 1 : 0);
+        const rightDur = seg.endTime - time;
+        const leftSeg = {
+            ...seg,
+            id: `${seg.id}_a`,
+            endTime: time,
+            duration: splitOffset,
+            sourceOut: seg.sourceIn + splitOffset,
+        };
+        const rightSeg = {
+            ...seg,
+            id: `${seg.id}_b`,
+            startTime: time,
+            endTime: seg.endTime,
+            duration: rightDur,
+            sourceIn: seg.sourceIn + splitOffset,
+            sourceOut: seg.sourceIn + splitOffset + rightDur,
+        };
+
+        segments.splice(segIdx, 1, leftSeg, rightSeg);
+        timelineState.setAudioSegments(segments, false);
+        timelineState.setSelectedAudioSegmentId(rightSeg.id);
+        timelineState.setSelectedAudioSplitIndex(segIdx + 1);
         ui.renderTimelineEditor();
-        ui.showStatus('Audio split at playhead.', false, 1500);
+        ui.showStatus('✂️ Audio segment split at playhead.', false, 1500);
         return;
     }
 
@@ -2536,6 +2801,68 @@ export function handleSplitClip() {
     refreshPerClipWordTimestamps();
     updateVideoContext();
     ui.showStatus('✂️ Shot split at playhead.', false, 1500);
+}
+
+export function handleDeleteAudioSegment(segmentId?: string, forceRipple?: boolean) {
+    if (!timelineState.masterAudioBuffer) return;
+    const segments = [...timelineState.ensureAudioSegments()];
+    const targetId = segmentId || timelineState.selectedAudioSegmentId;
+    let idx = targetId ? segments.findIndex(s => s.id === targetId) : -1;
+    if (idx === -1 && timelineState.selectedAudioSplitIndex !== null) {
+        idx = timelineState.selectedAudioSplitIndex;
+    }
+    if (idx < 0 || idx >= segments.length) return;
+
+    const removedSeg = segments[idx];
+    const removeStart = removedSeg.startTime;
+    const removeEnd = removedSeg.endTime;
+    const durRemoved = removedSeg.duration;
+    const isRipple = forceRipple ?? (timelineState.editMode === 'ripple');
+    const isLinked = timelineState.linkedAudioEdit;
+
+    forcePausePlayback();
+    timelineState.saveSnapshot();
+
+    segments.splice(idx, 1);
+
+    if (isRipple) {
+        // Shift downstream audio segments left to close the gap on A1
+        for (let i = idx; i < segments.length; i++) {
+            segments[i].startTime = Math.max(0, segments[i].startTime - durRemoved);
+            segments[i].endTime = segments[i].startTime + segments[i].duration;
+        }
+
+        // If Linked Audio Editing is ON, also shift/trim corresponding V1 video clips
+        if (isLinked) {
+            const newClips = [...timelineState.clips];
+            for (const c of newClips) {
+                if (c.displayMode === 'pip_overlay') continue;
+                const cs = c.startTime ?? 0;
+                const ce = c.endTime ?? (cs + c.duration);
+                if (cs >= removeEnd - 0.001) {
+                    c.startTime = Math.max(0, cs - durRemoved);
+                    c.endTime = Math.max(c.startTime + 0.05, ce - durRemoved);
+                } else if (cs >= removeStart - 0.001 && ce <= removeEnd + 0.001) {
+                    c.duration = 0;
+                }
+            }
+            timelineState.setClips(newClips.filter(c => c.duration >= 0.05), false);
+        }
+    }
+
+    timelineState.setAudioSegments(segments, false);
+    timelineState.setSelectedAudioSegmentId(null);
+    timelineState.setSelectedAudioSplitIndex(null);
+
+    updateVideoContext();
+    ui.renderTimelineEditor();
+    ui.showStatus(
+        isRipple
+            ? `🗑️ Ripple-deleted audio segment (${durRemoved.toFixed(1)}s)${isLinked ? ' + linked video' : ''}.`
+            : `🗑️ Lift-deleted audio segment (${durRemoved.toFixed(1)}s gap left on A1).`,
+        false,
+        2000
+    );
 }
 
 export function handleDeleteAudioClip(index: number, ripple: boolean = false) {
@@ -2656,7 +2983,7 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
     }
 
     // Check if playhead is over an SFX clip when no video clip is explicitly selected
-    if (!options.clipId && !timelineState.selectedClipId && timelineState.selectedAudioSplitIndex === null) {
+    if (!options.clipId && !timelineState.selectedClipId && timelineState.selectedAudioSplitIndex === null && timelineState.selectedAudioSegmentId === null) {
       const time = state.videoPauseTime || 0;
       const sfxAtTime = (timelineState.graphics || []).find(g => {
         const isSfx = (g as any).isSfxOnly || (g as any).type === 'sfxCue' || Boolean((g as any).sfxTrigger && (g as any).sfxTrigger !== 'none');
@@ -2680,9 +3007,8 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
       }
     }
 
-    if (timelineState.selectedAudioSplitIndex !== null && timelineState.masterAudioBuffer) {
-        const shouldRippleAudio = options.deleteAudio ?? (timelineState.editMode === 'ripple' && timelineState.linkedAudioEdit);
-        handleDeleteAudioClip(timelineState.selectedAudioSplitIndex, shouldRippleAudio);
+    if ((timelineState.selectedAudioSegmentId !== null || timelineState.selectedAudioSplitIndex !== null) && timelineState.masterAudioBuffer) {
+        handleDeleteAudioSegment(timelineState.selectedAudioSegmentId || undefined, options.deleteAudio);
         return;
     }
 

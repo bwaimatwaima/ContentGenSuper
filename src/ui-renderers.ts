@@ -2206,71 +2206,95 @@ export function renderBrollEditor(
       waveformCanvas.height = 48;
 
       const ctx = waveformCanvas.getContext("2d", { alpha: true });
-      if (ctx && canvasWidth > 0) {
-        ctx.fillStyle = "#10b981"; // emerald-500
-        const peaks = getAudioBufferPeaks(buffer);
-        const buckets = peaks.length;
-
+      const audioBuffer = masterAudioBuf;
+      const globalMax = 1.0;
+      const audioSegments = timelineState.ensureAudioSegments?.() || [];
+      if (ctx && audioBuffer) {
+        const rawData = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
+        ctx.fillStyle = "#10b981";
         ctx.beginPath();
-        const startCanvasX = canvasStartX;
-        const endCanvasX = Math.min(canvasStartX + canvasWidth, canvasEndX);
 
-        for (let i = startCanvasX; i < endCanvasX; i++) {
-          const localX = i - canvasStartX;
-          const progress = i / audioWidthPx;
-          const bucketIdx = Math.min(buckets - 1, Math.max(0, Math.floor(progress * buckets)));
-          const norm = peaks[bucketIdx] || 0.05;
-          const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
-          const y = Math.floor((48 - h) / 2);
-          ctx.rect(localX, y, 1, h);
+        // Draw waveform peaks per AudioSegment using each segment's [startTime, endTime] and sourceIn offset
+        for (const seg of audioSegments) {
+          if (seg.muted || seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) continue;
+
+          const segVisStart = Math.max(seg.startTime, visibleStartTime);
+          const segVisEnd = Math.min(seg.endTime, visibleEndTime);
+          const startPx = Math.max(0, Math.floor((segVisStart - visibleStartTime) * pps));
+          const endPx = Math.min(canvasWidth, Math.ceil((segVisEnd - visibleStartTime) * pps));
+
+          for (let localX = startPx; localX < endPx; localX += 3) {
+            const timelineTime = visibleStartTime + (localX / pps);
+            const offsetInSeg = timelineTime - seg.startTime;
+            const sourceTime = seg.sourceIn + offsetInSeg;
+            if (sourceTime < 0 || sourceTime >= audioBuffer.duration) continue;
+
+            const sampleIdx = Math.floor(sourceTime * sampleRate);
+            const step = Math.max(1, Math.floor((3 / pps) * sampleRate));
+            let maxPeak = 0;
+            for (let s = 0; s < step && sampleIdx + s < rawData.length; s += Math.max(1, Math.floor(step / 16))) {
+              const val = Math.abs(rawData[sampleIdx + s]);
+              if (val > maxPeak) maxPeak = val;
+            }
+            const norm = Math.min(1, maxPeak / globalMax);
+            const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
+            const y = Math.floor((48 - h) / 2);
+            ctx.rect(localX, y, 2, h);
+          }
         }
         ctx.fill();
       }
-      
-      // Render audio splits as selectable clip overlays
+
+      // Render interactive AudioSegments as draggable/trimmable clip blocks
       const existingClipOverlays = trackAudio.querySelectorAll('.audio-clip-overlay');
       existingClipOverlays.forEach(el => el.remove());
 
-      const audioSplits = [0, ...(timelineState.audioSplits || []), audioDur].sort((a, b) => a - b);
-      for (let i = 0; i < audioSplits.length - 1; i++) {
-        const start = audioSplits[i];
-        const end = audioSplits[i + 1];
-        if (end - start < 0.01) continue; // skip zero-length
-        
+      audioSegments.forEach((seg, i) => {
+        if (seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) return;
+        if (seg.duration < 0.02) return;
+
+        const isSelected =
+          timelineState.selectedAudioSegmentId === seg.id ||
+          timelineState.selectedAudioSplitIndex === i;
+
         const clipDiv = document.createElement('div');
-        clipDiv.className = `audio-clip-overlay absolute top-0 bottom-0 border-r border-zinc-900 pointer-events-auto cursor-pointer transition-colors group`;
-        clipDiv.style.left = `${start * pps}px`;
-        clipDiv.style.width = `${(end - start) * pps}px`;
-        
-        const isSelected = timelineState.selectedAudioSplitIndex === i;
+        clipDiv.className = `audio-clip-overlay absolute top-0.5 bottom-0.5 rounded border pointer-events-auto cursor-grab active:cursor-grabbing transition-colors group overflow-hidden ${
+          isSelected
+            ? 'bg-emerald-500/25 border-emerald-400 ring-1 ring-emerald-400/40 z-20'
+            : 'bg-emerald-950/30 border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-900/25 z-10'
+        } ${seg.muted ? 'opacity-40 grayscale' : ''}`;
+        clipDiv.dataset.audioSegId = seg.id;
+        clipDiv.dataset.audioSegIndex = String(i);
+        clipDiv.style.left = `${seg.startTime * pps}px`;
+        clipDiv.style.width = `${Math.max(12, seg.duration * pps)}px`;
+
+        clipDiv.innerHTML = `
+          <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+          <div class="absolute top-1 left-2.5 flex items-center gap-1.5 pointer-events-none select-none z-20">
+            <span class="text-[9px] font-mono px-1 rounded-xs ${
+              isSelected ? 'bg-emerald-900 text-emerald-100 font-bold' : 'bg-black/60 text-emerald-300'
+            }">🎙️ Voice ${i + 1}</span>
+            <span class="audio-time-badge text-[8px] font-mono text-emerald-200/80 hidden sm:inline">${seg.startTime.toFixed(1)}s–${seg.endTime.toFixed(1)}s</span>
+          </div>
+          <div class="resize-handle right-handle right-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+        `;
+
         if (isSelected) {
-            clipDiv.classList.add('bg-indigo-500/30', 'border', 'border-indigo-400', 'z-20');
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'absolute top-1 right-2 text-white bg-red-600/80 hover:bg-red-500 rounded p-1 pointer-events-auto shadow';
-            deleteBtn.innerHTML = '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
-            deleteBtn.onmousedown = (e) => {
-                e.stopPropagation();
-                import('./videoController').then(m => m.handleDeleteClip({ deleteAudio: true }));
-            };
-            clipDiv.appendChild(deleteBtn);
-        } else {
-            clipDiv.classList.add('hover:bg-white/10');
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'delete-btn absolute top-1 right-2.5 text-white bg-red-600/85 hover:bg-red-500 rounded p-1 pointer-events-auto shadow z-30 cursor-pointer';
+          deleteBtn.title = 'Delete Voice Segment (Delete / Backspace)';
+          deleteBtn.innerHTML = '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
+          deleteBtn.onmousedown = (e) => {
+            e.stopPropagation();
+            import('./videoController').then(m => m.handleDeleteAudioSegment(seg.id));
+          };
+          clipDiv.appendChild(deleteBtn);
         }
 
-        clipDiv.onmousedown = (e) => {
-            timelineState.setSelectedClipId(null);
-            timelineState.setSelectedAudioSplitIndex(i);
-            renderTimelineEditor();
-        };
-
-        const label = document.createElement('div');
-        label.className = `absolute top-1 left-2 text-[9px] font-mono select-none px-1 rounded-sm ${isSelected ? 'bg-indigo-900 text-indigo-200' : 'bg-black/50 text-emerald-400 opacity-0 group-hover:opacity-100'}`;
-        label.textContent = `A-Roll ${i + 1}`;
-        clipDiv.appendChild(label);
-
         trackAudio.appendChild(clipDiv);
-      }
+      });
     } else {
       if (waveformCanvas) {
         waveformCanvas.style.display = "none";

@@ -99,6 +99,7 @@ export async function exportProjectArchive(onProgress?: (percent: number, messag
             timelineMode: timelineState.mode,
             graphics: timelineState.graphics,
             audioSplits: timelineState.audioSplits,
+            audioSegments: timelineState.audioSegments,
             audioMetadata: timelineState.masterAudioBuffer ? {
                 duration: timelineState.masterAudioBuffer.duration,
                 sampleRate: timelineState.masterAudioBuffer.sampleRate,
@@ -701,6 +702,10 @@ export async function importProjectArchive(file: File) {
         state.smartCaptionPlacementEnabled = Boolean(importedState.smartCaptionPlacementEnabled);
         timelineState.setMode(importedState.timelineMode || 'free');
         timelineState.setGraphics(importedState.graphics || []);
+        timelineState.setAudioSplits(importedState.audioSplits || []);
+        if (Array.isArray(importedState.audioSegments) && importedState.audioSegments.length > 0) {
+            timelineState.setAudioSegments(importedState.audioSegments, false);
+        }
 
         // Restore active production video timeline & preview
         const videoTimelineMetadata =

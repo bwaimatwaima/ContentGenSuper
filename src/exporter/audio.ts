@@ -100,25 +100,53 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
         }
     };
 
-    if (timelineState.masterAudioBuffer) {
+    if (timelineState.masterAudioBuffer && !timelineState.isTrackHidden('audio')) {
+        const segments = timelineState.ensureAudioSegments?.() || [];
         const hasSoloClips = timelineState.clips?.some((c: any) => c.soloAudio || c.muteNarration);
-        if (hasSoloClips) {
-            await mixInNative(voiceBus, timelineState.masterAudioBuffer, 0, false, (g) => {
-                const FADE_SEC = 0.025; // 25ms anti-click micro-fade
-                g.gain.setValueAtTime(1.0, 0);
+
+        const applySoloMuteEnvelope = (g: GainNode, baseVol: number) => {
+            const FADE_SEC = 0.025;
+            g.gain.setValueAtTime(baseVol, 0);
+            if (hasSoloClips) {
                 for (const clip of timelineState.clips) {
                     if (clip.soloAudio || clip.muteNarration) {
                         const muteStart = Math.max(0, clip.startTime);
                         const muteEnd = Math.max(muteStart, clip.endTime);
-                        g.gain.setValueAtTime(1.0, Math.max(0, muteStart - FADE_SEC));
+                        g.gain.setValueAtTime(baseVol, Math.max(0, muteStart - FADE_SEC));
                         g.gain.linearRampToValueAtTime(0.0, muteStart);
                         g.gain.setValueAtTime(0.0, Math.max(muteStart, muteEnd - FADE_SEC));
-                        g.gain.linearRampToValueAtTime(1.0, muteEnd);
+                        g.gain.linearRampToValueAtTime(baseVol, muteEnd);
                     }
                 }
-            });
+            }
+        };
+
+        if (segments.length > 0) {
+            for (const seg of segments) {
+                if (seg.muted || seg.duration <= 0.01) continue;
+                const segVol = typeof seg.volume === 'number' ? seg.volume : 1.0;
+                const safeOffset = Math.max(0, Math.min(seg.sourceIn, timelineState.masterAudioBuffer.duration - 0.01));
+                const safeDur = Math.max(0.01, Math.min(seg.duration, timelineState.masterAudioBuffer.duration - safeOffset));
+
+                await mixInNative(
+                    voiceBus,
+                    timelineState.masterAudioBuffer,
+                    Math.max(0, seg.startTime),
+                    false,
+                    (g) => applySoloMuteEnvelope(g, segVol),
+                    safeOffset,
+                    safeDur,
+                    1.0
+                );
+            }
         } else {
-            await mixInNative(voiceBus, timelineState.masterAudioBuffer, 0, false);
+            await mixInNative(
+                voiceBus,
+                timelineState.masterAudioBuffer,
+                0,
+                false,
+                (g) => applySoloMuteEnvelope(g, 1.0)
+            );
         }
     }
 

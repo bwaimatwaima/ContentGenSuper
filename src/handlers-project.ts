@@ -276,6 +276,7 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
         timelineMode: timelineState.mode,
         graphics: timelineState.graphics,
         audioSplits: timelineState.audioSplits,
+        audioSegments: timelineState.audioSegments,
         // Save audio metadata
         audioMetadata: timelineState.masterAudioBuffer ? {
             duration: timelineState.masterAudioBuffer.duration,
@@ -862,6 +863,9 @@ export async function loadProject() {
             timelineState.setMode(projectData.timelineMode || 'free');
             timelineState.setGraphics(projectData.graphics || []);
             timelineState.setAudioSplits(projectData.audioSplits || []);
+            if (Array.isArray(projectData.audioSegments) && projectData.audioSegments.length > 0) {
+                timelineState.setAudioSegments(projectData.audioSegments, false);
+            }
             
             // Update UI from restored settings
             if (dom.detailLevelSelect) ui.handlePacingChange(dom.detailLevelSelect.value);

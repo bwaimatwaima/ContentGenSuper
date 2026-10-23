@@ -1091,8 +1091,13 @@ export const MODAL_TEMPLATES = `
                                 </button>
                                 <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-md p-0.5 shrink-0 shadow-inner">
                                     <button id="timeline-mode-ripple" title="Ripple Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-zinc-800 text-white rounded transition-colors cursor-pointer shrink-0">Ripple</button>
+                                    <button id="timeline-mode-lift" title="Lift Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">Lift</button>
                                     <button id="timeline-mode-slip" title="Slip Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">Slip</button>
                                 </div>
+                                <button id="timeline-link-audio-toggle" title="Toggle Linked Audio Editing (Synchronize video trims/deletes with master narration)" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border border-white/10 rounded-md transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-xs">
+                                    <span>🔗</span>
+                                    <span class="hidden xl:inline">Link Audio</span>
+                                </button>
                             </div>
                         </div>
 

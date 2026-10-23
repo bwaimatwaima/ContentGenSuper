@@ -21,8 +21,8 @@ let devCheck = 0;
 
 export type TimelineClip = {
   id: string;
-  image?: HTMLImageElement;
-  videoElement?: HTMLVideoElement;
+  image?: HTMLImageElement | null;
+  videoElement?: HTMLVideoElement | null;
   _exportVideoFrame?: any;
   _exportTalkingHeadFrame?: any;
   _exportSecondaryFrame?: any;
@@ -51,9 +51,9 @@ export type TimelineClip = {
   talkingHeadMode?: string;
   talkingHeadShape?: 'circle' | 'rounded' | 'square';
   talkingHeadSize?: 'small' | 'medium' | 'large';
-  talkingHeadVideoElement?: HTMLVideoElement;
-  secondaryImage?: HTMLImageElement;
-  secondaryVideoElement?: HTMLVideoElement;
+  talkingHeadVideoElement?: HTMLVideoElement | null;
+  secondaryImage?: HTMLImageElement | null;
+  secondaryVideoElement?: HTMLVideoElement | null;
   _secondaryImageObjectURL?: string;
   _secondaryVideoObjectURL?: string;
   secondary_image_id?: string | null;
@@ -608,7 +608,7 @@ function getCachedScaledImage(image: HTMLImageElement, targetWidth: number, targ
 export function preloadUpcomingClips(currentTime: number, lookahead = 5) {
   if (!videoRenderContext) return;
   const { clips } = videoRenderContext;
-  const isAbs = timelineState.mode === 'audio_locked';
+  const isAbs = true;
 
   let cumTime = 0;
   for (const clip of clips) {
@@ -2185,53 +2185,50 @@ function drawVideoFrameImpl(
   let tIn = 0;
   let inGapHold = false;
 
-  const isAbs = timelineState.mode === 'audio_locked';
+  const isAbs = true;
 
-  if (isAbs) {
-    activeClipIndex.ensure(clips, timelineState.clipsVersion);
-    const ai = activeClipIndex.find(time);
-    if ((import.meta as any).env?.DEV && ++devCheck % 120 === 0 && linearFind(clips, time) !== ai) {
-      console.warn('[ActiveClipIndex] mismatch', { time, fast: ai, linear: linearFind(clips, time) });
-    }
-    if (ai !== -1) {
-      cur = clips[ai];
-      nxt = clips[ai + 1] || null;
-      tIn = time - activeClipIndex.startOf(ai);
-    } else {
-      const li = activeClipIndex.lastEnded(time);
-      if (li !== -1) {
-        cur = clips[li];
-        nxt = clips[li + 1] || null;
-        const curLenForGap = Math.max(0.001, (isNum(cur.endTime) && isNum(cur.startTime)) ? cur.endTime - cur.startTime : cur.duration);
-        tIn = Math.max(0, curLenForGap - 1e-3);
-        inGapHold = true;
-      }
-    }
+  // Always evaluate clips by their canonical project-time intervals [startTime, endTime)
+  activeClipIndex.ensure(clips, timelineState.clipsVersion);
+  const ai = activeClipIndex.find(time);
+  if (ai !== -1) {
+    cur = clips[ai];
+    nxt = clips[ai + 1] || null;
+    tIn = Math.max(0, time - activeClipIndex.startOf(ai));
   } else {
-    let cum = 0;
+    // Fallback linear check in case activeClipIndex wasn't rebuilt yet
     for (let i = 0; i < clips.length; i++) {
-      if (time >= cum && time < cum + clips[i].duration) {
+      const cs = isNum(clips[i].startTime) ? clips[i].startTime : 0;
+      const ce = isNum(clips[i].endTime) ? clips[i].endTime : cs + (clips[i].duration || 0);
+      if (time >= cs && time < ce) {
         cur = clips[i];
         nxt = clips[i + 1] || null;
-        tIn = time - cum;
+        tIn = Math.max(0, time - cs);
         break;
       }
-      cum += clips[i].duration;
     }
   }
 
+  // If no clip covers `time` (playhead is inside an intentional gap), render black base canvas
+  // so it matches Remotion's <AbsoluteFill style={{ backgroundColor: '#000000' }} />
   if (!cur) {
-    if (time >= totalDuration - 0.1 && clips.length > 0) {
-      cur = clips[clips.length - 1];
-      tIn = Math.max(0.001, (isAbs && isNum(cur.endTime) && isNum(cur.startTime)) ? cur.endTime - cur.startTime : cur.duration);
+    if (targetCanvas) {
+      cvW = canvas.width;
+      cvH = canvas.height;
     } else {
-      ctx.fillStyle = 'black';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      return;
+      const ratio = state.aspectRatio || '16:9';
+      const { width: targetW, height: targetH } = getPreviewDimensions(ratio);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+      cvW = targetW;
+      cvH = targetH;
     }
+    ctx.clearRect(0, 0, cvW, cvH);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, cvW, cvH);
+    return;
   }
-
-  if (!cur) return;
 
   // If cur is a pip_overlay shot, check if there is an overlapping base clip (e.g. multi-track timeline)
   // In single-track sequential workflows, cur remains the active shot at this timestamp and renders full A-roll
@@ -2243,7 +2240,7 @@ function drawVideoFrameImpl(
     // Check for an overlapping non-pip base clip that is genuinely active at the exact current time (multi-track layout)
     const baseClip = timelineState.clips.find(c => c.id !== currentClipId && c.displayMode !== 'pip_overlay' && (c.startTime || 0) <= time && (c.endTime || 0) > time);
     if (baseClip) {
-      cur = baseClip;
+      cur = baseClip as any;
       tIn = Math.max(0, time - (baseClip.startTime || 0));
     }
   }
@@ -2600,22 +2597,26 @@ function drawVideoFrameImpl(
 
   const sMedia = t0();
   const prog = Math.min(1, tIn / curLen);
-  let resolvedTransition = cur.transitionToNext || 'cut';
   const globalStyle = timelineState.videoTransitionStyle || 'narrative_guided';
-  
-  if (globalStyle === 'random_mix') {
-    const candidateTransitions = [
-      'cross_dissolve',
-      'cross_dissolve',
-      'zoom_dissolve',
-      'push',
-      'blur_dissolve',
-      'fade_to_black',
-    ];
-    const hash = (cur.id || '').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-    resolvedTransition = candidateTransitions[hash % candidateTransitions.length];
-  } else if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
-    resolvedTransition = globalStyle;
+  let resolvedTransition = cur.transitionToNext;
+
+  if (!resolvedTransition) {
+    if (globalStyle === 'random_mix') {
+      const candidateTransitions = [
+        'cross_dissolve',
+        'cross_dissolve',
+        'zoom_dissolve',
+        'push',
+        'blur_dissolve',
+        'fade_to_black',
+      ];
+      const hash = (cur.id || '').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+      resolvedTransition = candidateTransitions[hash % candidateTransitions.length];
+    } else if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
+      resolvedTransition = globalStyle;
+    } else {
+      resolvedTransition = 'cut';
+    }
   }
   const tType = resolvedTransition.replace(/_/g, '').toLowerCase();
   const wantsTransition = Boolean(nxt && tType !== 'cut');
@@ -2823,7 +2824,7 @@ function drawVideoFrameImpl(
           activeTransPipClips.push(activePipOverlayClip);
         }
         for (const pipC of activeTransPipClips) {
-          drawPopUpBrollPipOverlay(ctx, pipC, cvW, cvH, time, targetCanvas);
+          drawPopUpBrollPipOverlay(ctx, pipC as any, cvW, cvH, time, targetCanvas);
         }
       }
     } else {
@@ -2897,7 +2898,7 @@ function drawVideoFrameImpl(
         activePipClips.push(activePipOverlayClip);
       }
       for (const pipC of activePipClips) {
-        drawPopUpBrollPipOverlay(ctx, pipC, cvW, cvH, time, targetCanvas);
+        drawPopUpBrollPipOverlay(ctx, pipC as any, cvW, cvH, time, targetCanvas);
       }
       t1('stage.pip', sPip);
     }
@@ -3119,7 +3120,7 @@ export function drawExportOverlayLayer(
     activePipClips.push(activePipOverlayClip);
   }
   for (const pipC of activePipClips) {
-    drawPopUpBrollPipOverlay(ctx, pipC, cvW, cvH, time, targetCanvas);
+    drawPopUpBrollPipOverlay(ctx, pipC as any, cvW, cvH, time, targetCanvas);
   }
 
   // 4. Apply Post Effects (Vignette, Grain, Sparkles, Rain, Dust, Snow)
@@ -3143,7 +3144,7 @@ export function drawExportOverlayLayer(
   }
 
   // 6. Draw Subtitles
-  const isAbs = timelineState.mode === 'audio_locked';
+  const isAbs = true;
   const curStart = isNum(cur.startTime) ? cur.startTime : 0;
   const tIn = isAbs ? (time - curStart) : Math.max(0, prog * (cur.duration || 3));
   const isPlaceholderText = cur.text && /^(?:master\s+a-?roll|a-?roll)$/i.test(cur.text.trim());

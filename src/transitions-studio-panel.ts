@@ -187,7 +187,7 @@ export const TRANSITIONS_LIBRARY: TransitionSpec[] = [
 ];
 
 let panelContainer: HTMLElement | null = null;
-let currentTargetClipId: string | 'all' = 'all';
+let currentTargetClipId: string | 'all' | null = null;
 let currentCategoryFilter = 'all';
 let currentSearchQuery = '';
 
@@ -305,13 +305,14 @@ function setupTargetSelector(panel: HTMLElement) {
     // Option 1: Global All Shots
     const allOpt = document.createElement('option');
     allOpt.value = 'all';
-    allOpt.textContent = `🌐 All Shots (Global Default - ${clips.length} shots)`;
+    allOpt.textContent = `🌐 All Shots (Global Bulk - ${clips.length} shots)`;
     select.appendChild(allOpt);
 
+    const validCuts = clips.slice(0, -1);
+
     // Options for each cut boundary between Shot N and Shot N+1
-    if (clips.length > 1) {
-      clips.forEach((c, idx) => {
-        if (idx === clips.length - 1) return; // Last clip doesn't have transition to next
+    if (validCuts.length > 0) {
+      validCuts.forEach((c, idx) => {
         const opt = document.createElement('option');
         opt.value = c.id;
         const currentTrans = c.transitionToNext || 'cut';
@@ -322,12 +323,19 @@ function setupTargetSelector(panel: HTMLElement) {
       });
     }
 
-    if (prevVal !== 'all' && clips.some(c => c.id === prevVal)) {
-      select.value = prevVal;
+    const selectedIndex = clips.findIndex(c => c.id === timelineState.selectedClipId);
+    const preferredCut =
+      selectedIndex >= 0 && selectedIndex < clips.length - 1
+        ? clips[selectedIndex].id
+        : validCuts[0]?.id;
+
+    if (prevVal === 'all' || (prevVal && validCuts.some(c => c.id === prevVal))) {
+      currentTargetClipId = prevVal;
     } else {
-      select.value = 'all';
-      currentTargetClipId = 'all';
+      currentTargetClipId = preferredCut ?? 'all';
     }
+
+    select.value = currentTargetClipId ?? 'all';
 
     updateTargetHint(panel);
     highlightActiveTransitionCards(panel);
@@ -349,13 +357,19 @@ function updateTargetHint(panel: HTMLElement) {
   const hint = panel.querySelector<HTMLElement>('#vs-trans-target-hint');
   if (!hint) return;
 
+  const clips = timelineState.clips || [];
+  if (!clips.length || clips.length < 2) {
+    hint.textContent = 'Add at least 2 shots to configure cut transitions';
+    hint.style.color = '#9ca3af';
+    return;
+  }
+
   if (currentTargetClipId === 'all') {
     hint.textContent = 'Applying to all cut boundaries across the entire timeline';
     hint.style.color = '#9ca3af';
   } else {
-    const clips = timelineState.clips || [];
     const clipIndex = clips.findIndex(c => c.id === currentTargetClipId);
-    if (clipIndex >= 0) {
+    if (clipIndex >= 0 && clipIndex < clips.length - 1) {
       const clip = clips[clipIndex];
       const curTrans = clip.transitionToNext || 'cut';
       const label = utils.getTransitionLabel(curTrans);
@@ -548,7 +562,7 @@ function handleApplyTransition(transId: string, panel: HTMLElement) {
   } else {
     const clipIndex = clips.findIndex(c => c.id === currentTargetClipId);
     if (clipIndex >= 0) {
-      applyTransitionToClip(currentTargetClipId, transId, false);
+      applyTransitionToClip(clips[clipIndex].id, transId, false);
       ui.showStatus(`Shot ${clipIndex + 1} ➔ Shot ${clipIndex + 2} set to ${utils.getTransitionLabel(transId)}`, false, 2500);
     } else {
       applyTransitionToClip(clips[0].id, transId, false);

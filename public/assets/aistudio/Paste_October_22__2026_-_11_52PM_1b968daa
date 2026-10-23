@@ -1,0 +1,572 @@
+Here is Phase B: upgrading timelineState to normalize and persist sourceIn/sourceOut alongside videoStartOffset, wiring Slip, Lift, Ripple, Insert, and Overwrite operations in src/videoController.ts, and updating the export gatekeeper in src/timing/timeline-timing.ts so intentional timeline gaps do not block exports.   Phase B — Part 1: Additive NLE Clip Schema & Migration in src/state-timeline.tsInstead of replacing timelineState.clips and breaking projectArchive.ts or handlers-project.ts, we add an automatic normalizer inside setClips() in src/state-timeline.ts. It ensures every clip has explicit trackId, startTime, endTime, duration, sourceIn, and sourceOut synchronized with videoStartOffset.   In src/state-timeline.ts, replace type TimelineClip = any; (line 13) with:TypeScriptexport interface EditableTimelineClip {
+    id: string;
+    trackId?: string;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    sourceIn?: number;
+    sourceOut?: number;
+    videoStartOffset?: number;
+    linkedGroupId?: string;
+    muted?: boolean;
+    volume?: number;
+    transitionToNext?: string;
+    displayMode?: 'fullscreen' | 'pip_overlay';
+    [k: string]: any;
+}
+
+type TimelineClip = EditableTimelineClip;
+In src/state-timeline.ts, replace setClips (lines 395–418) with:TypeScript    setClips(clips: TimelineClip[], notify: boolean = true) {
+        this._clipsVersion++;
+        let cursor = 0;
+
+        this._clips = (clips || []).map((c, idx) => {
+            if (!c) return c;
+            const isPip = c.displayMode === 'pip_overlay';
+            const hasStart = typeof c.startTime === 'number' && Number.isFinite(c.startTime) && c.startTime >= 0;
+            const start = hasStart ? c.startTime : cursor;
+            const rawDur = typeof c.duration === 'number' && Number.isFinite(c.duration) && c.duration > 0
+                ? c.duration
+                : (typeof c.endTime === 'number' && c.endTime > start ? c.endTime - start : 3.5);
+            const end = typeof c.endTime === 'number' && Number.isFinite(c.endTime) && c.endTime > start
+                ? c.endTime
+                : start + rawDur;
+            const dur = Math.max(0.05, end - start);
+
+            const sourceIn = typeof c.videoStartOffset === 'number' && Number.isFinite(c.videoStartOffset) && c.videoStartOffset >= 0
+                ? c.videoStartOffset
+                : (typeof c.sourceIn === 'number' && Number.isFinite(c.sourceIn) && c.sourceIn >= 0 ? c.sourceIn : 0);
+            const sourceOut = sourceIn + dur;
+
+            if (!isPip) {
+                cursor = Math.max(cursor, end);
+            }
+
+            c.id = c.id || `clip_${idx}`;
+            c.trackId = c.trackId || (isPip ? 'v2-pip' : 'v1-main');
+            c.startTime = start;
+            c.endTime = end;
+            c.duration = dur;
+            c.videoStartOffset = sourceIn;
+            c.sourceIn = sourceIn;
+            c.sourceOut = sourceOut;
+            return c;
+        });
+        
+        let changed = false;
+        const newGraphics = [...this._graphics];
+        for (let i = 0; i < newGraphics.length; i++) {
+            const g = newGraphics[i];
+            if (g.clipId && g.offsetInClip !== undefined) {
+                const c = this._clips.find(x => x.id === g.clipId);
+                if (c) {
+                    const dur = g.end - g.start;
+                    const newStart = c.startTime + g.offsetInClip;
+                    if (Math.abs(g.start - newStart) > 0.001) {
+                        newGraphics[i] = { ...g, start: newStart, end: newStart + dur };
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (changed) this._graphics = newGraphics;
+        
+        if (notify) this.emitClipChange();
+    }
+Phase B — Part 2: Connect Edit Modes (Ripple, Lift, Slip) & NLE Operations in src/videoController.ts1. Fix Undo / Redo from Destroying Gaps (src/videoController.ts, lines 2130–2186)Currently, handleUndoTimeline() and handleRedoTimeline() call resyncTimeline(), which immediately wipes out any gap or unlinked edit you just undid/redid. We also update handleSetEditMode to accept 'ripple' | 'lift' | 'slip'.   Replace lines 2130–2186 in src/videoController.ts with:TypeScriptexport function handleUndoTimeline() {
+    forcePausePlayback();
+    if (!timelineState.canUndo()) {
+        ui.showStatus('ℹ️ Nothing to undo on timeline.', false, 1500);
+        timelineState.updateUndoRedoUI();
+        return;
+    }
+    if (timelineState.undo()) {
+        try { SubtitleEngine.clearBitmapCache(); } catch {}
+        try { invalidateSpectrumCache(); } catch {}
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'undo' });
+        } else {
+            refreshPerClipWordTimestamps();
+        }
+        updateVideoContext();
+        ui.renderTimelineEditor();
+        if (videoRenderContext) {
+            drawVideoFrame(state.videoPauseTime);
+            ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
+        }
+        ui.showStatus('↩️ Undid last timeline edit', false, 1500);
+    }
+}
+
+export function handleRedoTimeline() {
+    forcePausePlayback();
+    if (!timelineState.canRedo()) {
+        ui.showStatus('ℹ️ Nothing to redo on timeline.', false, 1500);
+        timelineState.updateUndoRedoUI();
+        return;
+    }
+    if (timelineState.redo()) {
+        try { SubtitleEngine.clearBitmapCache(); } catch {}
+        try { invalidateSpectrumCache(); } catch {}
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'redo' });
+        } else {
+            refreshPerClipWordTimestamps();
+        }
+        updateVideoContext();
+        ui.renderTimelineEditor();
+        if (videoRenderContext) {
+            drawVideoFrame(state.videoPauseTime);
+            ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
+        }
+        ui.showStatus('↪️ Redid timeline edit', false, 1500);
+    }
+}
+
+export function handleSetEditMode(mode: 'ripple' | 'lift' | 'slip') {
+    timelineState.setEditMode(mode);
+    ui.showStatus(`Timeline mode: ${mode.toUpperCase()}`, false, 1500);
+    if (dom.timelineModeRippleBtn && dom.timelineModeSlipBtn) {
+      dom.timelineModeRippleBtn.classList.toggle('bg-indigo-600', mode === 'ripple');
+      dom.timelineModeRippleBtn.classList.toggle('text-white', mode === 'ripple');
+      dom.timelineModeRippleBtn.classList.toggle('bg-zinc-800', mode !== 'ripple');
+      dom.timelineModeRippleBtn.classList.toggle('text-gray-400', mode !== 'ripple');
+
+      dom.timelineModeSlipBtn.classList.toggle('bg-indigo-600', mode === 'slip');
+      dom.timelineModeSlipBtn.classList.toggle('text-white', mode === 'slip');
+      dom.timelineModeSlipBtn.classList.toggle('bg-zinc-800', mode !== 'slip');
+      dom.timelineModeSlipBtn.classList.toggle('text-gray-400', mode !== 'slip');
+    }
+}
+2. Wire Up Handle Resize to Respect Ripple, Lift, and Slip (src/videoController.ts, lines 679–832)When dragging a clip's left or right handle on the timeline in free mode:Slip mode (timelineState.editMode === 'slip'): Changes videoStartOffset (sourceIn/sourceOut) inside the clip while keeping startTime, endTime, and duration fixed.   Lift mode (timelineState.editMode === 'lift'): Changes the clip's startTime or endTime without pushing or pulling downstream clips (clamping only so it doesn't invert).   Ripple mode (timelineState.editMode === 'ripple'): Changes the clip's duration and shifts downstream clips on the V1 track by the exact delta (preserving any existing downstream gaps relative to each other).   And in handleTimelineMouseUp(), stop calling resyncTimeline() in free mode so handle edits and gaps are not overwritten on mouse release!   Replace lines 679–832 in src/videoController.ts with:TypeScript  const editMode = timelineState.editMode;
+
+  if (resizeEdge === 'right') {
+    const cur = findClipById(sorted[idx].id);
+    if (!cur) return;
+
+    if (isLocked) {
+      const next = sorted[idx + 1] ? findClipById(sorted[idx + 1].id) : null;
+      if (!next) return;
+
+      const maxNewEndTime = originalEndTimes[idx + 1] - minDuration;
+      const minNewEndTime = originalStartTimes[idx] + minDuration;
+      let rawNewEndTime = originalEndTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        rawNewEndTime = getSnappedTime(rawNewEndTime, cachedDragSnapPoints);
+      }
+      const newEndTime = Math.max(minNewEndTime, Math.min(rawNewEndTime, maxNewEndTime));
+      const shift = newEndTime - originalEndTimes[idx];
+
+      cur.startTime = originalStartTimes[idx];
+      cur.endTime = newEndTime;
+      cur.duration = cur.endTime - cur.startTime;
+      next.startTime = newEndTime;
+      next.endTime = originalEndTimes[idx + 1];
+      next.duration = next.endTime - next.startTime;
+      next.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx + 1] + shift);
+      timelineState.bumpClipsVersion();
+
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+      updateClipDOM(next.id, next.startTime, next.endTime);
+    } else if (editMode === 'slip') {
+      // Slip mode: keep timeline position and duration fixed, shift sourceIn (videoStartOffset)
+      const maxMediaDur = cur.videoElement?.duration;
+      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
+      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
+        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
+      }
+      cur.videoStartOffset = newOffset;
+      cur.sourceIn = newOffset;
+      cur.sourceOut = newOffset + cur.duration;
+    } else if (editMode === 'lift') {
+      // Lift trim right: change endTime without shifting downstream clips
+      let targetEndTime = originalEndTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
+      }
+      const nextStart = sorted[idx + 1] ? originalStartTimes[idx + 1] : Infinity;
+      const clampedEnd = Math.max(originalStartTimes[idx] + minDuration, Math.min(targetEndTime, nextStart));
+      cur.endTime = clampedEnd;
+      cur.duration = cur.endTime - cur.startTime;
+      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else {
+      // Ripple trim right: shift downstream clips by exact delta (preserving relative gaps)
+      let targetEndTime = originalEndTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
+      }
+      cur.duration = Math.max(minDuration, targetEndTime - originalStartTimes[idx]);
+      cur.endTime = cur.startTime + cur.duration;
+      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+
+      const deltaEnd = cur.endTime - originalEndTimes[idx];
+      for (let i = idx + 1; i < sorted.length; i++) {
+        const c = findClipById(sorted[i].id);
+        if (!c || c.displayMode === 'pip_overlay') continue;
+        c.startTime = Math.max(0, originalStartTimes[i] + deltaEnd);
+        c.endTime = Math.max(c.startTime + minDuration, originalEndTimes[i] + deltaEnd);
+        c.duration = c.endTime - c.startTime;
+        updateClipDOM(c.id, c.startTime, c.endTime);
+      }
+    }
+  } else if (resizeEdge === 'left') {
+    const cur = findClipById(sorted[idx].id);
+    if (!cur) return;
+
+    if (isLocked) {
+      const prev = sorted[idx - 1] ? findClipById(sorted[idx - 1].id) : null;
+      if (!prev) return;
+
+      const minNewStartTime = originalStartTimes[idx - 1] + minDuration;
+      const maxNewStartTime = originalEndTimes[idx] - minDuration;
+      let rawNewStartTime = originalStartTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        rawNewStartTime = getSnappedTime(rawNewStartTime, cachedDragSnapPoints);
+      }
+      const newStartTime = Math.max(minNewStartTime, Math.min(rawNewStartTime, maxNewStartTime));
+      const shift = newStartTime - originalStartTimes[idx];
+
+      prev.startTime = originalStartTimes[idx - 1];
+      prev.endTime = newStartTime;
+      prev.duration = prev.endTime - prev.startTime;
+      cur.startTime = newStartTime;
+      cur.endTime = originalEndTimes[idx];
+      cur.duration = cur.endTime - cur.startTime;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+
+      updateClipDOM(prev.id, prev.startTime, prev.endTime);
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else if (editMode === 'slip') {
+      // Slip mode: shift sourceIn (videoStartOffset) without moving clip boundaries
+      const maxMediaDur = cur.videoElement?.duration;
+      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
+      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
+        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
+      }
+      cur.videoStartOffset = newOffset;
+      cur.sourceIn = newOffset;
+      cur.sourceOut = newOffset + cur.duration;
+    } else if (editMode === 'lift') {
+      // Lift trim left: move startTime and advance sourceIn without shifting downstream clips
+      let targetStartTime = originalStartTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetStartTime = getSnappedTime(targetStartTime, cachedDragSnapPoints);
+      }
+      const prevEnd = idx > 0 ? originalEndTimes[idx - 1] : 0;
+      const clampedStart = Math.max(prevEnd, Math.min(targetStartTime, originalEndTimes[idx] - minDuration));
+      const shift = clampedStart - originalStartTimes[idx];
+
+      cur.startTime = clampedStart;
+      cur.endTime = originalEndTimes[idx];
+      cur.duration = cur.endTime - cur.startTime;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+      cur.sourceIn = cur.videoStartOffset;
+      cur.sourceOut = cur.videoStartOffset + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else {
+      // Ripple trim left: keep startTime anchored, trim sourceIn, and ripple downstream clips
+      const originalDur = originalEndTimes[idx] - originalStartTimes[idx];
+      let targetStartTime = originalStartTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetStartTime = getSnappedTime(targetStartTime, cachedDragSnapPoints);
+      }
+      const newDur = Math.max(minDuration, originalEndTimes[idx] - targetStartTime);
+      const shift = originalDur - newDur;
+
+      cur.startTime = originalStartTimes[idx];
+      cur.duration = newDur;
+      cur.endTime = cur.startTime + cur.duration;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+      cur.sourceIn = cur.videoStartOffset;
+      cur.sourceOut = cur.videoStartOffset + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+
+      const deltaEnd = cur.endTime - originalEndTimes[idx];
+      for (let i = idx + 1; i < sorted.length; i++) {
+        const c = findClipById(sorted[i].id);
+        if (!c || c.displayMode === 'pip_overlay') continue;
+        c.startTime = Math.max(0, originalStartTimes[i] + deltaEnd);
+        c.endTime = Math.max(c.startTime + minDuration, originalEndTimes[i] + deltaEnd);
+        c.duration = c.endTime - c.startTime;
+        updateClipDOM(c.id, c.startTime, c.endTime);
+      }
+    }
+  }
+
+  // ✅ Optimized: Throttled render context update
+  const now = performance.now();
+  if (now - lastDrawTime >= DRAW_THROTTLE) {
+    setVideoRenderContext({ 
+      totalDuration: videoRenderContext!.totalDuration,
+      clips: timelineState.clips as any[] 
+    });
+    drawVideoFrame(state.videoPauseTime);
+    lastDrawTime = now;
+  }
+}
+
+function handleTimelineMouseUp() {
+  flushTimelineMove();
+  dragOverlayEl = null;
+  cachedDragSnapPoints = null;
+  if (isDraggingOverlay || isResizingOverlay) {
+    isDraggingOverlay = false;
+    isResizingOverlay = false;
+    activeOverlayId = null;
+    overlayResizeEdge = null;
+    document.body.style.cursor = 'default';
+    timelineState.setGraphics([...timelineState.graphics]);
+    ui.renderTimelineEditor();
+    if (videoRenderContext) drawVideoFrame(state.videoPauseTime);
+  }
+
+  if (isDraggingClip) dom.timelineClipsContainer.querySelector('.dragging')?.classList.remove('dragging');
+
+  isDraggingClip = false;
+  draggedClipId = null;
+  isResizingClip = false;
+  resizedClipId = null;
+  resizeEdge = null;
+  cachedClipElements.clear();
+
+  document.body.style.cursor = 'default';
+  document.removeEventListener('mousemove', onTimelineMouseMove);
+  document.removeEventListener('mouseup', handleTimelineMouseUp);
+  scheduleFullQualityRedraw();
+
+  if (originalStartTimes.length > 0) {
+    if (timelineState.mode === 'audio_locked') {
+      resyncTimeline({ notify: false, reason: 'mouse-up' });
+    } else {
+      refreshPerClipWordTimestamps();
+    }
+    updateVideoContext();
+    ui.renderTimelineEditor();
+    originalStartTimes = [];
+    originalEndTimes = [];
+    originalVideoStartOffsets = [];
+    if (videoRenderContext) drawVideoFrame(state.videoPauseTime);
+  }
+}
+3. Add Shared NLE Operations (slipClip, moveClipToTime, insertOrOverwriteClipAtTime) in src/videoController.tsAdd these reusable functions right after handleTrimClip (around line 2810 of src/videoController.ts) so both keyboard shortcuts, inspector controls, and Phase C's drag-and-drop use the exact same deterministic NLE rules:   TypeScript/**
+ * Slip a clip's media source range without altering its timeline position or duration.
+ */
+export function handleSlipClip(clipId: string, deltaOffsetSeconds: number) {
+  const clip = findClipById(clipId);
+  if (!clip) return;
+
+  timelineState.saveSnapshot();
+  const maxDur = clip.videoElement?.duration;
+  let nextOffset = Math.max(0, (clip.videoStartOffset || 0) + deltaOffsetSeconds);
+  if (isNum(maxDur) && maxDur > clip.duration) {
+    nextOffset = Math.min(nextOffset, maxDur - clip.duration);
+  }
+  clip.videoStartOffset = nextOffset;
+  clip.sourceIn = nextOffset;
+  clip.sourceOut = nextOffset + clip.duration;
+
+  timelineState.setClips([...timelineState.clips], false);
+  updateVideoContext();
+  if (!state.isVideoPlaying && videoRenderContext) {
+    drawVideoFrame(state.videoPauseTime);
+  }
+}
+
+/**
+ * Insert or Overwrite a clip at a specific project timestamp on the main video track.
+ * - 'insert' (Ripple): splits any clip straddling insertTime and shifts downstream clips right by newClip.duration.
+ * - 'overwrite': trims/splits/removes any existing clip segments covered by [insertTime, insertTime + newClip.duration].
+ */
+export function placeClipOnTimeline(
+  incomingClip: Partial<TimelineClip>,
+  targetTime: number,
+  policy: 'insert' | 'overwrite' = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite'
+) {
+  timelineState.saveSnapshot();
+  const clipDur = Math.max(0.1, Number(incomingClip.duration) || 3.5);
+  const start = Math.max(0, targetTime);
+  const end = start + clipDur;
+  const sourceIn = Number(incomingClip.videoStartOffset ?? incomingClip.sourceIn ?? 0);
+
+  const placedClip: TimelineClip = {
+    ...incomingClip,
+    id: incomingClip.id || `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    trackId: 'v1-main',
+    startTime: start,
+    endTime: end,
+    duration: clipDur,
+    videoStartOffset: sourceIn,
+    sourceIn,
+    sourceOut: sourceIn + clipDur,
+    transitionToNext: incomingClip.transitionToNext || 'cut',
+  };
+
+  const pipClips = timelineState.clips.filter(c => c.displayMode === 'pip_overlay' && c.id !== placedClip.id);
+  const mainClips = getSortedTimeline().filter(c => c.displayMode !== 'pip_overlay' && c.id !== placedClip.id);
+  const nextMain: TimelineClip[] = [];
+
+  if (policy === 'insert') {
+    for (const c of mainClips) {
+      const cs = c.startTime ?? 0;
+      const ce = c.endTime ?? (cs + c.duration);
+
+      if (ce <= start + 0.001) {
+        nextMain.push(c);
+      } else if (cs >= start - 0.001) {
+        c.startTime = cs + clipDur;
+        c.endTime = ce + clipDur;
+        nextMain.push(c);
+      } else {
+        // Clip straddles insert point -> split into left and right around inserted clip
+        const leftDur = start - cs;
+        const rightDur = ce - start;
+        if (leftDur >= 0.05) {
+          nextMain.push({
+            ...c,
+            id: `${c.id}_a`,
+            startTime: cs,
+            endTime: start,
+            duration: leftDur,
+            sourceOut: (c.videoStartOffset || 0) + leftDur,
+          });
+        }
+        if (rightDur >= 0.05) {
+          const rightOffset = (c.videoStartOffset || 0) + leftDur;
+          nextMain.push({
+            ...c,
+            id: `${c.id}_b`,
+            startTime: end,
+            endTime: end + rightDur,
+            duration: rightDur,
+            videoStartOffset: rightOffset,
+            sourceIn: rightOffset,
+            sourceOut: rightOffset + rightDur,
+          });
+        }
+      }
+    }
+    nextMain.push(placedClip);
+  } else {
+    // Overwrite policy: replace overlapping range without shifting downstream clips
+    for (const c of mainClips) {
+      const cs = c.startTime ?? 0;
+      const ce = c.endTime ?? (cs + c.duration);
+
+      if (ce <= start + 0.001 || cs >= end - 0.001) {
+        // No overlap
+        nextMain.push(c);
+      } else if (cs >= start - 0.001 && ce <= end + 0.001) {
+        // Completely covered -> dropped
+        continue;
+      } else if (cs < start && ce > end) {
+        // Existing clip completely encloses the new clip -> split into before and after
+        const leftDur = start - cs;
+        const rightDur = ce - end;
+        if (leftDur >= 0.05) {
+          nextMain.push({
+            ...c,
+            id: `${c.id}_a`,
+            startTime: cs,
+            endTime: start,
+            duration: leftDur,
+            sourceOut: (c.videoStartOffset || 0) + leftDur,
+          });
+        }
+        if (rightDur >= 0.05) {
+          const rightOffset = (c.videoStartOffset || 0) + (end - cs);
+          nextMain.push({
+            ...c,
+            id: `${c.id}_b`,
+            startTime: end,
+            endTime: ce,
+            duration: rightDur,
+            videoStartOffset: rightOffset,
+            sourceIn: rightOffset,
+            sourceOut: rightOffset + rightDur,
+          });
+        }
+      } else if (cs < start && ce > start) {
+        // Overlaps right tail of existing clip -> trim its end
+        const newDur = start - cs;
+        if (newDur >= 0.05) {
+          c.endTime = start;
+          c.duration = newDur;
+          c.sourceOut = (c.videoStartOffset || 0) + newDur;
+          nextMain.push(c);
+        }
+      } else if (cs < end && ce > end) {
+        // Overlaps left head of existing clip -> trim its start
+        const trimHead = end - cs;
+        const newDur = ce - end;
+        if (newDur >= 0.05) {
+          c.startTime = end;
+          c.duration = newDur;
+          c.videoStartOffset = (c.videoStartOffset || 0) + trimHead;
+          c.sourceIn = c.videoStartOffset;
+          c.sourceOut = c.videoStartOffset + newDur;
+          nextMain.push(c);
+        }
+      }
+    }
+    nextMain.push(placedClip);
+  }
+
+  nextMain.sort((a, b) => a.startTime - b.startTime);
+  timelineState.setClips([...nextMain, ...pipClips], false);
+  timelineState.setSelectedClipId(placedClip.id);
+  refreshPerClipWordTimestamps();
+  updateVideoContext();
+  if (!state.isVideoPlaying && videoRenderContext) {
+    drawVideoFrame(state.videoPauseTime);
+  }
+}
+Phase B — Part 3: Allow Intentional Gaps in src/timing/timeline-timing.tsIn src/timing/timeline-timing.ts, auditTimelineTiming() pushes a critical error whenever gap > 0.05 (line 342), and resolveClipAtTimelineTime() clamps gaps to the first or last clip instead of returning null.   1. Update resolveClipAtTimelineTime() (src/timing/timeline-timing.ts, lines 181–221)Return clip: null when time is inside an open timeline gap so preview and export renderers know no clip is active at that frame:   Replace lines 181–221 in src/timing/timeline-timing.ts with:TypeScriptexport function resolveClipAtTimelineTime(
+  clips: any[],
+  time: number
+): {
+  clip: any | null;
+  index: number;
+  localTime: number;
+  inGap?: boolean;
+} {
+  if (!clips || clips.length === 0 || !Number.isFinite(time)) {
+    return { clip: null, index: -1, localTime: 0, inGap: true };
+  }
+
+  const totalClips = clips.length;
+  for (let i = 0; i < totalClips; i++) {
+    const clip = clips[i];
+    const start = getClipStart(clip);
+    const end = getClipEnd(clip);
+
+    const isLast = (i === totalClips - 1);
+    if ((time >= start && time < end) || (isLast && time >= start && time <= end + 0.0001)) {
+      return {
+        clip,
+        index: i,
+        localTime: Math.max(0, time - start),
+        inGap: false,
+      };
+    }
+  }
+
+  // Time falls in a gap before the first clip, between clips, or after the last clip
+  return { clip: null, index: -1, localTime: 0, inGap: true };
+}
+2. Update auditTimelineTiming() (src/timing/timeline-timing.ts, lines 336–356)Only treat gaps > 50ms as blocking errors when isAudioLocked is true; in free mode, report them as informational warnings so Lift Deletes and intentional gaps never trigger EXPORT BLOCKED:   Replace lines 336–346 in src/timing/timeline-timing.ts with:TypeScript    if (i > 0) {
+      const gap = start - previousEnd;
+      if (gap > 0.001) {
+        gapCount++;
+        maxGap = Math.max(maxGap, gap);
+        if (gap > 0.05) {
+          if (isAudioLocked) {
+            errors.push(`Gap of ${(gap * 1000).toFixed(1)}ms detected before clip #${i + 1} (${c.id ?? i}).`);
+          } else {
+            warnings.push(`Intentional timeline gap of ${gap.toFixed(2)}s before clip #${i + 1} (${c.id ?? i}).`);
+          }
+        } else {
+          warnings.push(`Micro-gap of ${(gap * 1000).toFixed(1)}ms before clip #${i + 1}.`);
+        }
+      } else if (gap < -0.001) {

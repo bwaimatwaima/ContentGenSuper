@@ -138,7 +138,9 @@ export async function handleExportVideo() {
     try {
         const { forcePausePlayback, resyncTimeline } = await import('../videoController');
         forcePausePlayback(undefined, true);
-        resyncTimeline({ notify: false, reason: 'pre-export' });
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'pre-export' });
+        }
     } catch (e) {}
 
     // ── Canonical Pre-Export Timing Validation & User Sync Choice ──
@@ -401,7 +403,9 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
 
     try {
         const { updateVideoContext, resyncTimeline } = await import('../videoController');
-        resyncTimeline({ notify: false, reason: 'runExport' });
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'runExport' });
+        }
         updateVideoContext(true);
     } catch (e) {}
 

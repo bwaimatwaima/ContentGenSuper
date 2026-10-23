@@ -97,7 +97,7 @@ export async function syncShotMediaToTimeline(shot: any) {
             }
         }
 
-        const updatedClip = {
+        const updatedClip: any = {
             ...oldClip,
             image_id: shot.image_id,
             video_id: shot.video_id,

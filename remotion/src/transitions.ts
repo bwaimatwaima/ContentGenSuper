@@ -43,15 +43,19 @@ export function resolveClipTransition(
   style: string | undefined,
   clipId?: string
 ): string {
-  let t = clipTransition || 'cut';
+  // Always honor an explicit per-clip transition first
+  if (clipTransition && clipTransition.trim() !== '') {
+    return clipTransition;
+  }
   const s = style || 'narrative_guided';
   if (s === 'random_mix') {
     const hash = (clipId || '').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-    t = RANDOM_MIX[hash % RANDOM_MIX.length];
-  } else if (s !== 'narrative_guided' && s !== 'ai_directed') {
-    t = s;
+    return RANDOM_MIX[hash % RANDOM_MIX.length];
   }
-  return t;
+  if (s !== 'narrative_guided' && s !== 'ai_directed') {
+    return s;
+  }
+  return 'cut';
 }
 
 export interface TransitionFrame {

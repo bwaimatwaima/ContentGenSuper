@@ -43,19 +43,10 @@ function redrawPreview(time?: number) {
 function clipAtTime(time: number): { clip: any; index: number; tIn: number } | null {
     if (!timelineState.clips || timelineState.clips.length === 0) return null;
     const clips = timelineState.clips;
-    const isAbs = timelineState.mode === 'audio_locked';
-    if (isAbs) {
-        for (let i = 0; i < clips.length; i++) {
-            const start = clips[i].startTime ?? 0;
-            const end = clips[i].endTime ?? (start + clips[i].duration);
-            if (time >= start && time < end) return { clip: clips[i], index: i, tIn: time - start };
-        }
-        return null;
-    }
-    let cum = 0;
     for (let i = 0; i < clips.length; i++) {
-        if (time >= cum && time < cum + clips[i].duration) return { clip: clips[i], index: i, tIn: time - cum };
-        cum += clips[i].duration;
+        const start = clips[i].startTime ?? 0;
+        const end = clips[i].endTime ?? (start + clips[i].duration);
+        if (time >= start && time < end) return { clip: clips[i], index: i, tIn: time - start };
     }
     return null;
 }
@@ -135,55 +126,7 @@ export function rippleDeleteClipUnderPlayhead() {
 }
 
 function trimClipUnderPlayhead(side: 'in' | 'out') {
-    const idx = clipAtTime(state.videoPauseTime);
-    if (!idx || timelineState.mode === 'audio_locked') {
-        ui.showStatus(side === 'in' ? 'Trim in-point requires free mode.' : 'Trim out-point requires free mode.', true, 2500);
-        return;
-    }
-    const { clip, tIn } = idx;
-    const MIN_DUR = 0.3;
-    timelineState.saveSnapshot();
-    let audioRemoveStart = 0;
-    let audioRemoveEnd = 0;
-    if (side === 'in') {
-        const shift = tIn;
-        if (clip.duration - shift < MIN_DUR) { ui.showStatus('Trim too small.', true, 2000); return; }
-        const oldStart = clip.startTime ?? 0;
-        clip.videoStartOffset = (clip.videoStartOffset || 0) + shift;  // in-point into source media
-        clip.startTime = oldStart + shift;
-        clip.duration = clip.duration - shift;
-        clip.endTime = clip.startTime + clip.duration;
-        audioRemoveStart = oldStart;                              // [FIX aroll-trim] removed span from master audio
-        audioRemoveEnd = oldStart + shift;
-    } else {
-        const trimTo = tIn + (1 / 30);
-        if (trimTo < MIN_DUR) { ui.showStatus('Trim too small.', true, 2000); return; }
-        const clipStart = clip.startTime ?? 0;
-        const oldEnd = clip.endTime ?? clipStart + clip.duration;
-        clip.duration = trimTo;
-        clip.endTime = clipStart + trimTo;
-        audioRemoveStart = clipStart + trimTo;                    // [FIX aroll-trim] removed span from master audio
-        audioRemoveEnd = oldEnd;
-    }
-    // [FIX aroll-trim] Cut the same span out of the master (A-roll) audio and
-    // ripple the clips after the cut left, matching handleTrimClip.
-    const removedAudio = rippleCutMasterAudio(audioRemoveStart, audioRemoveEnd);
-    if (removedAudio) {
-        const nextClips = [...timelineState.clips];
-        for (const c of nextClips) {
-            if (c === clip) continue;                            // the trimmed clip keeps its own (new) start
-            if ((c.startTime ?? 0) >= audioRemoveStart) {
-                c.startTime = Math.max(0, (c.startTime ?? 0) - removedAudio);
-                c.endTime = Math.max((c.startTime ?? 0) + 0.05, (c.endTime ?? (c.startTime ?? 0)) - removedAudio);
-            }
-        }
-        timelineState.setClips(nextClips);
-    } else {
-        timelineState.setClips([...timelineState.clips]);
-    }
-    normalizeTimeline();
-    redrawPreview();
-    ui.showStatus('Clip trimmed.', false, 1500);
+    handleTrimClip(side === 'in' ? 'start' : 'end');
 }
 
 export function initKeyboardShortcuts() {
@@ -251,30 +194,9 @@ export function initKeyboardShortcuts() {
         if (mod && key === 'v') { e.preventDefault(); pasteClip(); return; }
         if (mod && key === 'd') { e.preventDefault(); duplicateClipUnderPlayheadOrSelected(); return; }
 
-        // Split Clip (Ctrl+B)
         if (mod && key === 'b') {
             e.preventDefault();
-            const hit = clipAtTime(state.videoPauseTime);
-            if (!hit) return;
-            const { clip, index, tIn } = hit;
-            if (tIn < 0.15 || clip.duration - tIn < 0.15) {
-                ui.showStatus('Too close to a clip edge to split.', true, 1800);
-                return;
-            }
-            timelineState.saveSnapshot();
-            const clips = [...timelineState.clips];
-            const lead = { ...clip, id: `${clip.id}__a`, duration: tIn, endTime: clip.startTime + tIn };
-            const tail = { ...clip, id: `${clip.id}__b`, videoStartOffset: (clip.videoStartOffset || 0) + tIn, startTime: clip.startTime + tIn, duration: clip.duration - tIn };
-            clips.splice(index, 1, lead); // replace original with lead
-            clips.splice(index + 1, 0, tail); // insert tail after
-            if (clip.wordTimestamps?.length) {
-                lead.wordTimestamps = clip.wordTimestamps.filter((w: any) => w.start < clip.startTime + tIn);
-                tail.wordTimestamps = clip.wordTimestamps.filter((w: any) => w.start >= clip.startTime + tIn);
-            }
-            timelineState.setClips(clips);
-            normalizeTimeline();
-            redrawPreview();
-            ui.showStatus('Clip split.', false, 1200);
+            handleSplitClip();
             return;
         }
 

@@ -2402,7 +2402,7 @@ Return JSON strictly conforming to this structure:
 
     let pipCount = 0;
     const positions = ['top_right', 'top_left', 'bottom_right', 'bottom_left'];
-    const newClips = timelineState.clips.map((c, idx) => {
+    const newClips: any[] = timelineState.clips.map((c, idx) => {
       const cue = cues.find((item: any) => item.id === c.id || item.index === idx);
       if (cue && cue.displayMode === 'pip_overlay') {
         pipCount++;

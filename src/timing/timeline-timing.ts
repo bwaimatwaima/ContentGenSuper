@@ -185,39 +185,31 @@ export function resolveClipAtTimelineTime(
   clip: any | null;
   index: number;
   localTime: number;
+  inGap?: boolean;
 } {
   if (!clips || clips.length === 0 || !Number.isFinite(time)) {
-    return { clip: null, index: -1, localTime: 0 };
+    return { clip: null, index: -1, localTime: 0, inGap: true };
   }
 
-  // Exact clamp at boundaries
   const totalClips = clips.length;
   for (let i = 0; i < totalClips; i++) {
     const clip = clips[i];
     const start = getClipStart(clip);
     const end = getClipEnd(clip);
 
-    // Last clip is closed at both ends [start, end] so end of video can paint last frame
     const isLast = (i === totalClips - 1);
     if ((time >= start && time < end) || (isLast && time >= start && time <= end + 0.0001)) {
       return {
         clip,
         index: i,
         localTime: Math.max(0, time - start),
+        inGap: false,
       };
     }
   }
 
-  // Fallback clamping: if beyond end, return last clip; if before start, return first clip
-  if (time < getClipStart(clips[0])) {
-    return { clip: clips[0], index: 0, localTime: 0 };
-  }
-  const lastClip = clips[totalClips - 1];
-  return {
-    clip: lastClip,
-    index: totalClips - 1,
-    localTime: Math.max(0, getClipDuration(lastClip)),
-  };
+  // Time falls in a gap before the first clip, between clips, or after the last clip
+  return { clip: null, index: -1, localTime: 0, inGap: true };
 }
 
 /**
@@ -339,7 +331,11 @@ export function auditTimelineTiming(
         gapCount++;
         maxGap = Math.max(maxGap, gap);
         if (gap > 0.05) {
-          errors.push(`Gap of ${(gap * 1000).toFixed(1)}ms detected before clip #${i + 1} (${c.id ?? i}).`);
+          if (isAudioLocked) {
+            errors.push(`Gap of ${(gap * 1000).toFixed(1)}ms detected before clip #${i + 1} (${c.id ?? i}).`);
+          } else {
+            warnings.push(`Intentional timeline gap of ${gap.toFixed(2)}s before clip #${i + 1} (${c.id ?? i}).`);
+          }
         } else {
           warnings.push(`Micro-gap of ${(gap * 1000).toFixed(1)}ms before clip #${i + 1}.`);
         }

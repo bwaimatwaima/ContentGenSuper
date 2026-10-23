@@ -43,6 +43,9 @@ type TimelineClip = {
 
 let isDraggingClip = false;
 let draggedClipId: string | null = null;
+let clipDragStartX = 0;
+let draggedClipOriginalStart = 0;
+let draggedClipDuration = 0;
 
 const narrationIndex = new ActiveClipIndex();
 let lastLoopTimestamp = 0;
@@ -575,8 +578,22 @@ export function handleTimelineMouseDown(e: MouseEvent) {
 
   const clipId = getClipIdFromEventTarget(target);
   if (clipId && videoRenderContext && !isLocked) {
+    const clip = findClipById(clipId);
+    if (!clip) return;
+
     draggedClipId = clipId;
     isDraggingClip = true;
+    clipDragStartX = e.clientX;
+    draggedClipOriginalStart = clip.startTime ?? 0;
+    draggedClipDuration = clip.duration || ((clip.endTime ?? 0) - draggedClipOriginalStart);
+    timelineState.setSelectedClipId(clipId);
+
+    cachedClipElements.clear();
+    timelineState.clips.forEach(c => {
+      const el = dom.timelineClipsContainer.querySelector(`[data-clip-id="${c.id}"]`) as HTMLElement;
+      if (el) cachedClipElements.set(c.id, el);
+    });
+
     (target.closest('.timeline-clip') as HTMLElement)?.classList.add('dragging');
     document.body.style.cursor = 'grabbing';
     document.addEventListener('mousemove', onTimelineMouseMove);
@@ -662,6 +679,41 @@ function handleTimelineMouseMove(e: MouseEvent) {
     return;
   }
 
+  if (isDraggingClip && draggedClipId) {
+    const clip = findClipById(draggedClipId);
+    if (clip) {
+      const deltaX = e.clientX - clipDragStartX;
+      const pps = getPixelsPerSecond();
+      const deltaSec = deltaX / pps;
+
+      let newStart = Math.max(0, draggedClipOriginalStart + deltaSec);
+      if (timelineState.snappingEnabled) {
+        const snapPoints = (cachedDragSnapPoints || []).filter(
+          p => Math.abs(p - clip.startTime) > 0.001 && Math.abs(p - clip.endTime) > 0.001
+        );
+        const snappedStart = getSnappedTime(newStart, snapPoints);
+        const snappedEnd = getSnappedTime(newStart + draggedClipDuration, snapPoints);
+        if (Math.abs(snappedStart - newStart) <= Math.abs(snappedEnd - (newStart + draggedClipDuration))) {
+          newStart = snappedStart;
+        } else {
+          newStart = Math.max(0, snappedEnd - draggedClipDuration);
+        }
+      }
+
+      clip.startTime = newStart;
+      clip.endTime = newStart + draggedClipDuration;
+      timelineState.bumpClipsVersion();
+      updateClipDOM(clip.id, clip.startTime, clip.endTime);
+
+      const now = performance.now();
+      if (now - lastDrawTime >= DRAW_THROTTLE && videoRenderContext) {
+        drawVideoFrame(state.videoPauseTime);
+        lastDrawTime = now;
+      }
+    }
+    return;
+  }
+
   if (!isResizingClip || !resizedClipId || !timelineContainerRect) return;
   timelineState.bumpClipsVersion();
 
@@ -675,6 +727,8 @@ function handleTimelineMouseMove(e: MouseEvent) {
   if (idx === -1) return;
 
   const minDuration = 0.05;
+
+  const editMode = timelineState.editMode;
 
   if (resizeEdge === 'right') {
     const cur = findClipById(sorted[idx].id);
@@ -690,7 +744,7 @@ function handleTimelineMouseMove(e: MouseEvent) {
       if (timelineState.snappingEnabled) {
         rawNewEndTime = getSnappedTime(rawNewEndTime, cachedDragSnapPoints);
       }
-      let newEndTime = Math.max(minNewEndTime, Math.min(rawNewEndTime, maxNewEndTime));
+      const newEndTime = Math.max(minNewEndTime, Math.min(rawNewEndTime, maxNewEndTime));
       const shift = newEndTime - originalEndTimes[idx];
 
       cur.startTime = originalStartTimes[idx];
@@ -699,28 +753,51 @@ function handleTimelineMouseMove(e: MouseEvent) {
       next.startTime = newEndTime;
       next.endTime = originalEndTimes[idx + 1];
       next.duration = next.endTime - next.startTime;
-      next.videoStartOffset = originalVideoStartOffsets[idx + 1] + shift;
+      next.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx + 1] + shift);
       timelineState.bumpClipsVersion();
 
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
       updateClipDOM(next.id, next.startTime, next.endTime);
+    } else if (editMode === 'slip') {
+      // Slip mode: keep timeline position and duration fixed, shift sourceIn (videoStartOffset)
+      const maxMediaDur = cur.videoElement?.duration;
+      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
+      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
+        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
+      }
+      cur.videoStartOffset = newOffset;
+      cur.sourceIn = newOffset;
+      cur.sourceOut = newOffset + cur.duration;
+    } else if (editMode === 'lift') {
+      // Lift trim right: change endTime without shifting downstream clips
+      let targetEndTime = originalEndTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
+      }
+      const nextStart = sorted[idx + 1] ? originalStartTimes[idx + 1] : Infinity;
+      const clampedEnd = Math.max(originalStartTimes[idx] + minDuration, Math.min(targetEndTime, nextStart));
+      cur.endTime = clampedEnd;
+      cur.duration = cur.endTime - cur.startTime;
+      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
     } else {
-      const originalDur = originalEndTimes[idx] - originalStartTimes[idx];
+      // Ripple trim right: shift downstream clips by exact delta (preserving relative gaps)
       let targetEndTime = originalEndTimes[idx] + deltaDuration;
       if (timelineState.snappingEnabled) {
         targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
       }
       cur.duration = Math.max(minDuration, targetEndTime - originalStartTimes[idx]);
       cur.endTime = cur.startTime + cur.duration;
+      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
 
-      let accumulated = cur.endTime;
+      const deltaEnd = cur.endTime - originalEndTimes[idx];
       for (let i = idx + 1; i < sorted.length; i++) {
         const c = findClipById(sorted[i].id);
-        if (!c) continue;
-        c.startTime = accumulated;
-        c.endTime = accumulated + c.duration;
-        accumulated = c.endTime;
+        if (!c || c.displayMode === 'pip_overlay') continue;
+        c.startTime = Math.max(0, originalStartTimes[i] + deltaEnd);
+        c.endTime = Math.max(c.startTime + minDuration, originalEndTimes[i] + deltaEnd);
+        c.duration = c.endTime - c.startTime;
         updateClipDOM(c.id, c.startTime, c.endTime);
       }
     }
@@ -738,7 +815,7 @@ function handleTimelineMouseMove(e: MouseEvent) {
       if (timelineState.snappingEnabled) {
         rawNewStartTime = getSnappedTime(rawNewStartTime, cachedDragSnapPoints);
       }
-      let newStartTime = Math.max(minNewStartTime, Math.min(rawNewStartTime, maxNewStartTime));
+      const newStartTime = Math.max(minNewStartTime, Math.min(rawNewStartTime, maxNewStartTime));
       const shift = newStartTime - originalStartTimes[idx];
 
       prev.startTime = originalStartTimes[idx - 1];
@@ -747,11 +824,39 @@ function handleTimelineMouseMove(e: MouseEvent) {
       cur.startTime = newStartTime;
       cur.endTime = originalEndTimes[idx];
       cur.duration = cur.endTime - cur.startTime;
-      cur.videoStartOffset = originalVideoStartOffsets[idx] + shift;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
 
       updateClipDOM(prev.id, prev.startTime, prev.endTime);
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else if (editMode === 'slip') {
+      // Slip mode: shift sourceIn (videoStartOffset) without moving clip boundaries
+      const maxMediaDur = cur.videoElement?.duration;
+      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
+      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
+        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
+      }
+      cur.videoStartOffset = newOffset;
+      cur.sourceIn = newOffset;
+      cur.sourceOut = newOffset + cur.duration;
+    } else if (editMode === 'lift') {
+      // Lift trim left: move startTime and advance sourceIn without shifting downstream clips
+      let targetStartTime = originalStartTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetStartTime = getSnappedTime(targetStartTime, cachedDragSnapPoints);
+      }
+      const prevEnd = idx > 0 ? originalEndTimes[idx - 1] : 0;
+      const clampedStart = Math.max(prevEnd, Math.min(targetStartTime, originalEndTimes[idx] - minDuration));
+      const shift = clampedStart - originalStartTimes[idx];
+
+      cur.startTime = clampedStart;
+      cur.endTime = originalEndTimes[idx];
+      cur.duration = cur.endTime - cur.startTime;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+      cur.sourceIn = cur.videoStartOffset;
+      cur.sourceOut = cur.videoStartOffset + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
     } else {
+      // Ripple trim left: keep startTime anchored, trim sourceIn, and ripple downstream clips
       const originalDur = originalEndTimes[idx] - originalStartTimes[idx];
       let targetStartTime = originalStartTimes[idx] + deltaDuration;
       if (timelineState.snappingEnabled) {
@@ -760,19 +865,21 @@ function handleTimelineMouseMove(e: MouseEvent) {
       const newDur = Math.max(minDuration, originalEndTimes[idx] - targetStartTime);
       const shift = originalDur - newDur;
 
-      cur.startTime = originalStartTimes[idx] + shift;
+      cur.startTime = originalStartTimes[idx];
       cur.duration = newDur;
       cur.endTime = cur.startTime + cur.duration;
-      cur.videoStartOffset = originalVideoStartOffsets[idx] + shift;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+      cur.sourceIn = cur.videoStartOffset;
+      cur.sourceOut = cur.videoStartOffset + cur.duration;
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
 
-      let accumulated = cur.endTime;
+      const deltaEnd = cur.endTime - originalEndTimes[idx];
       for (let i = idx + 1; i < sorted.length; i++) {
         const c = findClipById(sorted[i].id);
-        if (!c) continue;
-        c.startTime = accumulated;
-        c.endTime = accumulated + c.duration;
-        accumulated = c.endTime;
+        if (!c || c.displayMode === 'pip_overlay') continue;
+        c.startTime = Math.max(0, originalStartTimes[i] + deltaEnd);
+        c.endTime = Math.max(c.startTime + minDuration, originalEndTimes[i] + deltaEnd);
+        c.duration = c.endTime - c.startTime;
         updateClipDOM(c.id, c.startTime, c.endTime);
       }
     }
@@ -805,10 +912,24 @@ function handleTimelineMouseUp() {
     if (videoRenderContext) drawVideoFrame(state.videoPauseTime);
   }
 
-  if (isDraggingClip) dom.timelineClipsContainer.querySelector('.dragging')?.classList.remove('dragging');
+  if (isDraggingClip && draggedClipId) {
+    dom.timelineClipsContainer.querySelector('.dragging')?.classList.remove('dragging');
+    const movedClip = findClipById(draggedClipId);
+    const didMove = movedClip && hasTimelineDragged && Math.abs((movedClip.startTime ?? 0) - draggedClipOriginalStart) > 0.01;
+    isDraggingClip = false;
+    draggedClipId = null;
 
-  isDraggingClip = false;
-  draggedClipId = null;
+    if (didMove && movedClip) {
+      if (movedClip.displayMode === 'pip_overlay') {
+        timelineState.saveSnapshot();
+        timelineState.setClips([...timelineState.clips], false);
+        updateVideoContext();
+      } else {
+        const policy = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite';
+        placeClipOnTimeline({ ...movedClip }, movedClip.startTime, policy);
+      }
+    }
+  }
   isResizingClip = false;
   resizedClipId = null;
   resizeEdge = null;
@@ -820,10 +941,13 @@ function handleTimelineMouseUp() {
   scheduleFullQualityRedraw();
 
   if (originalStartTimes.length > 0) {
-    resyncTimeline({ notify: false, reason: 'mouse-up' });
-    updateVideoContext(); // Full reconciliation now that drag is finished
-    ui.renderTimelineEditor(); // Rebuild DOM to ensure everything is in perfect sync
-    // saveVersion(false);
+    if (timelineState.mode === 'audio_locked') {
+      resyncTimeline({ notify: false, reason: 'mouse-up' });
+    } else {
+      refreshPerClipWordTimestamps();
+    }
+    updateVideoContext();
+    ui.renderTimelineEditor();
     originalStartTimes = [];
     originalEndTimes = [];
     originalVideoStartOffsets = [];
@@ -859,33 +983,43 @@ export function updateVideoContext(skipUIRender = false) {
   ensureClipIds();
   const sorted = getSortedTimeline();
   const audioDur = timelineState.masterAudioBuffer?.duration;
-  const totalDuration = isNum(audioDur) ? (audioDur as number) : sorted.reduce((m, c) => 
+  const maxVisualEnd = sorted.reduce((m, c) =>
     Math.max(m, isNum(c.endTime) ? c.endTime : (isNum(c.startTime) ? c.startTime : 0) + (c.duration || 0)), 0
   );
-  
-  state.videoPauseTime = Math.max(0, Math.min(state.videoPauseTime, totalDuration));
-  normalizeTimeline(totalDuration);
+  const totalDuration = isNum(audioDur)
+    ? Math.max(audioDur as number, maxVisualEnd)
+    : maxVisualEnd;
 
+  state.videoPauseTime = Math.max(0, Math.min(state.videoPauseTime, totalDuration));
+
+  // Only auto-normalize when in audio_locked mode; in free mode, preserve exact user clip positions & gaps
   const isLocked = timelineState.mode === 'audio_locked';
-  let cum = 0;
+  if (isLocked) {
+    normalizeTimeline(totalDuration, true);
+  }
+
   for (let i = 0; i < sorted.length - 1; i++) {
     const clip = sorted[i];
     const nextClip = sorted[i + 1];
 
-    const clipLen = Math.max(0.001, isLocked && isNum(clip.endTime) && isNum(clip.startTime) ? clip.endTime - clip.startTime : clip.duration);
-    const clipEndGlobal = isLocked ? clip.endTime : cum + clipLen;
-    cum += clipLen;
+    const clipStart = isNum(clip.startTime) ? clip.startTime : 0;
+    const clipLen = Math.max(0.001, isNum(clip.endTime) ? clip.endTime - clipStart : clip.duration);
+    const clipEndGlobal = isNum(clip.endTime) ? clip.endTime : clipStart + clipLen;
+    const nextStart = isNum(nextClip.startTime) ? nextClip.startTime : clipEndGlobal;
+    const isContiguous = Math.abs(nextStart - clipEndGlobal) <= 0.05;
 
-    // ✅ Only calculate transition boundaries for actual transitions
-    let resolvedTransition = clip.transitionToNext || 'cut';
     const globalStyle = timelineState.videoTransitionStyle || 'narrative_guided';
-    if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
-      resolvedTransition = globalStyle;
+    let resolvedTransition = clip.transitionToNext;
+    if (!resolvedTransition) {
+      resolvedTransition = (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed')
+        ? globalStyle
+        : 'cut';
     }
-    const hasTransition = resolvedTransition !== 'cut';
+    // Transitions only occur when two clips touch (no transition across an open gap)
+    const hasTransition = resolvedTransition !== 'cut' && isContiguous;
 
     if (hasTransition) {
-      const nextLen = Math.max(0.001, isLocked && isNum(nextClip.endTime) && isNum(nextClip.startTime) ? nextClip.endTime - nextClip.startTime : nextClip.duration);
+      const nextLen = Math.max(0.001, isNum(nextClip.endTime) ? nextClip.endTime - nextStart : nextClip.duration);
 
       const transitionDur = utils.clamp(0.08 * Math.min(clipLen, nextLen), 0.08, 0.35);
       let transitionStart = clipEndGlobal - transitionDur;
@@ -2137,7 +2271,11 @@ export function handleUndoTimeline() {
     if (timelineState.undo()) {
         try { SubtitleEngine.clearBitmapCache(); } catch {}
         try { invalidateSpectrumCache(); } catch {}
-        resyncTimeline({ notify: false, reason: 'undo' });
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'undo' });
+        } else {
+            refreshPerClipWordTimestamps();
+        }
         updateVideoContext();
         ui.renderTimelineEditor();
         if (videoRenderContext) {
@@ -2158,7 +2296,11 @@ export function handleRedoTimeline() {
     if (timelineState.redo()) {
         try { SubtitleEngine.clearBitmapCache(); } catch {}
         try { invalidateSpectrumCache(); } catch {}
-        resyncTimeline({ notify: false, reason: 'redo' });
+        if (timelineState.mode === 'audio_locked') {
+            resyncTimeline({ notify: false, reason: 'redo' });
+        } else {
+            refreshPerClipWordTimestamps();
+        }
         updateVideoContext();
         ui.renderTimelineEditor();
         if (videoRenderContext) {
@@ -2169,19 +2311,36 @@ export function handleRedoTimeline() {
     }
 }
 
-export function handleSetEditMode(mode: 'ripple' | 'slip') {
+export function handleSetEditMode(mode: 'ripple' | 'lift' | 'slip') {
     timelineState.setEditMode(mode);
-    ui.showStatus(`Timeline mode: ${mode}`, false, 1500);
-    if (dom.timelineModeRippleBtn && dom.timelineModeSlipBtn) {
+    ui.showStatus(`Timeline mode: ${mode.toUpperCase()}`, false, 1500);
+    if (dom.timelineModeRippleBtn && dom.timelineModeLiftBtn && dom.timelineModeSlipBtn) {
       dom.timelineModeRippleBtn.classList.toggle('bg-indigo-600', mode === 'ripple');
       dom.timelineModeRippleBtn.classList.toggle('text-white', mode === 'ripple');
       dom.timelineModeRippleBtn.classList.toggle('bg-zinc-800', mode !== 'ripple');
       dom.timelineModeRippleBtn.classList.toggle('text-gray-400', mode !== 'ripple');
 
+      dom.timelineModeLiftBtn.classList.toggle('bg-indigo-600', mode === 'lift');
+      dom.timelineModeLiftBtn.classList.toggle('text-white', mode === 'lift');
+      dom.timelineModeLiftBtn.classList.toggle('bg-zinc-800', mode !== 'lift');
+      dom.timelineModeLiftBtn.classList.toggle('text-gray-400', mode !== 'lift');
+
       dom.timelineModeSlipBtn.classList.toggle('bg-indigo-600', mode === 'slip');
       dom.timelineModeSlipBtn.classList.toggle('text-white', mode === 'slip');
       dom.timelineModeSlipBtn.classList.toggle('bg-zinc-800', mode !== 'slip');
       dom.timelineModeSlipBtn.classList.toggle('text-gray-400', mode !== 'slip');
+    }
+}
+
+export function handleToggleLinkAudio() {
+    const nextLinked = !timelineState.linkedAudioEdit;
+    timelineState.setLinkedAudioEdit(nextLinked);
+    ui.showStatus(`Linked Audio Editing: ${nextLinked ? 'ON (Syncs Narration)' : 'OFF (Independent)'}`, false, 2000);
+    if (dom.timelineLinkAudioBtn) {
+        dom.timelineLinkAudioBtn.classList.toggle('bg-emerald-600', nextLinked);
+        dom.timelineLinkAudioBtn.classList.toggle('text-white', nextLinked);
+        dom.timelineLinkAudioBtn.classList.toggle('bg-zinc-800', !nextLinked);
+        dom.timelineLinkAudioBtn.classList.toggle('text-gray-400', !nextLinked);
     }
 }
   
@@ -2298,11 +2457,12 @@ export function handleSplitClip() {
 
     timelineState.saveSnapshot();
     timelineState.setSelectedClipId(null);
+    const origEnd = isNum(clip.endTime) ? clip.endTime : clipStart + clip.duration;
     const newClip2 = { 
       ...clip, 
       startTime: time, 
-      endTime: clip.endTime,
-      duration: clip.duration - splitPoint, 
+      endTime: origEnd,
+      duration: origEnd - time, 
       id: (clip.id || `${clipIndex}`) + '_b',
       videoStartOffset: (clip.videoStartOffset || 0) + splitPoint
     };
@@ -2311,9 +2471,9 @@ export function handleSplitClip() {
     clip.id = (clip.id || `${clipIndex}`) + '_a';
     const newClips = [...timelineState.clips];
     newClips.splice(clipIndex + 1, 0, newClip2);
-    timelineState.setClips(newClips);
-    normalizeTimeline();
-    ui.renderTimelineEditor();
+    timelineState.setClips(newClips, false);
+    refreshPerClipWordTimestamps();
+    updateVideoContext();
     ui.showStatus('✂️ Shot split at playhead.', false, 1500);
 }
 
@@ -2399,7 +2559,7 @@ export function handleDeleteAudioClip(index: number, ripple: boolean = false) {
     
     try { SubtitleEngine.clearBitmapCache(); } catch {}
     try { invalidateSpectrumCache(); } catch {}
-    resyncTimeline({ notify: false, reason: 'delete-audio' });
+    refreshPerClipWordTimestamps();
     updateVideoContext();
     ui.renderTimelineEditor();
     if (!state.isVideoPlaying && videoRenderContext) {
@@ -2460,8 +2620,8 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
     }
 
     if (timelineState.selectedAudioSplitIndex !== null && timelineState.masterAudioBuffer) {
-        // Always ripple-delete master audio splits so the UI segment visually disappears and closes the gap
-        handleDeleteAudioClip(timelineState.selectedAudioSplitIndex, true);
+        const shouldRippleAudio = options.deleteAudio ?? (timelineState.editMode === 'ripple' && timelineState.linkedAudioEdit);
+        handleDeleteAudioClip(timelineState.selectedAudioSplitIndex, shouldRippleAudio);
         return;
     }
 
@@ -2496,15 +2656,18 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
     }
     
     targetClip = timelineState.clips[targetIndex];
-    const removeStart = targetClip.startTime;
-    const removeEnd = targetClip.endTime;
+    const removeStart = targetClip.startTime ?? 0;
+    const removeEnd = targetClip.endTime ?? (removeStart + targetClip.duration);
     const durationRemoved = Math.max(0.01, removeEnd - removeStart);
+
+    const isRipple = timelineState.editMode === 'ripple' || Boolean(options.deleteAudio);
+    const shouldDeleteAudio = Boolean(options.deleteAudio ?? (isRipple && timelineState.linkedAudioEdit));
     
     forcePausePlayback();
     timelineState.saveSnapshot();
     
-    // Splice master audio if deleteAudio is true and master audio exists
-    if (options.deleteAudio && timelineState.masterAudioBuffer && durationRemoved > 0.01) {
+    // Splice master audio ONLY if shouldDeleteAudio is true
+    if (shouldDeleteAudio && timelineState.masterAudioBuffer && durationRemoved > 0.01) {
         const oldAudio = timelineState.masterAudioBuffer;
         const newAudio = spliceAudioBuffer(oldAudio, removeStart, removeEnd);
         timelineState.setMasterAudioBuffer(newAudio);
@@ -2535,34 +2698,38 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
         try { URL.revokeObjectURL(targetClip._videoObjectURL); } catch {}
     }
     
-    // Shift subsequent clips
-    for (let i = targetIndex; i < newClips.length; i++) {
-        newClips[i].startTime = Math.max(0, newClips[i].startTime - durationRemoved);
-        newClips[i].endTime = Math.max(0.05, newClips[i].endTime - durationRemoved);
-        newClips[i].duration = Math.max(0.05, newClips[i].endTime - newClips[i].startTime);
+    // Shift subsequent visual clips ONLY in Ripple mode; Lift mode leaves the gap intact
+    if (isRipple) {
+        for (let i = targetIndex; i < newClips.length; i++) {
+            if (newClips[i].displayMode === 'pip_overlay') continue;
+            newClips[i].startTime = Math.max(0, newClips[i].startTime - durationRemoved);
+            newClips[i].endTime = Math.max(0.05, newClips[i].endTime - durationRemoved);
+            newClips[i].duration = Math.max(0.05, newClips[i].endTime - newClips[i].startTime);
+        }
     }
     
     timelineState.setSelectedClipId(null);
-    timelineState.setClips(newClips);
+    timelineState.setClips(newClips, false);
     
-    if (state.videoPauseTime >= removeStart) {
+    if (isRipple && state.videoPauseTime >= removeStart) {
         state.videoPauseTime = Math.max(0, Math.min(removeStart, state.videoPauseTime - durationRemoved));
     }
     
     try { SubtitleEngine.clearBitmapCache(); } catch {}
     try { invalidateSpectrumCache(); } catch {}
-    resyncTimeline({ notify: false, reason: 'delete-clip' });
+    refreshPerClipWordTimestamps();
     updateVideoContext();
-    ui.renderTimelineEditor();
     if (!state.isVideoPlaying && videoRenderContext) {
         drawVideoFrame(state.videoPauseTime);
         ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
     }
     
-    if (options.deleteAudio) {
+    if (shouldDeleteAudio) {
         ui.showStatus(`Ripple deleted ${durationRemoved.toFixed(1)}s (Shot + Master Audio).`, false, 2500);
+    } else if (isRipple) {
+        ui.showStatus(`Ripple deleted shot (${newClips.length} remaining, audio preserved).`, false, 2000);
     } else {
-        ui.showStatus(`Deleted shot (${newClips.length} remaining).`, false, 1800);
+        ui.showStatus(`Lift deleted shot (gap preserved).`, false, 2000);
     }
 }
 
@@ -2728,7 +2895,7 @@ export function rippleCutMasterAudio(removeStartSec: number, removeEndSec: numbe
     return removed;
 }
 
-export function handleTrimClip(edge: 'start' | 'end') {
+export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolean; linkedAudio?: boolean } = {}) {
     if (!timelineState.videoGenerated || !videoRenderContext) {
         ui.showStatus("Production not run.", true, 3000);
         return;
@@ -2745,63 +2912,359 @@ export function handleTrimClip(edge: 'start' | 'end') {
         return;
     }
 
+    const useRipple = options.ripple ?? (timelineState.editMode === 'ripple');
+    const useLinkedAudio = options.linkedAudio ?? timelineState.linkedAudioEdit;
+
     timelineState.saveSnapshot();
     const newClips = [...timelineState.clips];
-    const clip = newClips[clipIndex];
+    const clip = { ...newClips[clipIndex] };
+    newClips[clipIndex] = clip;
     const oldStartTime = clip.startTime ?? 0;
     const oldEndTime = clip.endTime ?? (clip.startTime ?? 0) + clip.duration;
 
     let amountToTrim: number;
-    if (edge === 'start') {
-        // [AUDIT A3]: The stale patch_trim scripts logic for videoStartOffset is baked in here
-        amountToTrim = time - oldStartTime;
-        if (amountToTrim < 0.1) return; // Prevent creating tiny clips or invalid states
+    let audioRemoveStart: number;
+    let audioRemoveEnd: number;
 
-        clip.duration -= amountToTrim;
+    if (edge === 'start') {
+        amountToTrim = time - oldStartTime;
+        if (amountToTrim < 0.05) return;
+
+        clip.startTime = time;
+        clip.duration = Math.max(0, clip.duration - amountToTrim);
         clip.videoStartOffset = (clip.videoStartOffset || 0) + amountToTrim;
-        // startTime will be adjusted by normalizeTimeline
+        clip.endTime = oldEndTime;
+        audioRemoveStart = oldStartTime;
+        audioRemoveEnd = time;
     } else { // 'end'
         amountToTrim = oldEndTime - time;
-        if (amountToTrim < 0.1) return;
+        if (amountToTrim < 0.05) return;
 
-        clip.duration -= amountToTrim;
+        clip.duration = Math.max(0, clip.duration - amountToTrim);
+        clip.endTime = time;
+        audioRemoveStart = time;
+        audioRemoveEnd = oldEndTime;
     }
-    clip.endTime = (clip.startTime ?? 0) + clip.duration; // keep local fields consistent pre-normalize
 
     let clipRemoved = false;
-    if (clip.duration < 0.1) {
+    if (clip.duration < 0.05) {
         newClips.splice(clipIndex, 1);
         clipRemoved = true;
-        ui.showStatus("Clip removed (too short after trim).", false, 2000);
-    } else {
-        ui.showStatus("Clip trimmed.", false, 2000);
+        audioRemoveStart = oldStartTime;
+        audioRemoveEnd = oldEndTime;
     }
 
-    // [FIX aroll-trim] Cut the same span out of the master (A-roll) audio and
-    // close up every clip after the cut, so the exported voice track matches
-    // the trimmed visuals. No-op when there is no master audio track.
-    const audioRemoveStart = clipRemoved ? oldStartTime : (edge === 'start' ? oldStartTime : time);
-    const audioRemoveEnd = clipRemoved ? oldEndTime : (edge === 'start' ? time : oldEndTime);
-    const removedAudio = rippleCutMasterAudio(audioRemoveStart, audioRemoveEnd);
-    if (removedAudio && removedAudio > 0) {
-        for (let i = clipIndex + 1; i < newClips.length; i++) {
-            const c = newClips[i];
-            c.startTime = Math.max(0, (c.startTime ?? 0) - removedAudio);
-            c.endTime = Math.max((c.startTime ?? 0) + 0.05, (c.endTime ?? (c.startTime ?? 0)) - removedAudio);
+    // Ripple downstream visual clips only if ripple mode is enabled
+    if (useRipple && amountToTrim > 0) {
+        const shiftStartIdx = clipRemoved ? clipIndex : clipIndex + 1;
+        for (let i = shiftStartIdx; i < newClips.length; i++) {
+            const c = { ...newClips[i] };
+            c.startTime = Math.max(0, (c.startTime ?? 0) - amountToTrim);
+            c.endTime = Math.max((c.startTime ?? 0) + 0.05, (c.endTime ?? (c.startTime ?? 0)) - amountToTrim);
+            newClips[i] = c;
+        }
+        if (edge === 'start' && !clipRemoved) {
+            clip.startTime = oldStartTime;
+            clip.endTime = oldStartTime + clip.duration;
+            state.videoPauseTime = oldStartTime;
         }
     }
 
-    if (edge === 'start' && timelineState.mode === 'free') {
-        const oldStartTime = newClips[clipIndex] ? newClips[clipIndex].startTime : 0;
-        state.videoPauseTime = oldStartTime;
+    // Only cut master audio if linkedAudio is explicitly enabled and ripple mode is active
+    if (useRipple && useLinkedAudio && timelineState.masterAudioBuffer) {
+        rippleCutMasterAudio(audioRemoveStart, audioRemoveEnd);
     }
+
     timelineState.setClips(newClips, false);
-    resyncTimeline({ notify: false, reason: 'trim-clip' });
+    refreshPerClipWordTimestamps();
+    updateVideoContext();
     ui.renderTimelineEditor();
     if (!state.isVideoPlaying && videoRenderContext) {
         drawVideoFrame(state.videoPauseTime);
         ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
     }
+
+    if (clipRemoved) {
+        ui.showStatus("Clip removed (too short after trim).", false, 2000);
+    } else {
+        const modeLabel = useRipple
+            ? (useLinkedAudio ? 'Ripple trim (audio linked)' : 'Ripple trim (visual only)')
+            : 'Lift trim (gap preserved)';
+        ui.showStatus(`Trimmed ${amountToTrim.toFixed(2)}s [${modeLabel}].`, false, 2000);
+    }
+}
+
+/**
+ * Slip a clip's media source range without altering its timeline position or duration.
+ */
+export function handleSlipClip(clipId: string, deltaOffsetSeconds: number) {
+  const clip = findClipById(clipId);
+  if (!clip) return;
+
+  timelineState.saveSnapshot();
+  const maxDur = clip.videoElement?.duration;
+  let nextOffset = Math.max(0, (clip.videoStartOffset || 0) + deltaOffsetSeconds);
+  if (isNum(maxDur) && maxDur > clip.duration) {
+    nextOffset = Math.min(nextOffset, maxDur - clip.duration);
+  }
+  clip.videoStartOffset = nextOffset;
+  clip.sourceIn = nextOffset;
+  clip.sourceOut = nextOffset + clip.duration;
+
+  timelineState.setClips([...timelineState.clips], false);
+  updateVideoContext();
+  if (!state.isVideoPlaying && videoRenderContext) {
+    drawVideoFrame(state.videoPauseTime);
+  }
+}
+
+/**
+ * Insert or Overwrite a clip at a specific project timestamp on the main video track.
+ * - 'insert' (Ripple): splits any clip straddling insertTime and shifts downstream clips right by newClip.duration.
+ * - 'overwrite': trims/splits/removes any existing clip segments covered by [insertTime, insertTime + newClip.duration].
+ */
+export function placeClipOnTimeline(
+  incomingClip: Partial<TimelineClip>,
+  targetTime: number,
+  policy: 'insert' | 'overwrite' = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite'
+) {
+  timelineState.saveSnapshot();
+  const clipDur = Math.max(0.1, Number(incomingClip.duration) || 3.5);
+  const start = Math.max(0, targetTime);
+  const end = start + clipDur;
+  const sourceIn = Number(incomingClip.videoStartOffset ?? incomingClip.sourceIn ?? 0);
+
+  const placedClip: TimelineClip = {
+    ...incomingClip,
+    id: incomingClip.id || `clip_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    trackId: 'v1-main',
+    startTime: start,
+    endTime: end,
+    duration: clipDur,
+    videoStartOffset: sourceIn,
+    sourceIn,
+    sourceOut: sourceIn + clipDur,
+    transitionToNext: incomingClip.transitionToNext || 'cut',
+  };
+
+  const pipClips = timelineState.clips.filter(c => c.displayMode === 'pip_overlay' && c.id !== placedClip.id);
+  const mainClips = getSortedTimeline().filter(c => c.displayMode !== 'pip_overlay' && c.id !== placedClip.id);
+  const nextMain: TimelineClip[] = [];
+
+  if (policy === 'insert') {
+    for (const c of mainClips) {
+      const cs = c.startTime ?? 0;
+      const ce = c.endTime ?? (cs + c.duration);
+
+      if (ce <= start + 0.001) {
+        nextMain.push(c);
+      } else if (cs >= start - 0.001) {
+        c.startTime = cs + clipDur;
+        c.endTime = ce + clipDur;
+        nextMain.push(c);
+      } else {
+        // Clip straddles insert point -> split into left and right around inserted clip
+        const leftDur = start - cs;
+        const rightDur = ce - start;
+        if (leftDur >= 0.05) {
+          nextMain.push({
+            ...c,
+            id: `${c.id}_a`,
+            startTime: cs,
+            endTime: start,
+            duration: leftDur,
+            sourceOut: (c.videoStartOffset || 0) + leftDur,
+          });
+        }
+        if (rightDur >= 0.05) {
+          const rightOffset = (c.videoStartOffset || 0) + leftDur;
+          nextMain.push({
+            ...c,
+            id: `${c.id}_b`,
+            startTime: end,
+            endTime: end + rightDur,
+            duration: rightDur,
+            videoStartOffset: rightOffset,
+            sourceIn: rightOffset,
+            sourceOut: rightOffset + rightDur,
+          });
+        }
+      }
+    }
+    nextMain.push(placedClip);
+  } else {
+    // Overwrite policy: replace overlapping range without shifting downstream clips
+    for (const c of mainClips) {
+      const cs = c.startTime ?? 0;
+      const ce = c.endTime ?? (cs + c.duration);
+
+      if (ce <= start + 0.001 || cs >= end - 0.001) {
+        // No overlap
+        nextMain.push(c);
+      } else if (cs >= start - 0.001 && ce <= end + 0.001) {
+        // Completely covered -> dropped
+        continue;
+      } else if (cs < start && ce > end) {
+        // Existing clip completely encloses the new clip -> split into before and after
+        const leftDur = start - cs;
+        const rightDur = ce - end;
+        if (leftDur >= 0.05) {
+          nextMain.push({
+            ...c,
+            id: `${c.id}_a`,
+            startTime: cs,
+            endTime: start,
+            duration: leftDur,
+            sourceOut: (c.videoStartOffset || 0) + leftDur,
+          });
+        }
+        if (rightDur >= 0.05) {
+          const rightOffset = (c.videoStartOffset || 0) + (end - cs);
+          nextMain.push({
+            ...c,
+            id: `${c.id}_b`,
+            startTime: end,
+            endTime: ce,
+            duration: rightDur,
+            videoStartOffset: rightOffset,
+            sourceIn: rightOffset,
+            sourceOut: rightOffset + rightDur,
+          });
+        }
+      } else if (cs < start && ce > start) {
+        // Overlaps right tail of existing clip -> trim its end
+        const newDur = start - cs;
+        if (newDur >= 0.05) {
+          c.endTime = start;
+          c.duration = newDur;
+          c.sourceOut = (c.videoStartOffset || 0) + newDur;
+          nextMain.push(c);
+        }
+      } else if (cs < end && ce > end) {
+        // Overlaps left head of existing clip -> trim its start
+        const trimHead = end - cs;
+        const newDur = ce - end;
+        if (newDur >= 0.05) {
+          c.startTime = end;
+          c.duration = newDur;
+          c.videoStartOffset = (c.videoStartOffset || 0) + trimHead;
+          c.sourceIn = c.videoStartOffset;
+          c.sourceOut = c.videoStartOffset + newDur;
+          nextMain.push(c);
+        }
+      }
+    }
+    nextMain.push(placedClip);
+  }
+
+  nextMain.sort((a, b) => a.startTime - b.startTime);
+  timelineState.setClips([...nextMain, ...pipClips], false);
+  timelineState.setSelectedClipId(placedClip.id);
+  refreshPerClipWordTimestamps();
+  updateVideoContext();
+  if (!state.isVideoPlaying && videoRenderContext) {
+    drawVideoFrame(state.videoPauseTime);
+  }
+}
+
+export function handleTimelineDragOver(e: DragEvent) {
+  e.preventDefault();
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+export async function handleTimelineDrop(e: DragEvent) {
+  e.preventDefault();
+  if (timelineState.mode === 'audio_locked') {
+    ui.showStatus('Switch to Free Pacing mode to drop clips at custom timeline positions.', true, 2500);
+    return;
+  }
+
+  const scrollEl = dom.timelineClipsContainer?.querySelector('#timeline-multi-track-scroll') as HTMLElement | null;
+  const trackContainer = dom.timelineClipsContainer?.querySelector('#timeline-multi-track-container') as HTMLElement | null;
+  const rect = (trackContainer || scrollEl || dom.timelineClipsContainer)?.getBoundingClientRect();
+  if (!rect) return;
+
+  const pps = getPixelsPerSecond();
+  const offsetX = Math.max(0, e.clientX - rect.left);
+  let dropTime = offsetX / pps;
+  if (timelineState.snappingEnabled) {
+    dropTime = getSnappedTime(dropTime);
+  }
+
+  const policy = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite';
+
+  // 1. Handle OS File Drop (Video or Image files)
+  if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    if (file.type.startsWith('video/')) {
+      const objUrl = URL.createObjectURL(file);
+      const vidEl = await utils.loadVideoElement(objUrl);
+      const dur = Number.isFinite(vidEl.duration) && vidEl.duration > 0 ? vidEl.duration : 5.0;
+      const assetId = `vid_drop_${Date.now()}`;
+      try { await assetStorage.saveAsset(assetId, file); } catch {}
+      placeClipOnTimeline({
+        id: `imported-${Date.now()}`,
+        videoElement: vidEl,
+        _videoObjectURL: objUrl,
+        video_id: assetId,
+        duration: dur,
+        videoStartOffset: 0,
+        text: file.name.replace(/\.[^.]+$/, ''),
+      }, dropTime, policy);
+      ui.showStatus(`📥 Inserted "${file.name}" at ${dropTime.toFixed(2)}s (${policy})`, false, 2500);
+      return;
+    } else if (file.type.startsWith('image/')) {
+      const objUrl = URL.createObjectURL(file);
+      const imgEl = await utils.loadImageOrThrow(objUrl);
+      const assetId = `img_drop_${Date.now()}`;
+      try { await assetStorage.saveAsset(assetId, file); } catch {}
+      placeClipOnTimeline({
+        id: `imported-${Date.now()}`,
+        image: imgEl,
+        _imageObjectURL: objUrl,
+        image_id: assetId,
+        duration: 4.0,
+        videoStartOffset: 0,
+        text: file.name.replace(/\.[^.]+$/, ''),
+      }, dropTime, policy);
+      ui.showStatus(`🖼️ Inserted "${file.name}" at ${dropTime.toFixed(2)}s (${policy})`, false, 2500);
+      return;
+    }
+  }
+
+  // 2. Handle Storyboard Shot Card Drop
+  const rawData = e.dataTransfer?.getData('text/plain');
+  if (rawData) {
+    try {
+      const parsed = JSON.parse(rawData);
+      if (typeof parsed.sceneIndex === 'number' && typeof parsed.lineIndex === 'number') {
+        const isPaced = state.currentScenes[0] && typeof state.currentScenes[0].shot_number !== 'undefined';
+        const srcScene = state.currentScenes[parsed.sceneIndex];
+        const srcLines = srcScene?.lines || [srcScene];
+        const shot = isPaced ? state.currentScenes[parsed.lineIndex] : srcLines?.[parsed.lineIndex];
+        if (shot) {
+          const videoEl = shot._videoObjectURL ? await utils.loadVideoElement(shot._videoObjectURL) : undefined;
+          const imgEl = shot._imageObjectURL ? await utils.loadImageOrThrow(shot._imageObjectURL) : undefined;
+          const dur = videoEl && Number.isFinite(videoEl.duration) && videoEl.duration > 0 ? videoEl.duration : 4.0;
+          placeClipOnTimeline({
+            id: `${shot.id || 'shot'}_${Date.now()}`,
+            image: imgEl,
+            videoElement: videoEl,
+            _imageObjectURL: shot._imageObjectURL,
+            _videoObjectURL: shot._videoObjectURL,
+            image_id: shot.image_id,
+            video_id: shot.video_id,
+            duration: dur,
+            videoStartOffset: 0,
+            text: shot.text_reference || shot.line_text || 'Dropped Shot',
+          }, dropTime, policy);
+          ui.showStatus(`🎬 Placed shot at ${dropTime.toFixed(2)}s (${policy})`, false, 2500);
+        }
+      }
+    } catch {}
+  }
 }
   
 let wheelZoomRaf: number | null = null;
@@ -2888,6 +3351,13 @@ export function applyTransitionToClip(clipId: string, transitionName: string, ap
   });
 
   timelineState.setClips(newClips);
+  // Ensure per-clip transition mode is active so global preset doesn't override individual cuts
+  if (!applyToAll && timelineState.videoTransitionStyle !== 'narrative_guided') {
+    timelineState.setVideoTransitionStyle('narrative_guided');
+    if (dom.videoTransitionStyleSelect) {
+      dom.videoTransitionStyleSelect.value = 'narrative_guided';
+    }
+  }
 
   // Synchronize to state.currentScenes for export & storage persistence
   if (state.currentScenes && Array.isArray(state.currentScenes)) {

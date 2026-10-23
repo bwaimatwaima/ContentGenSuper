@@ -246,6 +246,11 @@ class AssetStorage {
       request.onerror = () => reject(request.error);
     });
   }
+
+  async saveAsset(id: string, file: Blob): Promise<string> {
+    const type = file.type.startsWith('video') ? 'video' : (file.type.startsWith('audio') ? 'audio' : 'image');
+    return this.storeAsset(file, type, undefined, id);
+  }
 }
 
 export const assetStorage = new AssetStorage();

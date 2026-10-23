@@ -1492,6 +1492,12 @@ export function renderBrollEditor(
         if (trackContainer) {
           trackContainer.addEventListener("click", handleTimelineClick);
           trackContainer.addEventListener("mousedown", handleTimelineMouseDown);
+          trackContainer.addEventListener("dragover", (e) => {
+            import("./videoController").then(m => m.handleTimelineDragOver(e));
+          });
+          trackContainer.addEventListener("drop", (e) => {
+            import("./videoController").then(m => m.handleTimelineDrop(e));
+          });
         }
       } else {
         const trackContainer = scrollContainer.querySelector(

@@ -1633,7 +1633,9 @@ function registerEventListeners() {
     dom.timelineClipsContainer?.addEventListener('click', videoController.handleTimelineClick);
     dom.timelineClipsContainer?.addEventListener('mousedown', videoController.handleTimelineMouseDown);
     dom.timelineModeRippleBtn?.addEventListener('click', () => videoController.handleSetEditMode('ripple'));
+    dom.timelineModeLiftBtn?.addEventListener('click', () => videoController.handleSetEditMode('lift'));
     dom.timelineModeSlipBtn?.addEventListener('click', () => videoController.handleSetEditMode('slip'));
+    dom.timelineLinkAudioBtn?.addEventListener('click', () => videoController.handleToggleLinkAudio());
     dom.timelineActionSplitBtn?.addEventListener('click', videoController.handleSplitClip);
     dom.timelineActionTrimStartBtn?.addEventListener('click', () => videoController.handleTrimClip('start'));
     dom.timelineActionTrimEndBtn?.addEventListener('click', () => videoController.handleTrimClip('end'));

@@ -3198,7 +3198,7 @@ User Request: "${prompt}"`
         return null;
     }
 
-    function findHitPipClip(x: number, y: number, cvW: number, cvH: number, scaleX: number, scaleY: number): TimelineClip | null {
+    function findHitPipClip(x: number, y: number, cvW: number, cvH: number, scaleX: number, scaleY: number): any | null {
         const activeClips = (timelineState.clips || []).filter(c => {
             if (c.displayMode !== 'pip_overlay') return false;
             const s = c.startTime || 0;
@@ -3208,7 +3208,7 @@ User Request: "${prompt}"`
 
         for (let i = activeClips.length - 1; i >= 0; i--) {
             const c = activeClips[i];
-            const bounds = getPipOverlayBounds(c, cvW, cvH, state.lastRenderedTime);
+            const bounds = getPipOverlayBounds(c as any, cvW, cvH, state.lastRenderedTime);
             if (!bounds) continue;
             const padX = 15 * scaleX;
             const padY = 15 * scaleY;

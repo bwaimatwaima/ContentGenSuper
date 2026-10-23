@@ -9,8 +9,34 @@ import { invalidateSpectrumCache } from './graphics-engine';
 import * as utils from './utils';
 import { state } from './state';
 
-// Using a simplified type for now, as it's complex in videoController.
-type TimelineClip = any;
+export interface EditableTimelineClip {
+    id: string;
+    trackId?: string;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    sourceIn?: number;
+    sourceOut?: number;
+    videoStartOffset?: number;
+    linkedGroupId?: string;
+    muted?: boolean;
+    volume?: number;
+    transitionToNext?: string;
+    displayMode?: 'fullscreen' | 'pip_overlay';
+    cameraMovement?: string;
+    text?: string;
+    image?: HTMLImageElement | null;
+    videoElement?: HTMLVideoElement | null;
+    secondaryImage?: HTMLImageElement | null;
+    secondaryVideoElement?: HTMLVideoElement | null;
+    talkingHeadVideoElement?: HTMLVideoElement | null;
+    pipPosition?: any;
+    pipAnimation?: any;
+    pipScale?: any;
+    [k: string]: any;
+}
+
+type TimelineClip = EditableTimelineClip;
 
 export interface TimelineSnapshot {
     clips: any[];
@@ -28,7 +54,8 @@ class TimelineState {
     get clipsVersion() { return this._clipsVersion; }
     bumpClipsVersion() { this._clipsVersion++; }
     private _mode: 'free' | 'audio_locked' = 'free';
-    private _editMode: 'ripple' | 'slip' = 'ripple';
+    private _editMode: 'ripple' | 'lift' | 'slip' = 'ripple';
+    private _linkedAudioEdit: boolean = false;
     private _zoomLevel: number = 1;
     private _masterAudioBuffer: AudioBuffer | null = null;
     private _masterAudioAssetId: string | null = null;
@@ -125,7 +152,8 @@ class TimelineState {
     // --- Getters (return copies where appropriate) ---
     get clips(): TimelineClip[] { return this._clips; } // Return direct reference for performance-critical path (e.g., dragging)
     get mode(): 'free' | 'audio_locked' { return this._mode; }
-    get editMode(): 'ripple' | 'slip' { return this._editMode; }
+    get editMode(): 'ripple' | 'lift' | 'slip' { return this._editMode; }
+    get linkedAudioEdit(): boolean { return this._linkedAudioEdit; }
     get zoomLevel(): number { return this._zoomLevel; }
     get masterAudioBuffer(): AudioBuffer | null { return this._masterAudioBuffer; }
     get masterAudioAssetId(): string | null { return this._masterAudioAssetId; }
@@ -394,14 +422,47 @@ class TimelineState {
     // --- Setters / Mutators ---
     setClips(clips: TimelineClip[], notify: boolean = true) {
         this._clipsVersion++;
-        this._clips = clips;
+        let cursor = 0;
+
+        this._clips = (clips || []).map((c, idx) => {
+            if (!c) return c;
+            const isPip = c.displayMode === 'pip_overlay';
+            const hasStart = typeof c.startTime === 'number' && Number.isFinite(c.startTime) && c.startTime >= 0;
+            const start = hasStart ? c.startTime : cursor;
+            const rawDur = typeof c.duration === 'number' && Number.isFinite(c.duration) && c.duration > 0
+                ? c.duration
+                : (typeof c.endTime === 'number' && c.endTime > start ? c.endTime - start : 3.5);
+            const end = typeof c.endTime === 'number' && Number.isFinite(c.endTime) && c.endTime > start
+                ? c.endTime
+                : start + rawDur;
+            const dur = Math.max(0.05, end - start);
+
+            const sourceIn = typeof c.videoStartOffset === 'number' && Number.isFinite(c.videoStartOffset) && c.videoStartOffset >= 0
+                ? c.videoStartOffset
+                : (typeof c.sourceIn === 'number' && Number.isFinite(c.sourceIn) && c.sourceIn >= 0 ? c.sourceIn : 0);
+            const sourceOut = sourceIn + dur;
+
+            if (!isPip) {
+                cursor = Math.max(cursor, end);
+            }
+
+            c.id = c.id || `clip_${idx}`;
+            c.trackId = c.trackId || (isPip ? 'v2-pip' : 'v1-main');
+            c.startTime = start;
+            c.endTime = end;
+            c.duration = dur;
+            c.videoStartOffset = sourceIn;
+            c.sourceIn = sourceIn;
+            c.sourceOut = sourceOut;
+            return c;
+        });
         
         let changed = false;
         const newGraphics = [...this._graphics];
         for (let i = 0; i < newGraphics.length; i++) {
             const g = newGraphics[i];
             if (g.clipId && g.offsetInClip !== undefined) {
-                const c = clips.find(x => x.id === g.clipId);
+                const c = this._clips.find(x => x.id === g.clipId);
                 if (c) {
                     const dur = g.end - g.start;
                     const newStart = c.startTime + g.offsetInClip;
@@ -422,8 +483,13 @@ class TimelineState {
         this.emitClipChange(); // Mode change affects timeline logic
     }
 
-    setEditMode(mode: 'ripple' | 'slip') {
+    setEditMode(mode: 'ripple' | 'lift' | 'slip') {
         this._editMode = mode;
+        this.emitSettingChange();
+    }
+
+    setLinkedAudioEdit(linked: boolean) {
+        this._linkedAudioEdit = Boolean(linked);
         this.emitSettingChange();
     }
 

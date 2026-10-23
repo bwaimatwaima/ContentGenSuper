@@ -253,7 +253,7 @@ export function clearStaticFrameCache() {
 /**
  * Fast O(1) amortized clip lookup cursor for sequential export rendering
  */
-export function findClipAtExportTime(time: number, isAbs: boolean): { cur: any; nxt: any; tIn: number; clipIndex: number } | null {
+export function findClipAtExportTime(time: number, _isAbs = true): { cur: any; nxt: any; tIn: number; clipIndex: number } | null {
     const clips = videoRenderContext?.clips || [];
     if (clips.length === 0) return null;
 
@@ -261,84 +261,61 @@ export function findClipAtExportTime(time: number, isAbs: boolean): { cur: any; 
         _activeClipCursor = 0;
     }
 
-    if (isAbs) {
-        // Step forward if time is past current clip
-        while (_activeClipCursor < clips.length - 1) {
-            const end = isNum(clips[_activeClipCursor].endTime)
-                ? clips[_activeClipCursor].endTime
-                : ((clips[_activeClipCursor].startTime ?? 0) + clips[_activeClipCursor].duration);
-            if (time >= end) {
-                _activeClipCursor++;
-            } else {
-                break;
-            }
-        }
-        // Step backward if time jumped back (e.g. segment seek)
-        while (_activeClipCursor > 0) {
-            const start = clips[_activeClipCursor].startTime ?? 0;
-            if (time < start) {
-                _activeClipCursor--;
-            } else {
-                break;
-            }
-        }
-
-        const curClip = clips[_activeClipCursor];
-        const s = curClip.startTime ?? 0;
-        const en = isNum(curClip.endTime) ? curClip.endTime : (s + curClip.duration);
-        if (time >= s && time < en) {
-            return { cur: curClip, nxt: clips[_activeClipCursor + 1] || null, tIn: time - s, clipIndex: _activeClipCursor };
-        }
-
-        // Check for gap or past end
-        if (time >= en) {
-            return { cur: curClip, nxt: clips[_activeClipCursor + 1] || null, tIn: Math.max(0, (en - s) - 1e-3), clipIndex: _activeClipCursor };
-        }
-
-        // Full search fallback
-        for (let i = 0; i < clips.length; i++) {
-            const cs = clips[i].startTime ?? 0;
-            const cen = isNum(clips[i].endTime) ? clips[i].endTime : (cs + clips[i].duration);
-            if (time >= cs && time < cen) {
-                _activeClipCursor = i;
-                return { cur: clips[i], nxt: clips[i + 1] || null, tIn: time - cs, clipIndex: i };
-            }
-        }
-    } else {
-        let cum = 0;
-        for (let i = 0; i < _activeClipCursor; i++) cum += clips[i].duration;
-
-        while (_activeClipCursor < clips.length - 1 && time >= cum + clips[_activeClipCursor].duration) {
-            cum += clips[_activeClipCursor].duration;
+    // Step forward if time is past current clip
+    while (_activeClipCursor < clips.length - 1) {
+        const s = clips[_activeClipCursor].startTime ?? 0;
+        const end = isNum(clips[_activeClipCursor].endTime)
+            ? clips[_activeClipCursor].endTime
+            : (s + clips[_activeClipCursor].duration);
+        if (time >= end) {
             _activeClipCursor++;
+        } else {
+            break;
         }
-        while (_activeClipCursor > 0 && time < cum) {
+    }
+
+    // Step backward if time jumped back
+    while (_activeClipCursor > 0) {
+        const start = clips[_activeClipCursor].startTime ?? 0;
+        if (time < start) {
             _activeClipCursor--;
-            cum -= clips[_activeClipCursor].duration;
-        }
-
-        const curClip = clips[_activeClipCursor];
-        if (time >= cum && time < cum + curClip.duration) {
-            return { cur: curClip, nxt: clips[_activeClipCursor + 1] || null, tIn: time - cum, clipIndex: _activeClipCursor };
-        }
-
-        cum = 0;
-        for (let i = 0; i < clips.length; i++) {
-            if (time >= cum && time < cum + clips[i].duration) {
-                _activeClipCursor = i;
-                return { cur: clips[i], nxt: clips[i + 1] || null, tIn: time - cum, clipIndex: i };
-            }
-            cum += clips[i].duration;
+        } else {
+            break;
         }
     }
 
-    if (clips.length > 0) {
-        const last = clips[clips.length - 1];
-        const s = isAbs ? (last.startTime ?? 0) : 0;
-        const en = isAbs ? (isNum(last.endTime) ? last.endTime : s + last.duration) : last.duration;
-        return { cur: last, nxt: null, tIn: Math.max(0.001, en - s), clipIndex: clips.length - 1 };
+    const curClip = clips[_activeClipCursor];
+    const s = curClip.startTime ?? 0;
+    const en = isNum(curClip.endTime) ? curClip.endTime : (s + curClip.duration);
+    if (time >= s && time < en) {
+        const nextClip = clips[_activeClipCursor + 1] || null;
+        const isNextContiguous = nextClip && Math.abs((nextClip.startTime ?? en) - en) <= 0.05;
+        return {
+            cur: curClip,
+            nxt: isNextContiguous ? nextClip : null,
+            tIn: time - s,
+            clipIndex: _activeClipCursor
+        };
     }
 
+    // Full search fallback for non-cursor hits
+    for (let i = 0; i < clips.length; i++) {
+        const cs = clips[i].startTime ?? 0;
+        const cen = isNum(clips[i].endTime) ? clips[i].endTime : (cs + clips[i].duration);
+        if (time >= cs && time < cen) {
+            _activeClipCursor = i;
+            const nextClip = clips[i + 1] || null;
+            const isNextContiguous = nextClip && Math.abs((nextClip.startTime ?? cen) - cen) <= 0.05;
+            return {
+                cur: clips[i],
+                nxt: isNextContiguous ? nextClip : null,
+                tIn: time - cs,
+                clipIndex: i
+            };
+        }
+    }
+
+    // Time falls inside an intentional timeline gap -> return null so export draws black frame
     return null;
 }
 
@@ -588,10 +565,12 @@ export async function syncVideosForExportTime(rawTime: number, fps: number = 30,
         const prog = Math.min(1, tIn / curLen);
         
         let wantsTransition = false;
-        let resolvedTransition = cur.transitionToNext || 'cut';
         const globalStyle = timelineState.videoTransitionStyle || 'narrative_guided';
-        if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
-            resolvedTransition = globalStyle;
+        let resolvedTransition = cur.transitionToNext;
+        if (!resolvedTransition) {
+            resolvedTransition = (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed')
+                ? globalStyle
+                : 'cut';
         }
         const tType = resolvedTransition.replace(/_/g, '').toLowerCase();
         wantsTransition = Boolean(nxt && tType !== 'cut');

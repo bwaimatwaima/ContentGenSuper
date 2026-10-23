@@ -58,6 +58,8 @@ export interface CanonicalClipPayload {
   rotate?: 0 | 90 | 180 | 270;
   playbackRate?: number;
   videoStartOffset?: number;
+  sourceIn?: number;
+  sourceOut?: number;
   volume?: number;
   fadeIn?: number;
   fadeOut?: number;
@@ -293,7 +295,9 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       focalPoint: c.focalPoint,
       rotate: c.rotate ?? 0,
       playbackRate: typeof c.playbackRate === 'number' ? c.playbackRate : 1.0,
-      videoStartOffset: typeof c.videoStartOffset === 'number' ? c.videoStartOffset : 0,
+      videoStartOffset: typeof c.videoStartOffset === 'number' ? c.videoStartOffset : (typeof c.sourceIn === 'number' ? c.sourceIn : 0),
+      sourceIn: typeof c.sourceIn === 'number' ? c.sourceIn : (typeof c.videoStartOffset === 'number' ? c.videoStartOffset : 0),
+      sourceOut: typeof c.sourceOut === 'number' ? c.sourceOut : ((typeof c.videoStartOffset === 'number' ? c.videoStartOffset : 0) + duration),
       volume: typeof c.volume === 'number' ? c.volume : 1.0,
       fadeIn: c.fadeIn,
       fadeOut: c.fadeOut,

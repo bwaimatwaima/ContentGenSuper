@@ -191,7 +191,10 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
     const fromFrame = Math.max(0, Math.round(startSec * fps));
     const toFrame = Math.max(fromFrame + 1, Math.round(endSec * fps));
     const baseDuration = Math.max(1, toFrame - fromFrame);
-    const type = idx === clips.length - 1 ? 'cut' : normalizeTransition(clip.transitionToNext);
+    const nextClip = clips[idx + 1];
+    const nextStartSec = nextClip && typeof nextClip.startTime === 'number' ? nextClip.startTime : endSec;
+    const isContiguous = Boolean(nextClip && Math.abs(nextStartSec - endSec) <= 0.05);
+    const type = (idx === clips.length - 1 || !isContiguous) ? 'cut' : normalizeTransition(clip.transitionToNext);
     const d = type === 'cut' ? 0 : Math.min(Math.round((clip.transitionDuration || 0.35) * fps), baseDuration - 1);
     return { clip, idx, startSec, endSec, durSec, fromFrame, toFrame, baseDuration, type, d };
   });

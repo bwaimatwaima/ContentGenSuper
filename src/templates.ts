@@ -2703,11 +2703,12 @@ export const MODAL_TEMPLATES = `
       </div>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 4px;">
-      <button type="button" id="inspector-paste-btn" class="btn small" title="Paste image from clipboard (Ctrl+V)">
-        📋 Paste
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <button type="button" id="inspector-paste-btn" class="btn small" style="display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; font-size: 11px;" title="Paste image from clipboard as this shot's visual (or press Ctrl+V / Cmd+V)">
+        <span style="font-size: 12px;">📋</span>
+        <span>Paste Image</span>
       </button>
-      <button type="button" id="close-inspector-btn" class="icon-btn small" title="Close Inspector" aria-label="Close">
+      <button type="button" id="close-inspector-btn" class="icon-btn small" title="Close Inspector (Esc)" aria-label="Close">
         ✕
       </button>
     </div>
@@ -3241,9 +3242,11 @@ export const MODAL_TEMPLATES = `
   </div>
 
   <!-- Sticky Footer: Save / Apply Changes -->
-  <div style="padding: 8px 12px; border-top: 1px solid var(--border); background: var(--bg-panel); display: flex; justify-content: flex-end;">
-    <button type="button" id="inspector-apply-btn" class="btn primary block">
-      Apply Shot Changes
+  <div style="padding: 10px 14px; border-top: 1px solid var(--border); background: var(--bg-panel-2, #18181b); display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+    <span style="font-size: 11px; color: var(--text-3, #9ca3af);">Edits save to current shot</span>
+    <button type="button" id="inspector-apply-btn" class="btn primary flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-xs cursor-pointer shadow-lg transition active:scale-95" style="background: linear-gradient(135deg, #4f46e5, #6366f1); color: #ffffff; border: 1px solid #818cf8; box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4); min-width: 140px; height: 34px;" title="Save and apply all changes to this shot">
+      <svg class="w-3.5 h-3.5 fill-none stroke-current" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <span>Apply to Shot</span>
     </button>
   </div>
 </aside>

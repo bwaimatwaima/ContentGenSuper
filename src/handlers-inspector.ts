@@ -11,7 +11,7 @@ import { saveVersion } from './handlers-project';
 import { timelineState } from './state-timeline';
 import { updateVideoContext, applyTransitionToClip } from './videoController';
 import { drawVideoFrame, getShotFilterCss } from './videoRenderer';
-import { presetToKeyframes, getTransitionIcon, getTransitionLabel } from './utils';
+import { presetToKeyframes, getTransitionIcon, getTransitionLabel, getAudioContext } from './utils';
 import type { CameraKeyframesConfig } from './types';
 import { openMapStudioModal } from './map-studio';
 import { removeSecondaryMedia } from './memoryManager';
@@ -20,6 +20,93 @@ import { focusTransitionForClip } from './transitions-studio-panel';
 import { isVillainFoilClip } from './constants';
 
 export let activeShotId: string | null = null;
+let inspectorPreviewVoiceEnabled = true;
+let activeInspectorVoiceSource: AudioBufferSourceNode | null = null;
+let activeInspectorVoiceGain: GainNode | null = null;
+
+export function stopInspectorVoicePreview() {
+    if (activeInspectorVoiceSource) {
+        try {
+            activeInspectorVoiceSource.onended = null;
+            activeInspectorVoiceSource.stop();
+            activeInspectorVoiceSource.disconnect();
+        } catch {}
+        activeInspectorVoiceSource = null;
+    }
+    if (activeInspectorVoiceGain) {
+        try { activeInspectorVoiceGain.disconnect(); } catch {}
+        activeInspectorVoiceGain = null;
+    }
+}
+
+export function getShotAudioTiming(shotId: string): { startTime: number; endTime: number; duration: number } | null {
+    const timelineClip = timelineState.clips?.find((c: any) => c.id === shotId);
+    if (timelineClip && typeof timelineClip.startTime === 'number') {
+        const start = timelineClip.startTime;
+        const dur = timelineClip.duration || ((timelineClip.endTime ?? start) - start);
+        return {
+            startTime: start,
+            endTime: timelineClip.endTime ?? (start + dur),
+            duration: Math.max(0.05, dur)
+        };
+    }
+
+    const allShots = getAllStoryboardShots();
+    let cumulative = 0;
+    for (const item of allShots) {
+        const dur = Math.max(0.1, item.shot.duration_seconds || 3.0);
+        if (item.shot.id === shotId) {
+            return {
+                startTime: cumulative,
+                endTime: cumulative + dur,
+                duration: dur
+            };
+        }
+        cumulative += dur;
+    }
+    return null;
+}
+
+export function startInspectorVoicePreview(shotId: string, currentVideoTime: number) {
+    stopInspectorVoicePreview();
+    if (!timelineState.masterAudioBuffer) return;
+
+    const timing = getShotAudioTiming(shotId);
+    if (!timing) return;
+
+    const audioCtx = getAudioContext();
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+    }
+
+    const audioStartTime = timing.startTime + Math.max(0, currentVideoTime);
+    const remainingDuration = Math.max(0.01, timing.endTime - audioStartTime);
+    if (audioStartTime >= timelineState.masterAudioBuffer.duration || remainingDuration <= 0) return;
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = timelineState.masterAudioBuffer;
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = 1.0;
+    source.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    activeInspectorVoiceSource = source;
+    activeInspectorVoiceGain = gain;
+
+    source.onended = () => {
+        if (activeInspectorVoiceSource === source) {
+            activeInspectorVoiceSource = null;
+            activeInspectorVoiceGain = null;
+        }
+    };
+
+    try {
+        source.start(0, audioStartTime, remainingDuration);
+    } catch (err) {
+        console.warn('[Inspector Voice Preview] failed to start:', err);
+    }
+}
 
 export function getFilterLabel(filter: string): string {
     switch (filter) {
@@ -145,6 +232,7 @@ export function getAllStoryboardShots(): FlatShotItem[] {
  * Open Inspector Drawer for a specific shot ID (or first shot if omitted)
  */
 export function openInspectorForShot(shotId?: string) {
+    stopInspectorVoicePreview();
     const allShots = getAllStoryboardShots();
     if (allShots.length === 0) {
         showStatus('No storyboard shots available to inspect. Generate a script first.', true);
@@ -193,9 +281,10 @@ export function openInspectorForShot(shotId?: string) {
         const displaySrc = shot._imageObjectURL || (shot.image_id ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23111827"/%3E%3Ctext x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="%23374151" font-size="10"%3ELoading...%3C/text%3E%3C/svg%3E' : '');
 
         if (videoSrc) {
+            const isClipAudioActive = !!shot.useOriginalAudio;
             dom.inspectorMediaContainer.innerHTML = `
                 <div class="relative w-full h-full group bg-black rounded-lg overflow-hidden flex flex-col justify-end select-none">
-                    <video src="${videoSrc}" class="w-full h-full object-contain bg-black cursor-pointer rounded-lg" loop muted playsinline preload="auto"></video>
+                    <video src="${videoSrc}" class="w-full h-full object-contain bg-black cursor-pointer rounded-lg" loop ${isClipAudioActive ? '' : 'muted'} playsinline preload="auto"></video>
                     
                     <!-- Center Play/Pause indicator overlay -->
                     <div id="inspector-video-center-overlay" class="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-150">
@@ -205,7 +294,7 @@ export function openInspectorForShot(shotId?: string) {
                     </div>
 
                     <!-- Bottom Persistent Controls Toolbar -->
-                    <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/75 to-transparent p-2 flex items-center justify-between gap-1 z-10">
+                    <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/80 to-transparent p-1.5 flex flex-wrap items-center justify-between gap-1 z-10">
                         <div class="flex items-center gap-1">
                             <button type="button" id="inspector-video-play-btn" class="px-2 py-1 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white rounded text-[11px] font-bold transition flex items-center gap-1 cursor-pointer" title="Play / Pause (Click video or button)">
                                 <span id="inspector-video-btn-icon">▶</span>
@@ -218,10 +307,22 @@ export function openInspectorForShot(shotId?: string) {
                                 +0.1s ▶
                             </button>
                         </div>
-                        <div class="flex items-center gap-1 font-mono text-[10px] text-white/90 bg-black/60 px-2 py-0.5 rounded border border-white/10">
-                            <span id="inspector-video-current-time">0.0s</span>
-                            <span class="text-white/40">/</span>
-                            <span id="inspector-video-total-duration">0.0s</span>
+                        <div class="flex items-center gap-1">
+                            <!-- Toggle Video Clip Original Audio -->
+                            <button type="button" id="inspector-video-audio-toggle" class="px-1.5 py-1 ${isClipAudioActive ? 'bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-400/40' : 'bg-white/10 hover:bg-white/20 text-white/70 border-white/10'} rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border" title="${isClipAudioActive ? 'Clip Audio: ON (Click to mute)' : 'Clip Audio: Muted (Click to enable)'}">
+                                <span id="inspector-video-audio-icon">${isClipAudioActive ? '🔊' : '🔇'}</span>
+                                <span id="inspector-video-audio-text">${isClipAudioActive ? 'Clip Audio' : 'Muted'}</span>
+                            </button>
+                            <!-- Toggle Narration Voiceover Preview -->
+                            <button type="button" id="inspector-video-voice-toggle" class="px-1.5 py-1 ${inspectorPreviewVoiceEnabled ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400/40 shadow-sm' : 'bg-white/10 hover:bg-white/20 text-white/70 border-white/10'} rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border" title="${inspectorPreviewVoiceEnabled ? 'Voiceover Preview: ON (Click to turn off)' : 'Voiceover Preview: OFF (Click to turn on)'}">
+                                <span id="inspector-video-voice-icon">🎙️</span>
+                                <span id="inspector-video-voice-text">${inspectorPreviewVoiceEnabled ? 'Voice: ON' : 'Voice: OFF'}</span>
+                            </button>
+                            <div class="flex items-center gap-1 font-mono text-[10px] text-white/90 bg-black/60 px-1.5 py-0.5 rounded border border-white/10 ml-0.5">
+                                <span id="inspector-video-current-time">0.0s</span>
+                                <span class="text-white/40">/</span>
+                                <span id="inspector-video-total-duration">0.0s</span>
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -236,6 +337,17 @@ export function openInspectorForShot(shotId?: string) {
             const stepFwdBtn = dom.inspectorMediaContainer.querySelector('#inspector-video-step-fwd-btn') as HTMLButtonElement;
             const currentTimeEl = dom.inspectorMediaContainer.querySelector('#inspector-video-current-time') as HTMLElement;
             const totalDurationEl = dom.inspectorMediaContainer.querySelector('#inspector-video-total-duration') as HTMLElement;
+            const audioToggleBtn = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-toggle') as HTMLButtonElement;
+            const audioToggleIcon = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-icon') as HTMLElement;
+            const audioToggleText = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-text') as HTMLElement;
+            const voiceToggleBtn = dom.inspectorMediaContainer.querySelector('#inspector-video-voice-toggle') as HTMLButtonElement;
+            const voiceToggleIcon = dom.inspectorMediaContainer.querySelector('#inspector-video-voice-icon') as HTMLElement;
+            const voiceToggleText = dom.inspectorMediaContainer.querySelector('#inspector-video-voice-text') as HTMLElement;
+
+            if (vidEl) {
+                vidEl.muted = !isClipAudioActive;
+                vidEl.volume = Math.min(1.0, Math.max(0, (shot.volume !== undefined ? shot.volume : 1.0)));
+            }
 
             const updatePlayStateUI = (isPlaying: boolean) => {
                 if (btnIcon) btnIcon.textContent = isPlaying ? '⏸' : '▶';
@@ -250,13 +362,47 @@ export function openInspectorForShot(shotId?: string) {
                 }
             };
 
+            const updateClipAudioBtnUI = (active: boolean) => {
+                if (!audioToggleBtn) return;
+                if (active) {
+                    audioToggleBtn.className = 'px-1.5 py-1 bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-400/40 rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                    if (audioToggleIcon) audioToggleIcon.textContent = '🔊';
+                    if (audioToggleText) audioToggleText.textContent = 'Clip Audio';
+                    audioToggleBtn.title = 'Clip Audio: ON (Click to mute)';
+                } else {
+                    audioToggleBtn.className = 'px-1.5 py-1 bg-white/10 hover:bg-white/20 text-white/70 border-white/10 rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                    if (audioToggleIcon) audioToggleIcon.textContent = '🔇';
+                    if (audioToggleText) audioToggleText.textContent = 'Muted';
+                    audioToggleBtn.title = 'Clip Audio: Muted (Click to enable)';
+                }
+            };
+
+            const updateVoiceToggleBtnUI = (active: boolean) => {
+                if (!voiceToggleBtn) return;
+                if (active) {
+                    voiceToggleBtn.className = 'px-1.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400/40 shadow-sm rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                    if (voiceToggleText) voiceToggleText.textContent = 'Voice: ON';
+                    voiceToggleBtn.title = 'Voiceover Preview: ON (Click to turn off)';
+                } else {
+                    voiceToggleBtn.className = 'px-1.5 py-1 bg-white/10 hover:bg-white/20 text-white/70 border-white/10 rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                    if (voiceToggleText) voiceToggleText.textContent = 'Voice: OFF';
+                    voiceToggleBtn.title = 'Voiceover Preview: OFF (Click to turn on)';
+                }
+            };
+
             const togglePlay = () => {
                 if (!vidEl) return;
                 if (vidEl.paused) {
-                    vidEl.play().then(() => updatePlayStateUI(true)).catch(() => {});
+                    vidEl.play().then(() => {
+                        updatePlayStateUI(true);
+                        if (inspectorPreviewVoiceEnabled && !shot.soloAudio && timelineState.masterAudioBuffer) {
+                            startInspectorVoicePreview(shot.id, vidEl.currentTime);
+                        }
+                    }).catch(() => {});
                 } else {
                     vidEl.pause();
                     updatePlayStateUI(false);
+                    stopInspectorVoicePreview();
                 }
             };
 
@@ -264,11 +410,53 @@ export function openInspectorForShot(shotId?: string) {
                 vidEl.addEventListener('click', togglePlay);
                 if (playBtn) playBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePlay(); });
 
+                if (audioToggleBtn) {
+                    audioToggleBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const willBeMuted = !vidEl.muted;
+                        vidEl.muted = willBeMuted;
+                        const active = !willBeMuted;
+                        shot.useOriginalAudio = active;
+                        if (dom.inspectorUseOriginalAudio) {
+                            dom.inspectorUseOriginalAudio.checked = active;
+                            if (dom.inspectorClipAudioControls) {
+                                dom.inspectorClipAudioControls.classList.toggle('hidden', !active);
+                            }
+                        }
+                        if (active) {
+                            vidEl.volume = Math.min(1.0, Math.max(0, parseFloat(dom.inspectorClipVolumeSlider?.value) || (shot.volume !== undefined ? shot.volume : 1.0)));
+                        }
+                        updateClipAudioBtnUI(active);
+                        showStatus(active ? 'Clip audio unmuted for preview' : 'Clip audio muted', false, 1500);
+                    });
+                }
+
+                if (voiceToggleBtn) {
+                    voiceToggleBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        inspectorPreviewVoiceEnabled = !inspectorPreviewVoiceEnabled;
+                        updateVoiceToggleBtnUI(inspectorPreviewVoiceEnabled);
+                        if (!timelineState.masterAudioBuffer && inspectorPreviewVoiceEnabled) {
+                            showStatus('Note: Narration audio not generated yet. Generate speech first to hear voiceover.', true, 3000);
+                        } else {
+                            showStatus(inspectorPreviewVoiceEnabled ? 'Voiceover preview enabled' : 'Voiceover preview muted', false, 1500);
+                        }
+                        if (!vidEl.paused) {
+                            if (inspectorPreviewVoiceEnabled && !shot.soloAudio) {
+                                startInspectorVoicePreview(shot.id, vidEl.currentTime);
+                            } else {
+                                stopInspectorVoicePreview();
+                            }
+                        }
+                    });
+                }
+
                 if (stepBackBtn) {
                     stepBackBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         vidEl.pause();
                         updatePlayStateUI(false);
+                        stopInspectorVoicePreview();
                         vidEl.currentTime = Math.max(0, vidEl.currentTime - 0.1);
                     });
                 }
@@ -278,6 +466,7 @@ export function openInspectorForShot(shotId?: string) {
                         e.stopPropagation();
                         vidEl.pause();
                         updatePlayStateUI(false);
+                        stopInspectorVoicePreview();
                         const dur = vidEl.duration || 60;
                         vidEl.currentTime = Math.min(dur, vidEl.currentTime + 0.1);
                     });
@@ -289,8 +478,24 @@ export function openInspectorForShot(shotId?: string) {
                     }
                 });
 
-                vidEl.addEventListener('play', () => updatePlayStateUI(true));
-                vidEl.addEventListener('pause', () => updatePlayStateUI(false));
+                vidEl.addEventListener('play', () => {
+                    updatePlayStateUI(true);
+                    if (inspectorPreviewVoiceEnabled && !shot.soloAudio && timelineState.masterAudioBuffer) {
+                        startInspectorVoicePreview(shot.id, vidEl.currentTime);
+                    }
+                });
+                vidEl.addEventListener('pause', () => {
+                    updatePlayStateUI(false);
+                    stopInspectorVoicePreview();
+                });
+                vidEl.addEventListener('ended', () => {
+                    stopInspectorVoicePreview();
+                });
+                vidEl.addEventListener('seeked', () => {
+                    if (!vidEl.paused && inspectorPreviewVoiceEnabled && !shot.soloAudio && timelineState.masterAudioBuffer) {
+                        startInspectorVoicePreview(shot.id, vidEl.currentTime);
+                    }
+                });
 
                 const onMetadata = () => {
                     const vidDur = vidEl.duration || 0;
@@ -769,6 +974,7 @@ export function openInspectorForShot(shotId?: string) {
  */
 export function closeInspector() {
     if (!dom.shotInspectorDrawer) return;
+    stopInspectorVoicePreview();
     if (dom.inspectorMediaContainer) {
         const vidEl = dom.inspectorMediaContainer.querySelector('video') as HTMLVideoElement;
         if (vidEl) {
@@ -1444,7 +1650,33 @@ export function initInspectorHandlers() {
     // Original Audio Toggle <-> Clip Audio Controls Visibility
     if (dom.inspectorUseOriginalAudio && dom.inspectorClipAudioControls) {
         dom.inspectorUseOriginalAudio.addEventListener('change', () => {
-            if (dom.inspectorUseOriginalAudio.checked) {
+            const isChecked = dom.inspectorUseOriginalAudio.checked;
+            if (dom.inspectorMediaContainer) {
+                const vidEl = dom.inspectorMediaContainer.querySelector('video') as HTMLVideoElement;
+                if (vidEl) {
+                    vidEl.muted = !isChecked;
+                    if (isChecked) {
+                        vidEl.volume = Math.min(1.0, Math.max(0, parseFloat(dom.inspectorClipVolumeSlider?.value) || 1.0));
+                    }
+                }
+                const audioToggleIcon = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-icon') as HTMLElement;
+                const audioToggleText = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-text') as HTMLElement;
+                const audioToggleBtn = dom.inspectorMediaContainer.querySelector('#inspector-video-audio-toggle') as HTMLButtonElement;
+                if (audioToggleBtn) {
+                    if (isChecked) {
+                        audioToggleBtn.className = 'px-1.5 py-1 bg-emerald-600/80 hover:bg-emerald-600 text-white border-emerald-400/40 rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                        if (audioToggleIcon) audioToggleIcon.textContent = '🔊';
+                        if (audioToggleText) audioToggleText.textContent = 'Clip Audio';
+                        audioToggleBtn.title = 'Clip Audio: ON (Click to mute)';
+                    } else {
+                        audioToggleBtn.className = 'px-1.5 py-1 bg-white/10 hover:bg-white/20 text-white/70 border-white/10 rounded text-[10px] font-medium transition flex items-center gap-1 cursor-pointer border';
+                        if (audioToggleIcon) audioToggleIcon.textContent = '🔇';
+                        if (audioToggleText) audioToggleText.textContent = 'Muted';
+                        audioToggleBtn.title = 'Clip Audio: Muted (Click to enable)';
+                    }
+                }
+            }
+            if (isChecked) {
                 dom.inspectorClipAudioControls.classList.remove('hidden');
                 if (dom.inspectorAudioStackWarning) {
                     if (timelineState.globalWordTimestamps?.length) {
@@ -1474,11 +1706,17 @@ export function initInspectorHandlers() {
         });
     }
 
-    // Clip Volume Slider <-> Label Sync
+    // Clip Volume Slider <-> Label Sync & Preview Video Volume Sync
     if (dom.inspectorClipVolumeSlider && dom.inspectorClipVolumeLabel) {
         dom.inspectorClipVolumeSlider.addEventListener('input', () => {
             const val = parseFloat(dom.inspectorClipVolumeSlider.value) || 0;
             dom.inspectorClipVolumeLabel.textContent = `${Math.round(val * 100)}%`;
+            if (dom.inspectorMediaContainer) {
+                const vidEl = dom.inspectorMediaContainer.querySelector('video') as HTMLVideoElement;
+                if (vidEl && !vidEl.muted) {
+                    vidEl.volume = Math.min(1.0, Math.max(0, val));
+                }
+            }
         });
     }
 
@@ -1902,6 +2140,16 @@ export function initInspectorHandlers() {
             if (clip) {
                 clip.soloAudio = isSolo;
                 clip.muteNarration = isSolo;
+            }
+            if (dom.inspectorMediaContainer) {
+                const vidEl = dom.inspectorMediaContainer.querySelector('video') as HTMLVideoElement;
+                if (vidEl && !vidEl.paused) {
+                    if (isSolo) {
+                        stopInspectorVoicePreview();
+                    } else if (inspectorPreviewVoiceEnabled && timelineState.masterAudioBuffer) {
+                        startInspectorVoicePreview(activeShotId, vidEl.currentTime);
+                    }
+                }
             }
             saveVersion(false);
             if (dom.resultsContainer) renderResults(state.currentScenes);

@@ -290,6 +290,12 @@ export function buildTransitionsStudioPanel(): HTMLElement {
   return panel;
 }
 
+function getMainTrackClips() {
+  return (timelineState.clips || [])
+    .filter(c => c && c.displayMode !== 'pip_overlay')
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+}
+
 /**
  * Updates the Target Cut dropdown based on current timeline clips
  */
@@ -298,7 +304,7 @@ function setupTargetSelector(panel: HTMLElement) {
   if (!select) return;
 
   const updateOptions = () => {
-    const clips = timelineState.clips || [];
+    const clips = getMainTrackClips();
     const prevVal = currentTargetClipId;
     select.innerHTML = '';
 
@@ -357,7 +363,7 @@ function updateTargetHint(panel: HTMLElement) {
   const hint = panel.querySelector<HTMLElement>('#vs-trans-target-hint');
   if (!hint) return;
 
-  const clips = timelineState.clips || [];
+  const clips = getMainTrackClips();
   if (!clips.length || clips.length < 2) {
     hint.textContent = 'Add at least 2 shots to configure cut transitions';
     hint.style.color = '#9ca3af';
@@ -550,7 +556,7 @@ function renderTransitionCards(panel: HTMLElement) {
  * Applies selected transition to either the single targeted clip or all clips
  */
 function handleApplyTransition(transId: string, panel: HTMLElement) {
-  const clips = timelineState.clips || [];
+  const clips = getMainTrackClips();
   if (!clips.length) {
     ui.showStatus('Add shots to the timeline first before applying transitions', true, 2500);
     return;
@@ -577,7 +583,7 @@ function handleApplyTransition(transId: string, panel: HTMLElement) {
  * Highlights which transition card is currently active
  */
 function highlightActiveTransitionCards(panel: HTMLElement) {
-  const clips = timelineState.clips || [];
+  const clips = getMainTrackClips();
   let activeTrans = 'cut';
 
   if (currentTargetClipId === 'all') {

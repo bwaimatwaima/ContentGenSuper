@@ -284,7 +284,9 @@ class TimelineState {
                 for (let i = 0; i < last.clips.length; i++) {
                     if (last.clips[i].id !== snapshot.clips[i].id ||
                         last.clips[i].startTime !== snapshot.clips[i].startTime ||
-                        last.clips[i].endTime !== snapshot.clips[i].endTime) {
+                        last.clips[i].endTime !== snapshot.clips[i].endTime ||
+                        last.clips[i].videoStartOffset !== snapshot.clips[i].videoStartOffset ||
+                        last.clips[i].transitionToNext !== snapshot.clips[i].transitionToNext) {
                         changed = true;
                         break;
                     }

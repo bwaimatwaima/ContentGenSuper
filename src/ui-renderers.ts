@@ -1493,9 +1493,11 @@ export function renderBrollEditor(
           trackContainer.addEventListener("click", handleTimelineClick);
           trackContainer.addEventListener("mousedown", handleTimelineMouseDown);
           trackContainer.addEventListener("dragover", (e) => {
-            import("./videoController").then(m => m.handleTimelineDragOver(e));
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
           });
           trackContainer.addEventListener("drop", (e) => {
+            e.preventDefault();
             import("./videoController").then(m => m.handleTimelineDrop(e));
           });
         }

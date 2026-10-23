@@ -46,6 +46,7 @@ let draggedClipId: string | null = null;
 let clipDragStartX = 0;
 let draggedClipOriginalStart = 0;
 let draggedClipDuration = 0;
+let draggedClipOriginalOffset = 0;
 
 const narrationIndex = new ActiveClipIndex();
 let lastLoopTimestamp = 0;
@@ -487,6 +488,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     if (graphicId) {
       const ev = (timelineState.graphics || []).find(g => g.id === graphicId);
       if (ev) {
+        timelineState.saveSnapshot();
         activeOverlayId = graphicId;
         timelineState.setSelectedGraphicId(graphicId);
         overlayDragStartX = e.clientX;
@@ -550,6 +552,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
   if (target.classList.contains('resize-handle')) {
     const clipId = getClipIdFromEventTarget(target);
     if (!clipId || !videoRenderContext) return;
+    timelineState.saveSnapshot();
 
     resizedClipId = clipId;
     isResizingClip = true;
@@ -581,11 +584,15 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     const clip = findClipById(clipId);
     if (!clip) return;
 
+    // Save pre-drag state BEFORE any mousemove mutation occurs
+    timelineState.saveSnapshot();
+
     draggedClipId = clipId;
     isDraggingClip = true;
     clipDragStartX = e.clientX;
     draggedClipOriginalStart = clip.startTime ?? 0;
     draggedClipDuration = clip.duration || ((clip.endTime ?? 0) - draggedClipOriginalStart);
+    draggedClipOriginalOffset = clip.videoStartOffset || 0;
     timelineState.setSelectedClipId(clipId);
 
     cachedClipElements.clear();
@@ -595,7 +602,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     });
 
     (target.closest('.timeline-clip') as HTMLElement)?.classList.add('dragging');
-    document.body.style.cursor = 'grabbing';
+    document.body.style.cursor = timelineState.editMode === 'slip' ? 'ew-resize' : 'grabbing';
     document.addEventListener('mousemove', onTimelineMouseMove);
     document.addEventListener('mouseup', handleTimelineMouseUp);
   }
@@ -686,24 +693,37 @@ function handleTimelineMouseMove(e: MouseEvent) {
       const pps = getPixelsPerSecond();
       const deltaSec = deltaX / pps;
 
-      let newStart = Math.max(0, draggedClipOriginalStart + deltaSec);
-      if (timelineState.snappingEnabled) {
-        const snapPoints = (cachedDragSnapPoints || []).filter(
-          p => Math.abs(p - clip.startTime) > 0.001 && Math.abs(p - clip.endTime) > 0.001
-        );
-        const snappedStart = getSnappedTime(newStart, snapPoints);
-        const snappedEnd = getSnappedTime(newStart + draggedClipDuration, snapPoints);
-        if (Math.abs(snappedStart - newStart) <= Math.abs(snappedEnd - (newStart + draggedClipDuration))) {
-          newStart = snappedStart;
-        } else {
-          newStart = Math.max(0, snappedEnd - draggedClipDuration);
+      if (timelineState.editMode === 'slip' && clip.displayMode !== 'pip_overlay') {
+        // Slip mode on body drag: keep timeline startTime/endTime fixed, shift sourceIn (videoStartOffset)
+        const maxMediaDur = clip.videoElement?.duration;
+        let nextOffset = Math.max(0, draggedClipOriginalOffset - deltaSec);
+        if (isNum(maxMediaDur) && maxMediaDur > draggedClipDuration) {
+          nextOffset = Math.min(nextOffset, maxMediaDur - draggedClipDuration);
         }
-      }
+        clip.videoStartOffset = nextOffset;
+        clip.sourceIn = nextOffset;
+        clip.sourceOut = nextOffset + draggedClipDuration;
+        timelineState.bumpClipsVersion();
+      } else {
+        let newStart = Math.max(0, draggedClipOriginalStart + deltaSec);
+        if (timelineState.snappingEnabled) {
+          const snapPoints = (cachedDragSnapPoints || []).filter(
+            p => Math.abs(p - clip.startTime) > 0.001 && Math.abs(p - clip.endTime) > 0.001
+          );
+          const snappedStart = getSnappedTime(newStart, snapPoints);
+          const snappedEnd = getSnappedTime(newStart + draggedClipDuration, snapPoints);
+          if (Math.abs(snappedStart - newStart) <= Math.abs(snappedEnd - (newStart + draggedClipDuration))) {
+            newStart = snappedStart;
+          } else {
+            newStart = Math.max(0, snappedEnd - draggedClipDuration);
+          }
+        }
 
-      clip.startTime = newStart;
-      clip.endTime = newStart + draggedClipDuration;
-      timelineState.bumpClipsVersion();
-      updateClipDOM(clip.id, clip.startTime, clip.endTime);
+        clip.startTime = newStart;
+        clip.endTime = newStart + draggedClipDuration;
+        timelineState.bumpClipsVersion();
+        updateClipDOM(clip.id, clip.startTime, clip.endTime);
+      }
 
       const now = performance.now();
       if (now - lastDrawTime >= DRAW_THROTTLE && videoRenderContext) {
@@ -915,21 +935,33 @@ function handleTimelineMouseUp() {
   if (isDraggingClip && draggedClipId) {
     dom.timelineClipsContainer.querySelector('.dragging')?.classList.remove('dragging');
     const movedClip = findClipById(draggedClipId);
-    const didMove = movedClip && hasTimelineDragged && Math.abs((movedClip.startTime ?? 0) - draggedClipOriginalStart) > 0.01;
+    const targetStart = movedClip ? (movedClip.startTime ?? 0) : draggedClipOriginalStart;
+    const didMove = movedClip && hasTimelineDragged && (
+      timelineState.editMode === 'slip'
+        ? Math.abs((movedClip.videoStartOffset ?? 0) - draggedClipOriginalOffset) > 0.005
+        : Math.abs(targetStart - draggedClipOriginalStart) > 0.01
+    );
     isDraggingClip = false;
     draggedClipId = null;
 
     if (didMove && movedClip) {
-      if (movedClip.displayMode === 'pip_overlay') {
-        timelineState.saveSnapshot();
+      if (timelineState.editMode === 'slip' || movedClip.displayMode === 'pip_overlay') {
         timelineState.setClips([...timelineState.clips], false);
+        refreshPerClipWordTimestamps();
         updateVideoContext();
       } else {
-        const policy = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite';
-        placeClipOnTimeline({ ...movedClip }, movedClip.startTime, policy);
+        moveExistingClip(
+          movedClip.id,
+          draggedClipOriginalStart,
+          targetStart,
+          timelineState.editMode === 'ripple' ? 'ripple' : 'lift'
+        );
       }
     }
   }
+
+  const finishedResizeClipId = resizedClipId;
+  const finishedResizeEdge = resizeEdge;
   isResizingClip = false;
   resizedClipId = null;
   resizeEdge = null;
@@ -944,6 +976,29 @@ function handleTimelineMouseUp() {
     if (timelineState.mode === 'audio_locked') {
       resyncTimeline({ notify: false, reason: 'mouse-up' });
     } else {
+      // If user ripple-trimmed a clip via mouse handle with Linked Audio ON, splice the removed audio range
+      if (
+        timelineState.editMode === 'ripple' &&
+        timelineState.linkedAudioEdit &&
+        timelineState.masterAudioBuffer &&
+        finishedResizeClipId
+      ) {
+        const sortedBefore = getSortedTimeline();
+        const rIdx = sortedBefore.findIndex(c => c.id === finishedResizeClipId);
+        const curClip = findClipById(finishedResizeClipId);
+        if (rIdx !== -1 && curClip) {
+          const oldStart = originalStartTimes[rIdx];
+          const oldEnd = originalEndTimes[rIdx];
+          const oldDur = oldEnd - oldStart;
+          const newDur = curClip.duration;
+          const trimmedSec = oldDur - newDur;
+          if (trimmedSec >= 0.05) {
+            const cutStart = finishedResizeEdge === 'left' ? oldStart : oldEnd - trimmedSec;
+            const cutEnd = finishedResizeEdge === 'left' ? oldStart + trimmedSec : oldEnd;
+            rippleCutMasterAudio(cutStart, cutEnd);
+          }
+        }
+      }
       refreshPerClipWordTimestamps();
     }
     updateVideoContext();
@@ -2419,9 +2474,9 @@ export function handleSplitClip() {
         const newSplits = [...splits, time].sort((a, b) => a - b);
         timelineState.setAudioSplits(newSplits);
         
-        // Select the new segment created after the split
-        const newIndex = newSplits.findIndex(s => s === time);
-        timelineState.setSelectedAudioSplitIndex(newIndex);
+        // Select the new segment immediately after the split point
+        const splitPos = newSplits.findIndex(s => s === time);
+        timelineState.setSelectedAudioSplitIndex(splitPos >= 0 ? splitPos + 1 : 0);
         ui.renderTimelineEditor();
         ui.showStatus('Audio split at playhead.', false, 1500);
         return;
@@ -2458,16 +2513,22 @@ export function handleSplitClip() {
     timelineState.saveSnapshot();
     timelineState.setSelectedClipId(null);
     const origEnd = isNum(clip.endTime) ? clip.endTime : clipStart + clip.duration;
+    const originalTransition = clip.transitionToNext || 'cut';
     const newClip2 = { 
       ...clip, 
       startTime: time, 
       endTime: origEnd,
       duration: origEnd - time, 
       id: (clip.id || `${clipIndex}`) + '_b',
-      videoStartOffset: (clip.videoStartOffset || 0) + splitPoint
+      videoStartOffset: (clip.videoStartOffset || 0) + splitPoint,
+      sourceIn: (clip.videoStartOffset || 0) + splitPoint,
+      sourceOut: (clip.videoStartOffset || 0) + splitPoint + (origEnd - time),
+      transitionToNext: originalTransition
     };
     clip.endTime = time;
     clip.duration = splitPoint;
+    clip.sourceOut = (clip.videoStartOffset || 0) + splitPoint;
+    clip.transitionToNext = 'cut';
     clip.id = (clip.id || `${clipIndex}`) + '_a';
     const newClips = [...timelineState.clips];
     newClips.splice(clipIndex + 1, 0, newClip2);
@@ -2891,7 +2952,11 @@ export function rippleCutMasterAudio(removeStartSec: number, removeEndSec: numbe
         timelineState.setGlobalWordTimestamps(updated);
     }
 
-    resyncTimeline({ notify: false, reason: 'rippleCutMasterAudio' });
+    if (timelineState.mode === 'audio_locked') {
+        resyncTimeline({ notify: false, reason: 'rippleCutMasterAudio' });
+    } else {
+        refreshPerClipWordTimestamps();
+    }
     return removed;
 }
 
@@ -3026,9 +3091,12 @@ export function handleSlipClip(clipId: string, deltaOffsetSeconds: number) {
 export function placeClipOnTimeline(
   incomingClip: Partial<TimelineClip>,
   targetTime: number,
-  policy: 'insert' | 'overwrite' = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite'
+  policy: 'insert' | 'overwrite' = timelineState.editMode === 'ripple' ? 'insert' : 'overwrite',
+  options: { saveHistory?: boolean } = {}
 ) {
-  timelineState.saveSnapshot();
+  if (options.saveHistory !== false) {
+    timelineState.saveSnapshot();
+  }
   const clipDur = Math.max(0.1, Number(incomingClip.duration) || 3.5);
   const start = Math.max(0, targetTime);
   const end = start + clipDur;
@@ -3063,9 +3131,10 @@ export function placeClipOnTimeline(
         c.endTime = ce + clipDur;
         nextMain.push(c);
       } else {
-        // Clip straddles insert point -> split into left and right around inserted clip
+        // Clip straddles insert point -> split into left ('cut') and right (retains transitionToNext)
         const leftDur = start - cs;
         const rightDur = ce - start;
+        const origTransition = c.transitionToNext || 'cut';
         if (leftDur >= 0.05) {
           nextMain.push({
             ...c,
@@ -3074,6 +3143,7 @@ export function placeClipOnTimeline(
             endTime: start,
             duration: leftDur,
             sourceOut: (c.videoStartOffset || 0) + leftDur,
+            transitionToNext: 'cut',
           });
         }
         if (rightDur >= 0.05) {
@@ -3087,6 +3157,7 @@ export function placeClipOnTimeline(
             videoStartOffset: rightOffset,
             sourceIn: rightOffset,
             sourceOut: rightOffset + rightDur,
+            transitionToNext: origTransition,
           });
         }
       }
@@ -3099,15 +3170,13 @@ export function placeClipOnTimeline(
       const ce = c.endTime ?? (cs + c.duration);
 
       if (ce <= start + 0.001 || cs >= end - 0.001) {
-        // No overlap
         nextMain.push(c);
       } else if (cs >= start - 0.001 && ce <= end + 0.001) {
-        // Completely covered -> dropped
         continue;
       } else if (cs < start && ce > end) {
-        // Existing clip completely encloses the new clip -> split into before and after
         const leftDur = start - cs;
         const rightDur = ce - end;
+        const origTransition = c.transitionToNext || 'cut';
         if (leftDur >= 0.05) {
           nextMain.push({
             ...c,
@@ -3116,6 +3185,7 @@ export function placeClipOnTimeline(
             endTime: start,
             duration: leftDur,
             sourceOut: (c.videoStartOffset || 0) + leftDur,
+            transitionToNext: 'cut',
           });
         }
         if (rightDur >= 0.05) {
@@ -3129,19 +3199,19 @@ export function placeClipOnTimeline(
             videoStartOffset: rightOffset,
             sourceIn: rightOffset,
             sourceOut: rightOffset + rightDur,
+            transitionToNext: origTransition,
           });
         }
       } else if (cs < start && ce > start) {
-        // Overlaps right tail of existing clip -> trim its end
         const newDur = start - cs;
         if (newDur >= 0.05) {
           c.endTime = start;
           c.duration = newDur;
           c.sourceOut = (c.videoStartOffset || 0) + newDur;
+          c.transitionToNext = 'cut';
           nextMain.push(c);
         }
       } else if (cs < end && ce > end) {
-        // Overlaps left head of existing clip -> trim its start
         const trimHead = end - cs;
         const newDur = ce - end;
         if (newDur >= 0.05) {
@@ -3164,6 +3234,59 @@ export function placeClipOnTimeline(
   updateVideoContext();
   if (!state.isVideoPlaying && videoRenderContext) {
     drawVideoFrame(state.videoPauseTime);
+  }
+}
+
+/**
+ * Dedicated move operation for rearranging an existing main-track clip:
+ * - In 'ripple' mode: extracts the clip, closes the old gap by shifting clips after originalStart left,
+ *   adjusts targetTime if moving forward past the closed gap, and inserts at the destination.
+ * - In 'lift' mode: extracts the clip (leaving its old gap intact) and overwrites at targetTime.
+ */
+export function moveExistingClip(
+  clipId: string,
+  originalStart: number,
+  rawTargetStart: number,
+  mode: 'ripple' | 'lift' = timelineState.editMode === 'ripple' ? 'ripple' : 'lift'
+) {
+  const moving = findClipById(clipId);
+  if (!moving) return;
+
+  const clipDur = Math.max(0.05, moving.duration || ((moving.endTime ?? 0) - originalStart));
+  const originalEnd = originalStart + clipDur;
+
+  // Restore originalStart on the clip before sorting remaining clips
+  moving.startTime = originalStart;
+  moving.endTime = originalEnd;
+
+  const otherMain = getSortedTimeline().filter(c => c.displayMode !== 'pip_overlay' && c.id !== clipId);
+  const pipClips = timelineState.clips.filter(c => c.displayMode === 'pip_overlay' && c.id !== clipId);
+
+  let effectiveTarget = Math.max(0, rawTargetStart);
+
+  if (mode === 'ripple') {
+    // 1. Close the gap at the clip's original position
+    for (const c of otherMain) {
+      if ((c.startTime ?? 0) >= originalEnd - 0.001) {
+        c.startTime = Math.max(0, c.startTime - clipDur);
+        c.endTime = Math.max(c.startTime + 0.05, c.endTime - clipDur);
+      }
+    }
+    // If dragging to the right, account for the upstream shift caused by extracting the clip
+    if (effectiveTarget > originalStart) {
+      effectiveTarget = Math.max(originalStart, effectiveTarget - clipDur);
+    }
+    // Snap to nearest clip boundary if close so rearranging shots feels clean
+    for (const c of otherMain) {
+      if (Math.abs(effectiveTarget - c.startTime) < 0.08) { effectiveTarget = c.startTime; break; }
+      if (Math.abs(effectiveTarget - c.endTime) < 0.08) { effectiveTarget = c.endTime; break; }
+    }
+    timelineState.setClips([...otherMain, ...pipClips], false);
+    placeClipOnTimeline({ ...moving }, effectiveTarget, 'insert', { saveHistory: false });
+  } else {
+    // Lift + Overwrite: leave the source gap open and overwrite at destination
+    timelineState.setClips([...otherMain, ...pipClips], false);
+    placeClipOnTimeline({ ...moving }, effectiveTarget, 'overwrite', { saveHistory: false });
   }
 }
 
@@ -3262,6 +3385,33 @@ export async function handleTimelineDrop(e: DragEvent) {
           }, dropTime, policy);
           ui.showStatus(`🎬 Placed shot at ${dropTime.toFixed(2)}s (${policy})`, false, 2500);
         }
+      } else if (parsed.assetId || parsed.videoUrl || parsed.imageUrl) {
+        let vidUrl = parsed.videoUrl;
+        let imgUrl = parsed.imageUrl;
+        if (parsed.assetId && !vidUrl && !imgUrl) {
+          const blob = await assetStorage.getAsset(parsed.assetId);
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            if (blob.type.startsWith('video/')) vidUrl = url;
+            else imgUrl = url;
+          }
+        }
+        const videoEl = vidUrl ? await utils.loadVideoElement(vidUrl) : undefined;
+        const imgEl = imgUrl ? await utils.loadImageOrThrow(imgUrl) : undefined;
+        const dur = videoEl && Number.isFinite(videoEl.duration) && videoEl.duration > 0 ? videoEl.duration : 4.0;
+        placeClipOnTimeline({
+          id: `asset_${Date.now()}`,
+          image: imgEl,
+          videoElement: videoEl,
+          _imageObjectURL: imgUrl,
+          _videoObjectURL: vidUrl,
+          image_id: imgEl ? parsed.assetId : undefined,
+          video_id: videoEl ? parsed.assetId : undefined,
+          duration: dur,
+          videoStartOffset: 0,
+          text: parsed.title || parsed.name || 'Library Asset',
+        }, dropTime, policy);
+        ui.showStatus(`🎬 Placed library asset at ${dropTime.toFixed(2)}s (${policy})`, false, 2500);
       }
     } catch {}
   }

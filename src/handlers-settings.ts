@@ -3455,6 +3455,20 @@ export function initSmartCaptionListeners() {
         });
     }
 
+    if (dom.videoTransitionStyleSelect) {
+        dom.videoTransitionStyleSelect.addEventListener('change', async () => {
+            const { handleVideoTransitionStyleChange } = await import('./videoController');
+            handleVideoTransitionStyleChange();
+        });
+    }
+
+    if (dom.videoTransitionSpeedSelect) {
+        dom.videoTransitionSpeedSelect.addEventListener('change', async () => {
+            const { handleVideoTransitionSpeedChange } = await import('./videoController');
+            handleVideoTransitionSpeedChange();
+        });
+    }
+
     updateSmartCaptionStatusUI();
 }
 

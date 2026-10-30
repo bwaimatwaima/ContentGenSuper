@@ -14,6 +14,7 @@ import * as utils from './utils';
 import * as constants from './constants';
 import { drawVideoFrame, videoRenderContext } from './videoRenderer';
 import { updateVideoContext } from './videoContextBridge';
+import { saveVersion } from './handlers-project';
 import type { GraphicEvent } from './graphics-engine';
 import type { ProceduralSfxType } from './audioSynthesizer';
 import { HYPERFRAME_PRESETS } from './hyperframes-engine';
@@ -261,18 +262,35 @@ function normalizeTransitionName(rawInput?: string): string {
 }
 
 function applyTransitions(transitions: { id: string; transition: string }[]) {
-  let invalidCount = 0;
+  timelineState.saveSnapshot();
 
-  const newClips = timelineState.clips.map((c, idx) => {
-    // The final clip in the timeline never transitions into a non-existent next clip
-    if (idx === timelineState.clips.length - 1) {
+  let invalidCount = 0;
+  const transitionById = new Map<string, string>();
+  for (const t of transitions) {
+    if (t && t.id) {
+      transitionById.set(String(t.id), t.transition);
+    }
+  }
+
+  // Filter only main-track clips so transitions only bridge sequential main video shots
+  const mainTrackClips = timelineState.clips.filter((c) => c && c.displayMode !== 'pip_overlay');
+  const lastMainClipId = mainTrackClips.length > 0 ? String(mainTrackClips[mainTrackClips.length - 1].id) : null;
+
+  const newClips = timelineState.clips.map((c) => {
+    // PiP overlays composite independently and never transition to next clip
+    if (c.displayMode === 'pip_overlay') {
       return { ...c, transitionToNext: 'cut' };
     }
-    const transitionUpdate = transitions.find((t) => t.id === c.id || String(t.id) === String(c.id)) || transitions[idx];
-    if (!transitionUpdate) return c;
+    // The final main-track clip never transitions into a non-existent next clip
+    if (lastMainClipId && String(c.id) === lastMainClipId) {
+      return { ...c, transitionToNext: 'cut' };
+    }
 
-    const normalized = normalizeTransitionName(transitionUpdate.transition);
-    if (normalized === 'cut' && transitionUpdate.transition && transitionUpdate.transition.toLowerCase() !== 'cut') {
+    const tVal = transitionById.get(String(c.id));
+    if (!tVal) return c;
+
+    const normalized = normalizeTransitionName(tVal);
+    if (normalized === 'cut' && tVal && tVal.toLowerCase() !== 'cut') {
       invalidCount++;
     }
     return { ...c, transitionToNext: normalized };
@@ -280,14 +298,14 @@ function applyTransitions(transitions: { id: string; transition: string }[]) {
 
   timelineState.setClips(newClips);
 
-  // Sync to currentScenes using a flat counter so multi-scene projects don't reuse index 0
+  // Sync to currentScenes using O(1) map
+  const clipById = new Map<string, any>(newClips.map((c) => [String(c.id), c]));
   if (state.currentScenes && Array.isArray(state.currentScenes)) {
     let flatIdx = 0;
     state.currentScenes.forEach((s: any) => {
       const lines = s.lines || [s];
       lines.forEach((l: any) => {
-        const matchingClip =
-          newClips.find((c) => c.id === l.id || String(c.id) === String(l.id)) || newClips[flatIdx];
+        const matchingClip = clipById.get(String(l.id)) || (flatIdx < newClips.length ? newClips[flatIdx] : null);
         flatIdx++;
         if (matchingClip?.transitionToNext) {
           l.transitionToNext = matchingClip.transitionToNext;
@@ -300,6 +318,8 @@ function applyTransitions(transitions: { id: string; transition: string }[]) {
   try {
     updateVideoContext();
   } catch {}
+
+  saveVersion(false);
 
   if (invalidCount > 0) ui.showStatus(`Applied transitions (${invalidCount} invalid, set to cut)`, false, 3000);
   if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
@@ -728,37 +748,29 @@ export async function handleAnalyzeTransitions(isSilent = false) {
     return;
   }
 
-  if (timelineState.clips.length < 2) {
-    if (!isSilent) ui.showStatus('At least 2 shots are required for transition analysis.', false, 3000);
+  const mainTrackClips = timelineState.clips
+    .filter((c) => c && c.displayMode !== 'pip_overlay')
+    .sort((a, b) => (a.startTime - b.startTime));
+
+  if (mainTrackClips.length < 2) {
+    if (!isSilent) ui.showStatus('At least 2 main-track shots are required for transition analysis.', false, 3000);
     return;
   }
 
-  const sortedClips = timelineState.clips
-    .map((c, idx) => ({ c, idx }))
-    .sort((a, b) => (a.c.startTime - b.c.startTime) || (a.idx - b.idx))
-    .map((x) => x.c);
-  timelineState.setClips(sortedClips, false);
-
-  const timelineContext = timelineState.clips.map((c) => ({ id: c.id, text: (c.text || c.text_reference || '').slice(0, 100), duration: c.duration }));
-  const cacheKey = getCacheKey('transitions_v3', { count: timelineState.clips.length, ctx: timelineContext });
+  const timelineContext = mainTrackClips.map((c) => ({ id: c.id, text: (c.text || c.text_reference || '').slice(0, 100), duration: c.duration }));
+  const cacheKey = getCacheKey('transitions_v4', { count: mainTrackClips.length, ctx: timelineContext });
   const cached = getCache(cacheKey);
   const btn = dom.analyzeTransitionsBtn;
 
   const hasCachedCinematic = cached && Array.isArray(cached.transitions) && cached.transitions.some((t: any) => t.transition && t.transition !== 'cut' && t.transition !== 'none');
-  if (cached && Array.isArray(cached.transitions) && cached.transitions.length >= timelineState.clips.length - 1 && hasCachedCinematic) {
+  if (cached && Array.isArray(cached.transitions) && cached.transitions.length >= mainTrackClips.length - 1 && hasCachedCinematic) {
+    applyTransitions(cached.transitions);
     if (!isSilent && btn) {
-      btn.disabled = true;
       btn.classList.remove('bg-gray-700', 'hover:bg-gray-600', 'bg-zinc-800/90', 'hover:bg-zinc-700');
       btn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
-      btn.innerHTML = '✅ Analyzed';
-      ui.showStatus('Analysis complete! Applying transitions...', false, 2500);
-      // Wait to visibly show analyzed on button before applying transitions
-      await new Promise((r) => setTimeout(r, 700));
-    }
-    applyTransitions(cached.transitions);
-    if (!isSilent) {
+      btn.innerHTML = '✅ Applied';
+      btn.disabled = false;
       ui.showStatus('Loaded transitions from cache!', false, 3000);
-      if (btn) btn.disabled = false;
     }
     return;
   }
@@ -769,14 +781,14 @@ export async function handleAnalyzeTransitions(isSilent = false) {
   }
 
   try {
-    const shotsWithContext: ShotContext[] = timelineState.clips.slice(0, -1).map((shot, idx) => ({
+    const shotsWithContext: ShotContext[] = mainTrackClips.slice(0, -1).map((shot, idx) => ({
       id: shot.id,
       index: idx,
       text: (shot.text || shot.text_reference || shot.line_text || '').slice(0, 120),
       duration: Number((shot.duration || 2).toFixed(1)),
       cameraMovement: shot.cameraMovement || 'static',
-      prevText: idx > 0 ? (timelineState.clips[idx - 1].text || '').slice(0, 50) ?? null : null,
-      nextText: idx < timelineState.clips.length - 1 ? (timelineState.clips[idx + 1].text || '').slice(0, 50) ?? null : null,
+      prevText: idx > 0 ? (mainTrackClips[idx - 1].text || '').slice(0, 50) ?? null : null,
+      nextText: idx < mainTrackClips.length - 1 ? (mainTrackClips[idx + 1].text || '').slice(0, 50) ?? null : null,
     }));
 
     // For very large projects (> 60 shots), batching transitions prevents prompt token overflow
@@ -821,49 +833,62 @@ export async function handleAnalyzeTransitions(isSilent = false) {
 
         const result: TransitionsResponse = utils.sanitizeAndParseJson(response.text!);
         const batchRes = result.transitions || [];
-        
-        // Ensure every shot in batch receives an entry with robust ID and index matching
-        for (let bIdx = 0; bIdx < batchShots.length; bIdx++) {
-          const s = batchShots[bIdx];
-          const found = batchRes.find(t =>
-            t.id === s.id ||
-            String(t.id) === String(s.id) ||
-            String(t.id).toLowerCase() === String(s.id).toLowerCase() ||
-            t.id === `shot_${s.index}` ||
-            t.id === `shot-${s.index}` ||
-            t.id === `shot_${s.index + 1}` ||
-            t.id === `shot-${s.index + 1}` ||
-            String(t.id) === String(s.index) ||
-            String(t.id) === String(s.index + 1)
-          ) || batchRes[bIdx];
+        const resultById = new Map<string, string>();
 
-          const rawTrans = found?.transition ? String(found.transition).toLowerCase().trim().replace(/[\s-]+/g, '_') : '';
-          allTransitions.push({
-            id: s.id,
-            transition: (rawTrans && VALID_TRANSITIONS.has(rawTrans)) ? rawTrans : 'cut'
-          });
+        for (const item of batchRes) {
+          if (!item || !item.id) continue;
+          const raw = String(item.transition || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+          if (VALID_TRANSITIONS.has(raw)) {
+            resultById.set(String(item.id), raw);
+          }
+        }
+
+        const missingShots: ShotContext[] = [];
+        for (const s of batchShots) {
+          const directMatch = resultById.get(String(s.id)) ||
+                              resultById.get(`shot_${s.index}`) ||
+                              resultById.get(`shot-${s.index}`) ||
+                              resultById.get(`shot_${s.index + 1}`) ||
+                              resultById.get(`shot-${s.index + 1}`) ||
+                              resultById.get(String(s.index)) ||
+                              resultById.get(String(s.index + 1));
+          if (directMatch) {
+            allTransitions.push({ id: s.id, transition: directMatch });
+          } else {
+            missingShots.push(s);
+          }
+        }
+
+        // If the AI omitted or had invalid transitions for any shots in this batch,
+        // compute algorithmic transitions specifically for those missing shots instead of hard cuts!
+        if (missingShots.length > 0) {
+          const algo = generateAlgorithmicTransitions(missingShots.map(s => ({ ...s, duration: s.duration })));
+          const algoMap = new Map<string, string>(algo.map(a => [String(a.id), a.transition]));
+          for (const s of missingShots) {
+            const chosen = algoMap.get(String(s.id)) || 'cross_dissolve';
+            allTransitions.push({ id: s.id, transition: chosen !== 'cut' ? chosen : 'cross_dissolve' });
+          }
         }
       } catch (batchErr) {
         console.warn(`[Transitions] Batch ${Math.floor(i / BATCH_SIZE) + 1} fallback to algorithmic transitions:`, batchErr);
         const algo = generateAlgorithmicTransitions(batchShots.map(s => ({ ...s, duration: s.duration })));
-        for (let bIdx = 0; bIdx < batchShots.length; bIdx++) {
-          const s = batchShots[bIdx];
-          const found = algo.find(t => t.id === s.id) || algo[bIdx];
-          allTransitions.push({ id: s.id, transition: found?.transition || 'cross_dissolve' });
+        const algoMap = new Map<string, string>(algo.map(a => [String(a.id), a.transition]));
+        for (const s of batchShots) {
+          allTransitions.push({ id: s.id, transition: algoMap.get(String(s.id)) || 'cross_dissolve' });
         }
       }
     }
 
     // Guarantee that transitions are truly cinematic and not all reverted to hard cuts
     const hasCinematicTransitions = allTransitions.some(t => t.transition && t.transition !== 'cut');
-    if (!hasCinematicTransitions && timelineState.clips.length > 1) {
+    if (!hasCinematicTransitions && mainTrackClips.length > 1) {
       console.warn('[Transitions] AI returned only cuts or unmatched IDs; applying algorithmic cinematic transitions');
-      const algoTransitions = generateAlgorithmicTransitions(timelineState.clips);
-      for (let i = 0; i < allTransitions.length; i++) {
-        const t = allTransitions[i];
-        const algo = algoTransitions.find(a => a.id === t.id) || algoTransitions[i];
-        if (algo && algo.transition && algo.transition !== 'cut') {
-          t.transition = algo.transition;
+      const algoTransitions = generateAlgorithmicTransitions(mainTrackClips);
+      const algoMap = new Map<string, string>(algoTransitions.map(a => [String(a.id), a.transition]));
+      for (const t of allTransitions) {
+        const found = algoMap.get(String(t.id));
+        if (found && found !== 'cut') {
+          t.transition = found;
         }
       }
       if (!allTransitions.some(t => t.transition && t.transition !== 'cut')) {
@@ -876,38 +901,30 @@ export async function handleAnalyzeTransitions(isSilent = false) {
 
     setCache(cacheKey, { transitions: allTransitions });
 
+    applyTransitions(allTransitions);
+
     if (!isSilent && btn) {
       btn.classList.remove('bg-gray-700', 'hover:bg-gray-600', 'bg-zinc-800/90', 'hover:bg-zinc-700');
       btn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
-      btn.innerHTML = '✅ Analyzed';
-      ui.showStatus('Analysis complete! Applying transitions...', false, 2500);
-      ui.logProductionStatus(`✅ Transition analysis complete (${allTransitions.length} transitions ready).`);
-      // Wait to visibly show analyzed on the button before applying transitions
-      await new Promise((r) => setTimeout(r, 700));
-    }
-
-    applyTransitions(allTransitions);
-    ui.logProductionStatus(`✨ Applied ${allTransitions.length} narrative-guided transitions.`);
-
-    if (!isSilent) {
+      btn.innerHTML = '✅ Applied';
+      btn.disabled = false;
       ui.showStatus('Cinematic transitions applied!', false, 3000);
+      ui.logProductionStatus(`✨ Applied ${allTransitions.length} narrative-guided transitions.`);
     }
   } catch (e: any) {
     console.warn('Transition analysis failed, applying algorithmic director transitions:', e);
-    const fallbackTransitions = generateAlgorithmicTransitions(timelineState.clips);
+    const mainTrackClips = timelineState.clips.filter((c) => c && c.displayMode !== 'pip_overlay');
+    const fallbackTransitions = generateAlgorithmicTransitions(mainTrackClips);
+
+    applyTransitions(fallbackTransitions);
+    ui.logProductionStatus(`✨ Applied ${fallbackTransitions.length} cinematic transitions (algorithmic fallback).`);
 
     if (!isSilent && btn) {
       btn.classList.remove('bg-gray-700', 'hover:bg-gray-600', 'bg-zinc-800/90', 'hover:bg-zinc-700');
       btn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
-      btn.innerHTML = '✅ Analyzed';
-      ui.showStatus('Analysis complete! Applying transitions...', false, 2500);
-      await new Promise((r) => setTimeout(r, 700));
-    }
-
-    applyTransitions(fallbackTransitions);
-    ui.logProductionStatus(`✨ Applied ${fallbackTransitions.length} cinematic transitions.`);
-    if (!isSilent) {
-      ui.showStatus('Cinematic transitions applied!', false, 3000);
+      btn.innerHTML = '✅ Applied';
+      btn.disabled = false;
+      ui.showStatus('Cinematic transitions applied (fallback)', false, 3000);
     }
   } finally {
     if (!isSilent && btn) {

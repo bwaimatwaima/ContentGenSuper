@@ -417,6 +417,8 @@ function setupSpeedChips(panel: HTMLElement) {
       if (classicSelect) classicSelect.value = speed;
 
       ui.showStatus(`Transition speed set to ${speedLabels[speed]}`, false, 2000);
+      updateVideoContext();
+      ui.renderTimelineEditor();
       if (!state.isVideoPlaying) {
         drawVideoFrame(state.videoPauseTime);
       }
@@ -455,11 +457,18 @@ function setupBatchActions(panel: HTMLElement) {
       syncTransitionsPanel();
     } else {
       // Direct narrative guided auto-selection
+      timelineState.saveSnapshot();
       const options = ['cross_dissolve', 'blur_dissolve', 'zoom_dissolve', 'swipe_left', 'push', 'wipe'];
       const clips = timelineState.clips || [];
-      const newClips = clips.map((c, i) => {
-        if (i === clips.length - 1) return c;
-        const assigned = options[i % options.length];
+      const mainTrack = clips.filter(c => c && c.displayMode !== 'pip_overlay');
+      const lastMainId = mainTrack.length > 0 ? mainTrack[mainTrack.length - 1].id : null;
+      let mainIdx = 0;
+      const newClips = clips.map((c) => {
+        if (c.displayMode === 'pip_overlay' || c.id === lastMainId) {
+          return { ...c, transitionToNext: 'cut' };
+        }
+        const assigned = options[mainIdx % options.length];
+        mainIdx++;
         return { ...c, transitionToNext: assigned };
       });
       timelineState.setClips(newClips);

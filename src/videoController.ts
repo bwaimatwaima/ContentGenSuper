@@ -626,31 +626,37 @@ export function handleTimelineMouseDown(e: MouseEvent) {
   }
 
   const clipId = getClipIdFromEventTarget(target);
-  if (clipId && videoRenderContext && !isLocked) {
+  if (clipId && videoRenderContext) {
     const clip = findClipById(clipId);
     if (!clip) return;
 
-    // Save pre-drag state BEFORE any mousemove mutation occurs
-    timelineState.saveSnapshot();
-
-    draggedClipId = clipId;
-    isDraggingClip = true;
-    clipDragStartX = e.clientX;
-    draggedClipOriginalStart = clip.startTime ?? 0;
-    draggedClipDuration = clip.duration || ((clip.endTime ?? 0) - draggedClipOriginalStart);
-    draggedClipOriginalOffset = clip.videoStartOffset || 0;
+    // Always select the clip regardless of audio_locked mode
     timelineState.setSelectedClipId(clipId);
+    ui.renderTimelineEditor();
 
-    cachedClipElements.clear();
-    timelineState.clips.forEach(c => {
-      const el = dom.timelineClipsContainer.querySelector(`[data-clip-id="${c.id}"]`) as HTMLElement;
-      if (el) cachedClipElements.set(c.id, el);
-    });
+    // Only initiate timing dragging if unlocked, OR if in slip mode (which slips offset without shifting timing)
+    if (!isLocked || timelineState.editMode === 'slip') {
+      // Save pre-drag state BEFORE any mousemove mutation occurs
+      timelineState.saveSnapshot();
 
-    (target.closest('.timeline-clip') as HTMLElement)?.classList.add('dragging');
-    document.body.style.cursor = timelineState.editMode === 'slip' ? 'ew-resize' : 'grabbing';
-    document.addEventListener('mousemove', onTimelineMouseMove);
-    document.addEventListener('mouseup', handleTimelineMouseUp);
+      draggedClipId = clipId;
+      isDraggingClip = true;
+      clipDragStartX = e.clientX;
+      draggedClipOriginalStart = clip.startTime ?? 0;
+      draggedClipDuration = clip.duration || ((clip.endTime ?? 0) - draggedClipOriginalStart);
+      draggedClipOriginalOffset = clip.videoStartOffset || 0;
+
+      cachedClipElements.clear();
+      timelineState.clips.forEach(c => {
+        const el = dom.timelineClipsContainer.querySelector(`[data-clip-id="${c.id}"]`) as HTMLElement;
+        if (el) cachedClipElements.set(c.id, el);
+      });
+
+      (target.closest('.timeline-clip') as HTMLElement)?.classList.add('dragging');
+      document.body.style.cursor = timelineState.editMode === 'slip' ? 'ew-resize' : 'grabbing';
+      document.addEventListener('mousemove', onTimelineMouseMove);
+      document.addEventListener('mouseup', handleTimelineMouseUp);
+    }
   }
 }
 
@@ -1198,10 +1204,40 @@ export function updateVideoContext(skipUIRender = false) {
     normalizeTimeline(totalDuration, true);
   }
 
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const clip = sorted[i];
-    const nextClip = sorted[i + 1];
+  const mainTrackClips = sorted.filter(c => c.displayMode !== 'pip_overlay');
+  const pipClips = sorted.filter(c => c.displayMode === 'pip_overlay');
 
+  // Clear transition boundaries for PiP overlays (they composite independently)
+  for (const pip of pipClips) {
+    pip._transitionStart = undefined;
+    pip._transitionEnd = undefined;
+    pip._transitionDuration = undefined;
+    pip._transitionSkippedReason = undefined;
+  }
+
+  // Resolve base duration from transition speed setting
+  const speed = timelineState.transitionSpeed || 'medium';
+  const speedDurationMap: Record<string, number> = {
+    ultrafast: 0.3,
+    fast: 0.5,
+    medium: 0.8,
+    slow: 1.2,
+  };
+  const baseTargetDur = speedDurationMap[speed] ?? 0.8;
+
+  for (let i = 0; i < mainTrackClips.length; i++) {
+    const clip = mainTrackClips[i];
+    clip._transitionSkippedReason = undefined;
+
+    if (i === mainTrackClips.length - 1) {
+      // The final clip in the sequence never transitions into a non-existent next clip
+      clip._transitionStart = undefined;
+      clip._transitionEnd = undefined;
+      clip._transitionDuration = undefined;
+      continue;
+    }
+
+    const nextClip = mainTrackClips[i + 1];
     const clipStart = isNum(clip.startTime) ? clip.startTime : 0;
     const clipLen = Math.max(0.001, isNum(clip.endTime) ? clip.endTime - clipStart : clip.duration);
     const clipEndGlobal = isNum(clip.endTime) ? clip.endTime : clipStart + clipLen;
@@ -1215,13 +1251,23 @@ export function updateVideoContext(skipUIRender = false) {
         ? globalStyle
         : 'cut';
     }
+
+    if (resolvedTransition !== 'cut' && !isContiguous) {
+      clip._transitionSkippedReason = 'gap';
+    }
+
     // Transitions only occur when two clips touch (no transition across an open gap)
     const hasTransition = resolvedTransition !== 'cut' && isContiguous;
 
     if (hasTransition) {
       const nextLen = Math.max(0.001, isNum(nextClip.endTime) ? nextClip.endTime - nextStart : nextClip.duration);
 
-      const transitionDur = utils.clamp(0.08 * Math.min(clipLen, nextLen), 0.08, 0.35);
+      // Clamp against clip lengths so transition doesn't consume more than 45% of either clip
+      const maxAllowedDur = Math.max(0.08, 0.45 * Math.min(clipLen, nextLen));
+      const requestedDur = typeof clip.transitionDuration === 'number' && clip.transitionDuration > 0
+        ? clip.transitionDuration
+        : baseTargetDur;
+      const transitionDur = utils.clamp(requestedDur, 0.08, maxAllowedDur);
       let transitionStart = clipEndGlobal - transitionDur;
 
       if (isLocked && timelineState.globalSilences?.length && clip.wordTimestamps?.length) {
@@ -1235,7 +1281,7 @@ export function updateVideoContext(skipUIRender = false) {
       clip._transitionEnd = clipEndGlobal;
       clip._transitionDuration = clipEndGlobal - transitionStart;
     } else {
-      // ✅ Clear transition boundaries for cuts
+      // Clear transition boundaries for cuts or gaps
       clip._transitionStart = undefined;
       clip._transitionEnd = undefined;
       clip._transitionDuration = undefined;
@@ -2352,15 +2398,28 @@ export async function handleSyncSubtitleTimestamps() {
 }
 
 export function handleVideoTransitionChange() {
-    timelineState.setVideoTransitionStyle(dom.videoTransitionStyleSelect.value as any);
-    updateVideoContext();
-    if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
+    const val = dom.videoTransitionStyleSelect?.value;
+    if (val) {
+        timelineState.setVideoTransitionStyle(val as any);
+        updateVideoContext();
+        ui.renderTimelineEditor();
+        if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
+        saveVersion(false);
+        syncTransitionsPanel();
+    }
 }
+export const handleVideoTransitionStyleChange = handleVideoTransitionChange;
 
 export function handleVideoTransitionSpeedChange() {
-    timelineState.setTransitionSpeed(dom.videoTransitionSpeedSelect.value as any);
-    updateVideoContext();
-    if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
+    const val = dom.videoTransitionSpeedSelect?.value;
+    if (val) {
+        timelineState.setTransitionSpeed(val as any);
+        updateVideoContext();
+        ui.renderTimelineEditor();
+        if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
+        saveVersion(false);
+        syncTransitionsPanel();
+    }
 }
 
 export function handleLyricsVideoPreset() {
@@ -2780,15 +2839,18 @@ export function handleSplitClip() {
     }
 
     timelineState.saveSnapshot();
-    timelineState.setSelectedClipId(null);
     const origEnd = isNum(clip.endTime) ? clip.endTime : clipStart + clip.duration;
     const originalTransition = clip.transitionToNext || 'cut';
+    const stableSourceShotId = clip.sourceShotId || clip.id;
+    clip.sourceShotId = stableSourceShotId;
+    const baseId = clip.id || `${clipIndex}`;
     const newClip2 = { 
       ...clip, 
       startTime: time, 
       endTime: origEnd,
       duration: origEnd - time, 
-      id: (clip.id || `${clipIndex}`) + '_b',
+      id: `${baseId}_b`,
+      sourceShotId: stableSourceShotId,
       videoStartOffset: (clip.videoStartOffset || 0) + splitPoint,
       sourceIn: (clip.videoStartOffset || 0) + splitPoint,
       sourceOut: (clip.videoStartOffset || 0) + splitPoint + (origEnd - time),
@@ -2798,12 +2860,14 @@ export function handleSplitClip() {
     clip.duration = splitPoint;
     clip.sourceOut = (clip.videoStartOffset || 0) + splitPoint;
     clip.transitionToNext = 'cut';
-    clip.id = (clip.id || `${clipIndex}`) + '_a';
+    clip.id = `${baseId}_a`;
     const newClips = [...timelineState.clips];
     newClips.splice(clipIndex + 1, 0, newClip2);
     timelineState.setClips(newClips, false);
+    timelineState.setSelectedClipId(newClip2.id);
     refreshPerClipWordTimestamps();
     updateVideoContext();
+    ui.renderTimelineEditor();
     ui.showStatus('✂️ Shot split at playhead.', false, 1500);
 }
 
@@ -3820,9 +3884,14 @@ export function applyTransitionToClip(clipId: string, transitionName: string, ap
   timelineState.saveSnapshot();
   const clipIndex = timelineState.clips.findIndex(c => c.id === clipId || String(c.id) === String(clipId));
 
+  const mainTrackClips = timelineState.clips.filter(c => c && c.displayMode !== 'pip_overlay');
+  const lastMainClipId = mainTrackClips.length > 0 ? mainTrackClips[mainTrackClips.length - 1].id : null;
+
   const newClips = timelineState.clips.map((c, i) => {
+    if (c.displayMode === 'pip_overlay' || c.id === lastMainClipId) {
+      return { ...c, transitionToNext: 'cut' };
+    }
     if (applyToAll) {
-      if (i === timelineState.clips.length - 1) return c;
       return { ...c, transitionToNext: transitionName };
     } else if (c.id === clipId || String(c.id) === String(clipId) || (clipIndex >= 0 && i === clipIndex)) {
       return { ...c, transitionToNext: transitionName };
@@ -3875,20 +3944,29 @@ export function applyTransitionToClip(clipId: string, transitionName: string, ap
 
 export function randomizeAllTransitions() {
   if (!timelineState.clips?.length || timelineState.clips.length < 2) return;
+  timelineState.saveSnapshot();
+
   const options = ['cross_dissolve', 'blur_dissolve', 'zoom_dissolve', 'swipe_left', 'swipe_right', 'swipe_up', 'swipe_down', 'fade_to_black', 'fade_to_white', 'wipe', 'push'];
-  const newClips = timelineState.clips.map((c, i) => {
-    if (i === timelineState.clips.length - 1) return c;
+  const mainTrackClips = timelineState.clips.filter(c => c && c.displayMode !== 'pip_overlay');
+  const lastMainClipId = mainTrackClips.length > 0 ? mainTrackClips[mainTrackClips.length - 1].id : null;
+
+  const newClips = timelineState.clips.map((c) => {
+    if (c.displayMode === 'pip_overlay' || c.id === lastMainClipId) {
+      return { ...c, transitionToNext: 'cut' };
+    }
     const randomTrans = options[Math.floor(Math.random() * options.length)];
     return { ...c, transitionToNext: randomTrans };
   });
 
   timelineState.setClips(newClips);
 
+  const clipById = new Map<string, any>(newClips.map(c => [String(c.id), c]));
+
   if (state.currentScenes && Array.isArray(state.currentScenes)) {
     state.currentScenes.forEach((s: any) => {
       const lines = s.lines || [s];
-      lines.forEach((l: any, lIdx: number) => {
-        const matchingClip = newClips.find(c => c.id === l.id || String(c.id) === String(l.id)) || newClips[lIdx];
+      lines.forEach((l: any) => {
+        const matchingClip = clipById.get(String(l.id));
         if (matchingClip?.transitionToNext) {
           l.transitionToNext = matchingClip.transitionToNext;
           l.transition = matchingClip.transitionToNext;

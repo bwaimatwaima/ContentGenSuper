@@ -2247,6 +2247,11 @@ function drawVideoFrameImpl(
 
   if (!cur) return;
 
+  // For cinematic transitions between sequential shots, resolve nxt as the next main-track clip
+  const mainTrackClips = clips.filter(c => c.displayMode !== 'pip_overlay');
+  const curMainIndex = mainTrackClips.findIndex(c => c.id === cur!.id);
+  nxt = curMainIndex !== -1 && curMainIndex < mainTrackClips.length - 1 ? mainTrackClips[curMainIndex + 1] : null;
+
   const lite = !targetCanvas && !state.isExporting && Boolean(state.responsivePreview) && isInteracting();
   if ((targetCanvas || state.isExporting) && lite) {
     console.error('lite mode active during export or targetCanvas render');

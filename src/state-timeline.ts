@@ -229,6 +229,7 @@ class TimelineState {
         this._selectedAudioSplitIndex = index;
         if (index !== null) {
             this._selectedClipId = null; // mutually exclusive
+            this._selectedAudioSegmentId = null;
             this._selectedGraphicId = null;
         }
         this.emitSettingChange();
@@ -241,6 +242,7 @@ class TimelineState {
         this._selectedAudioSegmentId = id;
         if (id !== null) {
             this._selectedClipId = null;
+            this._selectedAudioSplitIndex = null;
             this._selectedGraphicId = null;
         }
         this.emitSettingChange();
@@ -251,7 +253,10 @@ class TimelineState {
             const start = Math.max(0, Number(seg.startTime) || 0);
             const dur = Math.max(0.05, Number(seg.duration) || ((Number(seg.endTime) || start + 1) - start));
             const end = start + dur;
-            const sourceIn = Math.max(0, Number(seg.sourceIn) ?? start);
+            const rawSourceIn = Number(seg.sourceIn);
+            const sourceIn = Number.isFinite(rawSourceIn) ? Math.max(0, rawSourceIn) : start;
+            const rawSourceOut = Number(seg.sourceOut);
+            const sourceOut = Number.isFinite(rawSourceOut) ? Math.max(sourceIn + 0.05, rawSourceOut) : sourceIn + dur;
             return {
                 ...seg,
                 id: seg.id || `aud_seg_${idx}`,
@@ -260,7 +265,7 @@ class TimelineState {
                 endTime: end,
                 duration: dur,
                 sourceIn,
-                sourceOut: sourceIn + dur,
+                sourceOut,
                 muted: Boolean(seg.muted),
                 volume: typeof seg.volume === 'number' ? seg.volume : 1.0,
             };
@@ -310,6 +315,7 @@ class TimelineState {
         if (id !== null) {
             this._selectedClipId = null;
             this._selectedAudioSplitIndex = null;
+            this._selectedAudioSegmentId = null;
         }
         this.emitSettingChange();
     }
@@ -327,6 +333,7 @@ class TimelineState {
         this._selectedClipId = clipId;
         if (clipId !== null) {
             this._selectedAudioSplitIndex = null; // mutually exclusive
+            this._selectedAudioSegmentId = null;
             this._selectedGraphicId = null;
         }
         this.emitSettingChange();
@@ -337,7 +344,7 @@ class TimelineState {
         return clips.map(clip => {
             return {
                 ...clip,
-                image: clip.image ? { ...clip.image } : undefined,
+                image: clip.image, // Preserve native HTMLImageElement DOM reference without breaking prototype methods
                 cameraKeyframes: clip.cameraKeyframes ? clip.cameraKeyframes.map((k: any) => ({ ...k })) : undefined,
                 wordTimestamps: clip.wordTimestamps ? [...clip.wordTimestamps] : undefined,
                 elements: clip.elements ? clip.elements.map((e: any) => ({ ...e })) : undefined
@@ -349,42 +356,75 @@ class TimelineState {
         return graphics.map(g => ({ ...g }));
     }
 
-    saveSnapshot() {
-        if (!this._clips || this._clips.length === 0) return;
+    saveSnapshot(force = false) {
+        const hasClips = Boolean(this._clips && this._clips.length > 0);
+        const hasAudio = Boolean(this._audioSegments && this._audioSegments.length > 0);
+        const hasGraphics = Boolean(this._graphics && this._graphics.length > 0);
+        if (!hasClips && !hasAudio && !hasGraphics) return;
+
         const snapshot: TimelineSnapshot = {
-            clips: this.cloneClipsForHistory(this._clips),
-            graphics: this.cloneGraphicsForHistory(this._graphics),
+            clips: this.cloneClipsForHistory(this._clips || []),
+            graphics: this.cloneGraphicsForHistory(this._graphics || []),
             mode: this._mode,
             masterAudioBuffer: this._masterAudioBuffer,
             globalWordTimestamps: this._globalWordTimestamps, // Immutable reference
             globalSilences: this._globalSilences,             // Immutable reference
-            audioSplits: [...this._audioSplits],
-            audioSegments: this._audioSegments.map(s => ({ ...s })),
+            audioSplits: [...(this._audioSplits || [])],
+            audioSegments: (this._audioSegments || []).map(s => ({ ...s })),
         };
-        if (this._undoStack.length > 0) {
+        if (!force && this._undoStack.length > 0) {
             const last = this._undoStack[this._undoStack.length - 1];
             if (last.clips.length === snapshot.clips.length &&
                 last.graphics.length === snapshot.graphics.length &&
                 (last.audioSegments?.length || 0) === (snapshot.audioSegments?.length || 0) &&
                 last.mode === snapshot.mode &&
                 last.masterAudioBuffer === snapshot.masterAudioBuffer) {
-                // Quick shallow change check
+                
                 let changed = false;
                 for (let i = 0; i < last.clips.length; i++) {
-                    if (last.clips[i].id !== snapshot.clips[i].id ||
-                        last.clips[i].startTime !== snapshot.clips[i].startTime ||
-                        last.clips[i].endTime !== snapshot.clips[i].endTime ||
-                        last.clips[i].videoStartOffset !== snapshot.clips[i].videoStartOffset ||
-                        last.clips[i].transitionToNext !== snapshot.clips[i].transitionToNext) {
+                    const lc = last.clips[i];
+                    const sc = snapshot.clips[i];
+                    if (lc.id !== sc.id ||
+                        lc.startTime !== sc.startTime ||
+                        lc.endTime !== sc.endTime ||
+                        lc.duration !== sc.duration ||
+                        lc.videoStartOffset !== sc.videoStartOffset ||
+                        lc.transitionToNext !== sc.transitionToNext ||
+                        lc.displayMode !== sc.displayMode ||
+                        lc.pipPosition !== sc.pipPosition ||
+                        lc.pipAnimation !== sc.pipAnimation ||
+                        lc.pipScale !== sc.pipScale ||
+                        lc.colorFilter !== sc.colorFilter ||
+                        lc.colorFilterIntensity !== sc.colorFilterIntensity ||
+                        lc.cameraMovement !== sc.cameraMovement ||
+                        lc.talkingHeadMode !== sc.talkingHeadMode ||
+                        lc.talkingHeadShape !== sc.talkingHeadShape ||
+                        lc.talkingHeadSize !== sc.talkingHeadSize ||
+                        lc.useOriginalAudio !== sc.useOriginalAudio ||
+                        lc.soloAudio !== sc.soloAudio ||
+                        lc.muteNarration !== sc.muteNarration ||
+                        lc.hideSubtitles !== sc.hideSubtitles ||
+                        lc.volume !== sc.volume ||
+                        lc.fadeIn !== sc.fadeIn ||
+                        lc.fadeOut !== sc.fadeOut ||
+                        lc.playbackRate !== sc.playbackRate ||
+                        lc.rotate !== sc.rotate ||
+                        lc.deviceTag !== sc.deviceTag ||
+                        lc.isVillainShot !== sc.isVillainShot ||
+                        JSON.stringify(lc.cameraKeyframes || null) !== JSON.stringify(sc.cameraKeyframes || null)) {
                         changed = true;
                         break;
                     }
                 }
                 if (!changed) {
                     for (let i = 0; i < last.graphics.length; i++) {
-                        if (last.graphics[i].id !== snapshot.graphics[i].id ||
-                            last.graphics[i].start !== snapshot.graphics[i].start ||
-                            last.graphics[i].end !== snapshot.graphics[i].end) {
+                        const lg = last.graphics[i];
+                        const sg = snapshot.graphics[i];
+                        if (lg.id !== sg.id ||
+                            lg.start !== sg.start ||
+                            lg.end !== sg.end ||
+                            lg.startOffset !== sg.startOffset ||
+                            lg.volume !== sg.volume) {
                             changed = true;
                             break;
                         }
@@ -392,11 +432,16 @@ class TimelineState {
                 }
                 if (!changed && last.audioSegments && snapshot.audioSegments) {
                     for (let i = 0; i < last.audioSegments.length; i++) {
-                        if (last.audioSegments[i].id !== snapshot.audioSegments[i].id ||
-                            last.audioSegments[i].startTime !== snapshot.audioSegments[i].startTime ||
-                            last.audioSegments[i].endTime !== snapshot.audioSegments[i].endTime ||
-                            last.audioSegments[i].sourceIn !== snapshot.audioSegments[i].sourceIn ||
-                            last.audioSegments[i].muted !== snapshot.audioSegments[i].muted) {
+                        const la = last.audioSegments[i];
+                        const sa = snapshot.audioSegments[i];
+                        if (la.id !== sa.id ||
+                            la.startTime !== sa.startTime ||
+                            la.endTime !== sa.endTime ||
+                            la.duration !== sa.duration ||
+                            la.sourceIn !== sa.sourceIn ||
+                            la.sourceOut !== sa.sourceOut ||
+                            la.muted !== sa.muted ||
+                            la.volume !== sa.volume) {
                             changed = true;
                             break;
                         }
@@ -406,7 +451,7 @@ class TimelineState {
             }
         }
         this._undoStack.push(snapshot);
-        if (this._undoStack.length > 20) this._undoStack.shift();
+        if (this._undoStack.length > 25) this._undoStack.shift();
         this._redoStack = [];
         this.updateUndoRedoUI();
     }
@@ -439,6 +484,8 @@ class TimelineState {
         this._globalSilences = prev.globalSilences;
         this._audioSplits = prev.audioSplits || [];
         this._audioSegments = (prev.audioSegments || []).map(s => ({ ...s }));
+        this._selectedClipId = null;
+        this._selectedGraphicId = null;
         this._selectedAudioSegmentId = null;
         this._selectedAudioSplitIndex = null;
         state.uploadedAudioBuffer = this._masterAudioBuffer;
@@ -472,6 +519,8 @@ class TimelineState {
         this._globalSilences = next.globalSilences;
         this._audioSplits = next.audioSplits || [];
         this._audioSegments = (next.audioSegments || []).map(s => ({ ...s }));
+        this._selectedClipId = null;
+        this._selectedGraphicId = null;
         this._selectedAudioSegmentId = null;
         this._selectedAudioSplitIndex = null;
         state.uploadedAudioBuffer = this._masterAudioBuffer;

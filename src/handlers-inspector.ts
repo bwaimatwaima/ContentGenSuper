@@ -241,7 +241,14 @@ export function openInspectorForShot(shotId?: string) {
 
     let target = allShots[0];
     if (shotId) {
-        const found = allShots.find(item => item.shot.id === shotId);
+        let resolvedShotId = shotId;
+        const matchedClip = timelineState.clips?.find(c => c.id === shotId);
+        if (matchedClip && matchedClip.sourceShotId) {
+            resolvedShotId = matchedClip.sourceShotId;
+        } else if (shotId.includes('_')) {
+            resolvedShotId = shotId.replace(/_[a-z0-9]+$/i, '');
+        }
+        const found = allShots.find(item => item.shot.id === resolvedShotId || item.shot.id === shotId);
         if (found) target = found;
     }
 
@@ -259,7 +266,11 @@ export function openInspectorForShot(shotId?: string) {
     }
 
     // Video In-Point (Trim/Offset) Settings
-    const hasVideo = !!(shot._videoObjectURL || shot.video_id);
+    const globalVideoSrc = (state.uploadedVideoElement && (state.uploadedVideoElement.src || state.uploadedVideoElement.currentSrc)) || '';
+    const isUsingGlobalVideo = Boolean(shot.talkingHeadMode === 'a_roll' || (!shot._videoObjectURL && !shot.video_id && globalVideoSrc));
+    const videoSrc = shot._videoObjectURL || (isUsingGlobalVideo ? globalVideoSrc : '');
+    const hasVideo = Boolean(videoSrc || shot.video_id);
+
     if (dom.inspectorVideoTrimContainer) {
         if (hasVideo) {
             dom.inspectorVideoTrimContainer.classList.remove('hidden');
@@ -277,7 +288,6 @@ export function openInspectorForShot(shotId?: string) {
 
     // Media Preview Box
     if (dom.inspectorMediaContainer) {
-        const videoSrc = shot._videoObjectURL || '';
         const displaySrc = shot._imageObjectURL || (shot.image_id ? 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23111827"/%3E%3Ctext x="50" y="50" dominant-baseline="middle" text-anchor="middle" fill="%23374151" font-size="10"%3ELoading...%3C/text%3E%3C/svg%3E' : '');
 
         if (videoSrc) {
@@ -1148,9 +1158,9 @@ function syncActiveShotVideoOffset(newOffset: number) {
         }
     }
 
-    // Sync to timeline clip
-    const clip = timelineState.clips?.find((c: any) => c.id === shot.id);
-    if (clip) {
+    // Sync to timeline clip(s)
+    const matchingClips = findMatchingTimelineClips(shot);
+    for (const clip of matchingClips) {
         clip.videoStartOffset = shot.videoStartOffset;
     }
 
@@ -1171,6 +1181,7 @@ export function saveInspectorMetadata() {
     if (!targetItem) return;
 
     const shot = targetItem.shot;
+    timelineState.saveSnapshot(true);
 
     // Camera Angle
     let selectedAngle = dom.inspectorCameraAngleSelect ? dom.inspectorCameraAngleSelect.value : 'default';
@@ -1307,7 +1318,54 @@ export function saveInspectorMetadata() {
         }
     }
 
+    // Resize timeline clip duration and adjust downstream placement
+    if (matchingClips.length > 0 && typeof durationVal === 'number' && durationVal > 0) {
+        const isLocked = timelineState.isAudioLocked();
+        const sorted = [...(timelineState.clips || [])].sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+        const targetClip = matchingClips.find(c => c.id === timelineState.selectedClipId) || matchingClips[0];
+        const oldDur = targetClip.duration || Math.max(0.05, (targetClip.endTime ?? 0) - (targetClip.startTime ?? 0));
+        const minDur = 0.05;
+        let targetDur = Math.max(minDur, durationVal);
+
+        if (isLocked) {
+            // In audio-locked mode, bound against next sequential main-track clip
+            const idx = sorted.findIndex(c => c.id === targetClip.id);
+            if (idx !== -1 && idx < sorted.length - 1) {
+                let nextMainIdx = idx + 1;
+                while (nextMainIdx < sorted.length && sorted[nextMainIdx].displayMode === 'pip_overlay') {
+                    nextMainIdx++;
+                }
+                if (nextMainIdx < sorted.length) {
+                    const maxAllowed = Math.max(minDur, (sorted[nextMainIdx].startTime ?? 0) - (targetClip.startTime ?? 0));
+                    targetDur = Math.min(targetDur, maxAllowed);
+                }
+            }
+        }
+
+        const deltaDur = targetDur - oldDur;
+        targetClip.duration = targetDur;
+        targetClip.endTime = (targetClip.startTime ?? 0) + targetDur;
+        targetClip.sourceOut = (targetClip.videoStartOffset || 0) + targetDur;
+        shot.duration_seconds = targetDur;
+
+        // In free mode, ripple downstream non-PiP clips by deltaDur
+        if (!isLocked && Math.abs(deltaDur) > 0.001) {
+            const idx = sorted.findIndex(c => c.id === targetClip.id);
+            if (idx !== -1) {
+                for (let i = idx + 1; i < sorted.length; i++) {
+                    const c = sorted[i];
+                    if (c.displayMode === 'pip_overlay') continue;
+                    c.startTime = Math.max(0, (c.startTime ?? 0) + deltaDur);
+                    c.endTime = Math.max((c.startTime ?? 0) + minDur, (c.endTime ?? 0) + deltaDur);
+                    c.duration = c.endTime - c.startTime;
+                }
+            }
+        }
+        timelineState.bumpClipsVersion();
+    }
+
     renderTimelineEditor();
+    saveVersion(false);
 
     // Sync to DOM card if visible
     if (dom.resultsContainer) {
@@ -1356,8 +1414,12 @@ export function findMatchingTimelineClips(shotIdOrShot: string | any): any[] {
         shotId = shotObj.id || '';
     }
 
-    // 1. Direct ID match or split segments (e.g. shot-1_a, shot-1_b)
-    const directMatches = clips.filter(c => c.id === shotId || (shotId && c.id && c.id.startsWith(shotId + '_')));
+    // 1. Direct ID match, sourceShotId match, or split segments (e.g. shot-1_a, shot-1_b)
+    const directMatches = clips.filter(c => 
+        c.id === shotId ||
+        (c.sourceShotId && (c.sourceShotId === shotId || c.sourceShotId === shotObj?.id)) ||
+        (shotId && c.id && c.id.startsWith(shotId + '_'))
+    );
     if (directMatches.length > 0) return directMatches;
 
     // 2. Text match if text reference is non-empty
@@ -1894,7 +1956,8 @@ export function initInspectorHandlers() {
                 const roundedDur = Math.max(0.5, Math.min(60, Math.round(mediaDuration * 10) / 10));
                 shot.duration_seconds = roundedDur;
                 if (dom.inspectorDurationInput) dom.inspectorDurationInput.value = String(roundedDur);
-                if (dom.inspectorDurationSlider) dom.inspectorDurationSlider.value = String(Math.min(20, roundedDur));
+                const sliderMax = dom.inspectorDurationSlider ? (parseFloat(dom.inspectorDurationSlider.max) || 30) : 30;
+                if (dom.inspectorDurationSlider) dom.inspectorDurationSlider.value = String(Math.min(sliderMax, roundedDur));
                 const offset = dom.inspectorVideoOffsetInput ? parseFloat(dom.inspectorVideoOffsetInput.value) || 0 : 0;
                 updateInspectorVideoRangeInfo(offset, roundedDur);
                 if (dom.inspectorApplyBtn) dom.inspectorApplyBtn.click();

@@ -343,9 +343,14 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
         hasTransitions = true;
     }
 
-    // If the project was analyzed via the transition tool, treat as having transitions
-    const isAnalyzed = dom.analyzeTransitionsBtn?.innerHTML?.includes('✅') || dom.analyzeTransitionsBtn?.classList?.contains('bg-green-600');
-    if (isAnalyzed) {
+    // Inspect actual main-track clips on the timeline for active non-cut transitions
+    const hasActiveClipTransitions = clips.some(
+        (c: any) => c.displayMode !== 'pip_overlay' &&
+             c.transitionToNext &&
+             c.transitionToNext !== 'cut' &&
+             c.transitionToNext !== 'none'
+    );
+    if (hasActiveClipTransitions) {
         hasTransitions = true;
     }
 

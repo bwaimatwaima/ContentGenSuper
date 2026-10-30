@@ -2092,16 +2092,17 @@ export function renderBrollEditor(
         const currentTransition = clip.transitionToNext || "cut";
         const isTransitionActive = currentTransition !== "cut";
 
-        if (isTransitionActive) {
-          const transitionDur =
-            clip._transitionDuration ||
-            clamp(
-              0.08 * Math.min(clip.duration, nextClip.duration),
-              0.08,
-              0.35,
-            );
-          const startX =
-            (clip._transitionStart ?? clip.endTime - transitionDur) * pps;
+        if (isTransitionActive && clip._transitionSkippedReason === 'gap') {
+          if (seamX >= visibleStartX && seamX <= visibleEndX) {
+            const gapSeam = document.createElement("div");
+            gapSeam.className =
+              "timeline-cut-seam absolute h-full top-0 z-15 pointer-events-none border-r-2 border-dashed border-amber-400/80";
+            gapSeam.style.left = `${seamX}px`;
+            gapSeam.title = "Transition skipped: timeline gap detected";
+            trackVideo.appendChild(gapSeam);
+          }
+        } else if (isTransitionActive && typeof clip._transitionStart === 'number') {
+          const startX = clip._transitionStart * pps;
           const endX = (clip._transitionEnd ?? clip.endTime) * pps;
 
           if (endX >= visibleStartX && startX <= visibleEndX) {

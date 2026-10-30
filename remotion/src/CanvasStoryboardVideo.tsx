@@ -79,6 +79,7 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
       cornerCalloutLabel: c.cornerCalloutLabel,
       cornerCalloutCoords: c.cornerCalloutCoords,
       isPreMixedAudio: Boolean(c.isPreMixedAudio ?? isPreMixedAudio),
+      hideSubtitles: Boolean(c.hideSubtitles),
       isVillainShot: Boolean(c.isVillainShot || isVillainFoilClip(c)),
     };
   });
@@ -99,6 +100,7 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
   if (mappedSubtitles.length === 0 && mappedClips.length > 0) {
     const collected: SubtitleCue[] = [];
     mappedClips.forEach(c => {
+      if (c.hideSubtitles) return;
       const clipStart = typeof c.startTime === 'number' ? c.startTime : 0;
       const wordMode: 'absolute' | 'relative' = (c as any).wordTimestampMode || 'relative';
       if (Array.isArray(c.subtitles) && c.subtitles.length > 0) {

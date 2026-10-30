@@ -58,6 +58,7 @@ export interface TimelineClipProp {
   transitionToNext?: 'cut' | 'fade' | 'crossfade' | 'zoomdissolve' | 'swipeleft' | 'swiperight' | 'swipeup' | 'swipedown' | 'wipe' | 'blur' | 'glitch' | string;
   transitionDuration?: number;
   subtitles?: SubtitleCue[];
+  hideSubtitles?: boolean;
   wordTimestampMode?: 'absolute' | 'relative';
   videoStartOffset?: number;
   overlayImageUrl?: string;

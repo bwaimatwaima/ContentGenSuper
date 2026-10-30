@@ -1372,7 +1372,8 @@ async function handleExecuteAssembly() {
                     text: seg.text,
                     wordTimestamps: seg.words || [],
                     locked: false,
-                    useOriginalAudio: false
+                    useOriginalAudio: false,
+                    hideSubtitles: false,
                 });
             }
 

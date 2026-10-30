@@ -289,6 +289,7 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
         ) : (
           computedClips.map((item) => {
             const clip = item.clip;
+            if (clip.hideSubtitles) return null;
             const hasText = Boolean(clip.text && clip.text.trim());
             const hasCues = Boolean(clip.subtitles && clip.subtitles.length > 0);
             if (!hasText && !hasCues) return null;

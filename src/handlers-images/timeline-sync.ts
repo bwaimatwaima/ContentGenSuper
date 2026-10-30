@@ -112,7 +112,9 @@ export async function syncShotMediaToTimeline(shot: any) {
             talkingHeadMode: shot.talkingHeadMode ?? newClips[clipIndex].talkingHeadMode,
             talkingHeadShape: shot.talkingHeadShape ?? newClips[clipIndex].talkingHeadShape,
             talkingHeadSize: shot.talkingHeadSize ?? newClips[clipIndex].talkingHeadSize,
-            useOriginalAudio: shot.useOriginalAudio || false
+            useOriginalAudio: shot.useOriginalAudio || false,
+            hideSubtitles: shot.hideSubtitles ?? oldClip.hideSubtitles ?? false,
+            soloAudio: shot.soloAudio ?? oldClip.soloAudio ?? false,
         };
         
         try {

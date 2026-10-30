@@ -199,7 +199,7 @@ export const SubtitlesOverlay: React.FC<SubtitlesOverlayProps> = ({
     return [];
   }, [subtitles, text, durationSec]);
 
-  if (chunks.length === 0) return null;
+  if (chunks.length === 0 || activeClip?.hideSubtitles) return null;
 
   // The 13 editor styles are drawn with the browser's own renderers (exact parity).
   const localStyle = resolveLocalSubtitleStyle(styleConfig.preset);

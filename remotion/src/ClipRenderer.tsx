@@ -549,7 +549,7 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
       )}
 
       {/* Subtitles Layer */}
-      {subtitlesEnabled && (clip.text || (clip.subtitles && clip.subtitles.length > 0)) && (
+      {subtitlesEnabled && !clip.hideSubtitles && (clip.text || (clip.subtitles && clip.subtitles.length > 0)) && (
         <SubtitlesOverlay
           text={clip.text}
           subtitles={clip.subtitles}

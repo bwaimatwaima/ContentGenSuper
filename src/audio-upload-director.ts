@@ -772,6 +772,8 @@ export async function buildTimelineFromShotsWithMediaDurations(): Promise<void> 
             wordTimestamps: [],
             locked: false,
             useOriginalAudio: (shot as any).useOriginalAudio || false,
+            hideSubtitles: !!shot.hideSubtitles,
+            soloAudio: !!(shot.soloAudio || shot.muteNarration),
         } as any);
         cursor += duration;
     }
@@ -916,6 +918,8 @@ export async function buildTimelineFromShotsWithAudio() {
             talkingHeadShape: shot.talkingHeadShape || 'circle',
             talkingHeadSize: shot.talkingHeadSize || 'medium',
             useOriginalAudio: (shot as any).useOriginalAudio || false,
+            hideSubtitles: !!shot.hideSubtitles,
+            soloAudio: !!(shot.soloAudio || shot.muteNarration),
         });
     }
 

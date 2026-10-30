@@ -1272,9 +1272,9 @@ export function saveInspectorMetadata() {
         shot.isVillainShot = villainCb.checked;
     }
 
-    // Update corresponding clip in timeline
-    const clip = timelineState.clips?.find((c: any) => c.id === shot.id);
-    if (clip) {
+    // Update corresponding clip(s) in timeline
+    const matchingClips = findMatchingTimelineClips(shot);
+    for (const clip of matchingClips) {
         if (villainCb) {
             clip.isVillainShot = villainCb.checked;
         }
@@ -1340,9 +1340,49 @@ function clearShotCardHighlight() {
     cards.forEach(card => card.classList.remove('ring-2', 'ring-amber-400', 'shadow-lg'));
 }
 
+export function findMatchingTimelineClips(shotIdOrShot: string | any): any[] {
+    const clips = timelineState.clips || [];
+    if (!clips.length) return [];
+
+    let shotObj: any = null;
+    let shotId = '';
+    if (typeof shotIdOrShot === 'string') {
+        shotId = shotIdOrShot;
+        const allShots = getAllStoryboardShots();
+        const found = allShots.find(item => item.shot.id === shotId);
+        shotObj = found?.shot || null;
+    } else if (shotIdOrShot) {
+        shotObj = shotIdOrShot;
+        shotId = shotObj.id || '';
+    }
+
+    // 1. Direct ID match or split segments (e.g. shot-1_a, shot-1_b)
+    const directMatches = clips.filter(c => c.id === shotId || (shotId && c.id && c.id.startsWith(shotId + '_')));
+    if (directMatches.length > 0) return directMatches;
+
+    // 2. Text match if text reference is non-empty
+    const shotText = shotObj?.text_reference || shotObj?.line_text || '';
+    if (shotText && shotText.trim()) {
+        const textMatches = clips.filter(c => c.text && c.text.trim() === shotText.trim());
+        if (textMatches.length > 0) return textMatches;
+    }
+
+    // 3. Positional index fallback
+    if (shotObj) {
+        const allShots = getAllStoryboardShots();
+        const sIndex = allShots.findIndex(item => item.shot === shotObj || item.shot.id === shotId);
+        if (sIndex !== -1 && sIndex < clips.length) {
+            return [clips[sIndex]];
+        }
+    }
+
+    return [];
+}
+
 function getSelectedClip() {
     if (!activeShotId) return null;
-    return timelineState.clips.find(c => c.id === activeShotId) || null;
+    const matches = findMatchingTimelineClips(activeShotId);
+    return matches[0] || null;
 }
 
 export function handleInspectorDisplayModeChange(e: Event) {
@@ -2165,10 +2205,10 @@ export function initInspectorHandlers() {
             if (!targetItem) return;
             const isHidden = dom.inspectorHideSubtitlesCheckbox.checked;
             targetItem.shot.hideSubtitles = isHidden;
-            const clip = timelineState.clips?.find((c: any) => c.id === activeShotId);
-            if (clip) {
+            const matchingClips = findMatchingTimelineClips(targetItem.shot);
+            matchingClips.forEach(clip => {
                 clip.hideSubtitles = isHidden;
-            }
+            });
             saveVersion(false);
             if (dom.resultsContainer) renderResults(state.currentScenes);
             if (timelineState.videoGenerated) {

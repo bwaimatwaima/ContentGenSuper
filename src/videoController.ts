@@ -1559,6 +1559,8 @@ export async function resyncTimelineVisualsFromStoryboard(): Promise<boolean> {
                            clip.pipAnchorY !== shotPipAnchorY ||
                            clip.pipAnimation !== shotPipAnim ||
                            clip.pipScale !== shotPipScale ||
+                           clip.hideSubtitles !== !!shot.hideSubtitles ||
+                           clip.soloAudio !== !!shot.soloAudio ||
                            (!clip.talkingHeadVideoElement && !!state.uploadedVideoElement);
 
     if (needsVideoReload || needsImageReload || thPropsChanged) {
@@ -1654,6 +1656,8 @@ export async function resyncTimelineVisualsFromStoryboard(): Promise<boolean> {
         pipAnchorY: shotPipAnchorY,
         pipAnimation: shotPipAnim,
         pipScale: shotPipScale,
+        hideSubtitles: shot.hideSubtitles ?? clip.hideSubtitles ?? false,
+        soloAudio: shot.soloAudio ?? clip.soloAudio ?? false,
       };
     }
   }

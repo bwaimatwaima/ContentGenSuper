@@ -2933,7 +2933,8 @@ function drawVideoFrameImpl(
   // Draw Subtitles (respecting track visibility)
   const sSubs = t0();
   const isPlaceholderText = cur.text && /^(?:master\s+a-?roll|a-?roll)$/i.test(cur.text.trim());
-  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !cur.hideSubtitles) {
+  const isSubtitleHiddenOnClip = Boolean(cur.hideSubtitles || activePipOverlayClip?.hideSubtitles);
+  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !isSubtitleHiddenOnClip) {
       // Use real word timestamps whenever available, regardless of timeline mode.
       // Visual-first production also populates wordTimestamps via sliceTranscriptForShots
       // when audio is generated — gating on audio_locked was preventing real timestamp
@@ -3148,7 +3149,8 @@ export function drawExportOverlayLayer(
   const curStart = isNum(cur.startTime) ? cur.startTime : 0;
   const tIn = isAbs ? (time - curStart) : Math.max(0, prog * (cur.duration || 3));
   const isPlaceholderText = cur.text && /^(?:master\s+a-?roll|a-?roll)$/i.test(cur.text.trim());
-  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !cur.hideSubtitles) {
+  const isSubtitleHiddenOnClip = Boolean(cur.hideSubtitles || activePipOverlayClip?.hideSubtitles);
+  if (timelineState.showSubtitles && !timelineState.isTrackHidden('captions') && cur.text && !isPlaceholderText && !isSubtitleHiddenOnClip) {
       const hasTimestamps = cur.wordTimestamps != null && cur.wordTimestamps.length > 0;
       let wordIndex = -1;
 

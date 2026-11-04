@@ -978,21 +978,19 @@ export const MODAL_TEMPLATES = `
 
                             <!-- Media Add Group -->
                             <div class="flex items-center bg-zinc-950/80 rounded-lg border border-white/10 p-0.5 gap-0.5 shrink-0 shadow-inner">
-                                <button id="timeline-build-btn" title="Build timeline from uploaded shots — uses each clip's real duration" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold text-xs px-2.5 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer border border-white/5 shrink-0 whitespace-nowrap">
-                                    <span>🎞️</span><span class="hidden md:inline">Build Shots</span>
+                                <button id="timeline-build-btn" title="Build timeline from uploaded shots — uses each clip's real duration" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold text-xs p-1.5 px-2 rounded-md transition flex items-center justify-center cursor-pointer border border-white/5 shrink-0">
+                                    <span class="text-xs">🎞️</span>
                                 </button>
-                                <button id="timeline-add-overlay-btn" title="Add B-Roll Image, Icon, Lower Third, or Title Overlay to Timeline" class="bg-teal-950/40 hover:bg-teal-900/60 text-teal-300 hover:text-white border border-teal-500/30 font-semibold text-xs px-2.5 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap">
+                                <button id="timeline-add-overlay-btn" title="Add B-Roll Image, Icon, Lower Third, or Title Overlay to Timeline" class="bg-teal-950/40 hover:bg-teal-900/60 text-teal-300 hover:text-white border border-teal-500/30 font-semibold text-xs p-1.5 px-2 rounded-md transition flex items-center justify-center gap-1 cursor-pointer shrink-0">
                                     <svg class="w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                    <span class="hidden md:inline">Overlay</span>
+                                    <span class="text-[11px]">🖼️</span>
                                 </button>
-                                <button id="timeline-add-text-btn" title="Add Text at Playhead" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold text-xs px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer border border-white/5 shrink-0 whitespace-nowrap">
-                                    <span class="font-bold text-indigo-400">T</span>
-                                    <span class="hidden md:inline">Text</span>
+                                <button id="timeline-add-text-btn" title="Add Text Overlay at Playhead" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white font-semibold text-xs p-1.5 px-2 rounded-md transition flex items-center justify-center cursor-pointer border border-white/5 shrink-0">
+                                    <span class="font-bold text-indigo-400 text-xs">T</span>
                                 </button>
                                 <div class="relative inline-block" id="timeline-add-sfx-menu-container">
-                                    <button id="timeline-add-sfx-btn" type="button" title="Add Sound Effect at Playhead" class="bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-white border border-amber-500/30 font-semibold text-xs px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap">
+                                    <button id="timeline-add-sfx-btn" type="button" title="Add Sound Effect at Playhead" class="bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 hover:text-white border border-amber-500/30 font-semibold text-xs p-1.5 px-2 rounded-md transition flex items-center justify-center gap-1 cursor-pointer shrink-0">
                                         <span>🔊</span>
-                                        <span class="hidden md:inline">SFX</span>
                                         <svg class="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                                     </button>
                                     <div id="timeline-sfx-dropdown" class="hidden absolute left-0 bottom-full mb-2 w-56 bg-zinc-950/98 backdrop-blur-xl border border-amber-500/40 rounded-xl shadow-[0_-10px_25px_rgba(0,0,0,0.9)] p-2 z-[260] space-y-1">
@@ -1053,23 +1051,21 @@ export const MODAL_TEMPLATES = `
                         <div class="flex items-center gap-1.5 shrink-0">
                             <!-- Undo / Redo -->
                             <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-lg p-0.5 shrink-0 shadow-inner">
-                                <button id="timeline-action-undo" title="Undo Last Timeline Action (Ctrl+Z / Cmd+Z)" class="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" disabled>
+                                <button id="timeline-action-undo" title="Undo Last Timeline Action (Ctrl+Z / Cmd+Z)" class="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-md transition-colors text-xs flex items-center justify-center disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" disabled>
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a5 5 0 0 1 5 5v2M3 10l6-6M3 10l6 6"/></svg>
                                 </button>
-                                <button id="timeline-action-redo" title="Redo Last Timeline Action (Ctrl+Y / Cmd+Shift+Z)" class="p-1 hover:bg-white/10 text-gray-400 hover:text-white rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" disabled>
+                                <button id="timeline-action-redo" title="Redo Last Timeline Action (Ctrl+Y / Cmd+Shift+Z)" class="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-md transition-colors text-xs flex items-center justify-center disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed" disabled>
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10H11a5 5 0 0 0-5 5v2M21 10l-6-6M21 10l-6 6"/></svg>
                                 </button>
                             </div>
 
                             <!-- Tool Selection Strip (V / C) -->
                             <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-lg p-0.5 gap-0.5 shrink-0 shadow-inner">
-                                <button id="timeline-tool-select" title="Selection Tool (V) - Select, move, and trim clips" class="px-2 py-1 bg-indigo-600 text-white rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer font-medium">
+                                <button id="timeline-tool-select" title="Selection Tool (V) - Select, move, and trim clips" class="p-1 px-1.5 bg-indigo-600 text-white rounded-md transition-colors text-xs flex items-center justify-center cursor-pointer font-medium">
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2l16 11.4l-7.2.7l4 8.7l-3.3 1.5l-4-8.8l-5.5 5.5z"/></svg>
-                                    <span class="hidden xl:inline text-[10px]">Select (V)</span>
                                 </button>
-                                <button id="timeline-tool-razor" title="Razor Cut Tool (C) - Click any clip, audio segment, or overlay to split" class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer font-medium">
+                                <button id="timeline-tool-razor" title="Razor Cut Tool (C) - Click any clip, audio segment, or overlay to split" class="p-1 px-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors text-xs flex items-center justify-center cursor-pointer font-medium">
                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879a3 3 0 11-4.242-4.242L10.757 7.757m3.364 6.364l2.879-2.879a3 3 0 10-4.242-4.242L9.879 9.879"/></svg>
-                                    <span class="hidden xl:inline text-[10px]">Razor (C)</span>
                                 </button>
                             </div>
 
@@ -1096,29 +1092,27 @@ export const MODAL_TEMPLATES = `
                             </div>
 
                              <!-- Snap & Modes -->
-                            <div class="flex items-center gap-1.5 shrink-0">
-                                <button id="timeline-snap-toggle" title="Toggle Magnet Snapping to Playhead, Clip Edges, and Transcript Words" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-amber-600/90 hover:bg-amber-500 text-white rounded-md transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-xs">
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button id="timeline-snap-toggle" title="Toggle Magnet Snapping to Playhead, Clip Edges, and Transcript Words" class="p-1 px-1.5 text-[11px] font-bold bg-amber-600/90 hover:bg-amber-500 text-white rounded-md transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs">
                                     <span>🧲</span>
-                                    <span class="hidden xl:inline">Snap</span>
                                 </button>
                                 <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-md p-0.5 shrink-0 shadow-inner">
-                                    <button id="timeline-mode-ripple" title="Ripple Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider bg-zinc-800 text-white rounded transition-colors cursor-pointer shrink-0">Ripple</button>
-                                    <button id="timeline-mode-lift" title="Lift Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">Lift</button>
-                                    <button id="timeline-mode-slip" title="Slip Edit Mode" class="px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">Slip</button>
+                                    <button id="timeline-mode-ripple" title="Ripple Edit Mode (R)" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-white rounded transition-colors cursor-pointer shrink-0">R</button>
+                                    <button id="timeline-mode-lift" title="Lift Edit Mode" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">L</button>
+                                    <button id="timeline-mode-slip" title="Slip Edit Mode (T)" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">S</button>
                                 </div>
-                                <button id="timeline-link-audio-toggle" title="Toggle Linked Audio Editing (Synchronize video trims/deletes with master narration)" class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border border-white/10 rounded-md transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-xs">
+                                <button id="timeline-link-audio-toggle" title="Toggle Linked Audio Editing (Synchronize video trims/deletes with master narration)" class="p-1 px-1.5 text-[11px] font-bold bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border border-white/10 rounded-md transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs">
                                     <span>🔗</span>
-                                    <span class="hidden xl:inline">Link Audio</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- ZONE 3: Right - View, Transcript & Zoom Controls -->
-                        <div class="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto py-0.5">
+                        <div class="flex items-center gap-1 shrink-0 ml-auto py-0.5">
                             <!-- Transcript Group -->
                             <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-lg p-0.5 gap-0.5 shrink-0 shadow-inner">
-                                <button id="open-transcript-editor-btn" title="Open Transcript Editor" disabled class="hover:bg-zinc-800 text-gray-400 hover:text-white font-semibold text-xs px-2 py-1 rounded-md transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0 whitespace-nowrap">
-                                    <span>📝</span><span class="hidden sm:inline">Transcript</span>
+                                <button id="open-transcript-editor-btn" title="Open Transcript Editor" disabled class="p-1 px-1.5 hover:bg-zinc-800 text-gray-400 hover:text-white font-semibold text-xs rounded-md transition flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0">
+                                    <span>📝</span>
                                 </button>
                             </div>
 

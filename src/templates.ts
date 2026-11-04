@@ -1061,6 +1061,18 @@ export const MODAL_TEMPLATES = `
                                 </button>
                             </div>
 
+                            <!-- Tool Selection Strip (V / C) -->
+                            <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-lg p-0.5 gap-0.5 shrink-0 shadow-inner">
+                                <button id="timeline-tool-select" title="Selection Tool (V) - Select, move, and trim clips" class="px-2 py-1 bg-indigo-600 text-white rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer font-medium">
+                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M4 2l16 11.4l-7.2.7l4 8.7l-3.3 1.5l-4-8.8l-5.5 5.5z"/></svg>
+                                    <span class="hidden xl:inline text-[10px]">Select (V)</span>
+                                </button>
+                                <button id="timeline-tool-razor" title="Razor Cut Tool (C) - Click any clip, audio segment, or overlay to split" class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-md transition-colors text-xs flex items-center gap-1 cursor-pointer font-medium">
+                                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879a3 3 0 11-4.242-4.242L10.757 7.757m3.364 6.364l2.879-2.879a3 3 0 10-4.242-4.242L9.879 9.879"/></svg>
+                                    <span class="hidden xl:inline text-[10px]">Razor (C)</span>
+                                </button>
+                            </div>
+
                             <!-- Edit Tools Strip -->
                             <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-lg p-0.5 gap-0.5 shrink-0 shadow-inner">
                                 <button id="timeline-action-split" title="Split Clip at Playhead (S)" class="p-1.5 hover:bg-white/10 text-gray-300 hover:text-white rounded-md transition-colors text-xs cursor-pointer">

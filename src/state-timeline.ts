@@ -80,6 +80,7 @@ class TimelineState {
     private _selectedAudioSplitIndex: number | null = null;
     private _audioSegments: AudioSegment[] = [];
     private _audioSegmentsInitialized: boolean = false;
+    private _activeTool: 'select' | 'razor' = 'select';
     private _selectedAudioSegmentId: string | null = null;
     private _selectedGraphicId: string | null = null;
     private _videoGenerated: boolean = false;
@@ -250,6 +251,71 @@ class TimelineState {
             this._selectedGraphicId = null;
         }
         this.emitSettingChange();
+    }
+
+    get activeTool(): 'select' | 'razor' { return this._activeTool; }
+    setActiveTool(tool: 'select' | 'razor') {
+        this._activeTool = tool;
+        this.emitSettingChange();
+    }
+
+    /**
+     * Computes dynamically projected transcript word timestamps based on currently active
+     * AudioSegments on track A1. When segments are moved, trimmed, slipped, split, or deleted,
+     * the subtitle word timestamps dynamically project to the actual timeline time.
+     * When all audio segments are deleted, returns an empty array (silence / no phantom subtitles).
+     */
+    getTimelineWordTimestamps(): Array<{ word: string; start: number; end: number; score?: number; [k: string]: any }> {
+        const rawWords = this._globalWordTimestamps;
+        if (!rawWords || rawWords.length === 0) {
+            return [];
+        }
+
+        // If audio segments haven't been initialized, fall back to raw master words
+        if (!this._audioSegmentsInitialized) {
+            return rawWords;
+        }
+
+        const segments = this._audioSegments;
+        // If segments are initialized and user deleted all audio segments from track A1,
+        // no voiceover is present on the timeline, so voiceover subtitles must be empty!
+        if (segments.length === 0) {
+            return [];
+        }
+
+        const projected: Array<{ word: string; start: number; end: number; score?: number; [k: string]: any }> = [];
+
+        // Project words through each active, non-muted audio segment
+        for (const seg of segments) {
+            if (seg.muted) continue;
+            const segStart = seg.startTime;
+            const segDur = seg.duration;
+            const sourceIn = seg.sourceIn;
+            const sourceOut = seg.sourceOut;
+
+            for (const w of rawWords) {
+                // Check if this word overlaps with the segment's source window [sourceIn, sourceOut]
+                if (w.end > sourceIn + 0.01 && w.start < sourceOut - 0.01) {
+                    const offsetInSegStart = Math.max(0, w.start - sourceIn);
+                    const offsetInSegEnd = Math.min(segDur, w.end - sourceIn);
+                    const pStart = segStart + offsetInSegStart;
+                    const pEnd = segStart + offsetInSegEnd;
+
+                    if (pEnd > pStart + 0.01) {
+                        projected.push({
+                            ...w,
+                            start: Math.round(pStart * 1000) / 1000,
+                            end: Math.round(pEnd * 1000) / 1000,
+                            originalStart: w.start,
+                            originalEnd: w.end,
+                            audioSegmentId: seg.id,
+                        });
+                    }
+                }
+            }
+        }
+
+        return projected.sort((a, b) => a.start - b.start);
     }
 
     setAudioSegments(segments: AudioSegment[], notify = true) {

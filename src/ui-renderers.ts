@@ -2144,9 +2144,9 @@ export function renderBrollEditor(
       }
     });
 
-    // Render Track: Captions / Subtitles
-    if (timelineState.globalWordTimestamps?.length) {
-      const words = timelineState.globalWordTimestamps;
+    // Render Track: Captions / Subtitles (Dynamically synchronized with edited AudioSegments)
+    const words = timelineState.getTimelineWordTimestamps();
+    if (words && words.length > 0) {
       let currentPhrase: any[] = [];
       for (let i = 0; i < words.length; i++) {
         currentPhrase.push(words[i]);

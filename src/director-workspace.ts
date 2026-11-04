@@ -1508,10 +1508,30 @@ export function initStudioCommandPalette(): void {
       },
     },
     {
+      id: 'tool-select',
+      title: 'Selection Tool (Pointer)',
+      category: 'Editing',
+      shortcut: 'V',
+      action: () => {
+        const btn = document.getElementById('timeline-tool-select');
+        btn?.click();
+      },
+    },
+    {
+      id: 'tool-razor',
+      title: 'Razor Cut Tool (Interactive Slice)',
+      category: 'Editing',
+      shortcut: 'C',
+      action: () => {
+        const btn = document.getElementById('timeline-tool-razor');
+        btn?.click();
+      },
+    },
+    {
       id: 'edit-split',
       title: 'Split Clip at Playhead',
       category: 'Editing',
-      shortcut: 'Ctrl+B',
+      shortcut: 'Ctrl+B / S',
       action: () => {
         const btn = document.getElementById('timeline-action-split') || 
                     document.getElementById('split-clip-btn');

@@ -1632,6 +1632,8 @@ function registerEventListeners() {
     dom.timelineTranscribeBtn?.addEventListener('click', () => transcribeHandlers.handleTranscribeTimelineMixdown());
     dom.timelineClipsContainer?.addEventListener('click', videoController.handleTimelineClick);
     dom.timelineClipsContainer?.addEventListener('mousedown', videoController.handleTimelineMouseDown);
+    dom.timelineToolSelectBtn?.addEventListener('click', () => videoController.handleSetActiveTool('select'));
+    dom.timelineToolRazorBtn?.addEventListener('click', () => videoController.handleSetActiveTool('razor'));
     dom.timelineModeRippleBtn?.addEventListener('click', () => videoController.handleSetEditMode('ripple'));
     dom.timelineModeLiftBtn?.addEventListener('click', () => videoController.handleSetEditMode('lift'));
     dom.timelineModeSlipBtn?.addEventListener('click', () => videoController.handleSetEditMode('slip'));

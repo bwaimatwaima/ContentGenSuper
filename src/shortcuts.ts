@@ -11,7 +11,7 @@ import { timelineState } from './state-timeline';
 import * as ui from './ui';
 import * as dom from './dom';
 import { drawVideoFrame, videoRenderContext } from './videoRenderer';
-import { forcePausePlayback, handleVideoPlayPause, normalizeTimeline, handleSplitClip, handleTrimClip, handleSetEditMode, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, rippleCutMasterAudio, resyncTimeline } from './videoController';
+import { forcePausePlayback, handleVideoPlayPause, normalizeTimeline, handleSplitClip, handleTrimClip, handleSetEditMode, handleSetActiveTool, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, rippleCutMasterAudio, resyncTimeline } from './videoController';
 import { clearAIDirectorCache } from './videoDirector';
 import { getImageBlobFromClipboardEvent, processAndRoutePastedImage } from './handlers-images';
 import { initStudioCommandPalette } from './director-workspace';
@@ -210,6 +210,16 @@ export function initKeyboardShortcuts() {
 
         // Timeline editing operations
         if ((timelineState.clips?.length > 0 || timelineState.masterAudioBuffer) && !mod) {
+            if (key === 'c') {
+                e.preventDefault();
+                handleSetActiveTool('razor');
+                return;
+            }
+            if (key === 'v') {
+                e.preventDefault();
+                handleSetActiveTool('select');
+                return;
+            }
             if (key === 's') {
                 e.preventDefault();
                 handleSplitClip();

@@ -136,8 +136,9 @@ export async function handleExportVideo() {
     }
 
     try {
-        const { forcePausePlayback, resyncTimeline } = await import('../videoController');
+        const { forcePausePlayback, resyncTimeline, refreshPerClipWordTimestamps } = await import('../videoController');
         forcePausePlayback(undefined, true);
+        refreshPerClipWordTimestamps();
         if (timelineState.mode === 'audio_locked') {
             resyncTimeline({ notify: false, reason: 'pre-export' });
         }

@@ -1142,6 +1142,8 @@ export let timelineDurationBadge: HTMLSpanElement;
 export let timelineClipsBadge: HTMLSpanElement;
 export let timelinePacingBadge: HTMLSpanElement;
 export let storyboardTimelineDurationBadge: HTMLSpanElement;
+export let timelineToolSelectBtn: HTMLButtonElement;
+export let timelineToolRazorBtn: HTMLButtonElement;
 export let timelineModeRippleBtn: HTMLButtonElement;
 export let timelineModeLiftBtn: HTMLButtonElement;
 export let timelineModeSlipBtn: HTMLButtonElement;
@@ -2249,6 +2251,8 @@ export function initDOM() {
     timelineClipsBadge = document.getElementById('timeline-clips-badge') as HTMLSpanElement;
     timelinePacingBadge = document.getElementById('timeline-pacing-badge') as HTMLSpanElement;
     storyboardTimelineDurationBadge = (document.getElementById('storyboard-timeline-duration-badge') || document.getElementById('timeline-duration-badge')) as HTMLSpanElement;
+    timelineToolSelectBtn = document.getElementById('timeline-tool-select') as HTMLButtonElement;
+    timelineToolRazorBtn = document.getElementById('timeline-tool-razor') as HTMLButtonElement;
     timelineModeRippleBtn = document.getElementById('timeline-mode-ripple') as HTMLButtonElement;
     timelineModeLiftBtn = document.getElementById('timeline-mode-lift') as HTMLButtonElement;
     timelineModeSlipBtn = document.getElementById('timeline-mode-slip') as HTMLButtonElement;

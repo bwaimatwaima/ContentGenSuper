@@ -48,6 +48,11 @@ let draggedClipOriginalStart = 0;
 let draggedClipDuration = 0;
 let draggedClipOriginalOffset = 0;
 
+let isMarqueeSelecting = false;
+let marqueeStartX = 0;
+let marqueeStartY = 0;
+const multiDragOriginalStarts = new Map<string, number>();
+
 const narrationIndex = new ActiveClipIndex();
 let lastLoopTimestamp = 0;
 
@@ -494,6 +499,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
   }
 
   const isLocked = timelineState.mode === 'audio_locked';
+  const isMulti = Boolean(e.shiftKey || e.ctrlKey || e.metaKey);
 
   // If clicking directly on an overlay/track action button, do not hijack with drag or selection re-render
   if (target.closest('.overlay-edit-btn, .overlay-delete-btn, .clip-edit-btn, .clip-delete-btn, .sfx-play-btn, .sfx-trim-btn, .sfx-split-btn, .delete-btn, .edit-btn, .snap-btn, .dup-btn, .up-btn, .down-btn, button')) {
@@ -517,7 +523,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
       if (ev) {
         timelineState.saveSnapshot();
         activeOverlayId = graphicId;
-        timelineState.setSelectedGraphicId(graphicId);
+        timelineState.setSelectedGraphicId(graphicId, isMulti);
         overlayDragStartX = e.clientX;
         overlayOriginalStart = ev.start;
         overlayOriginalEnd = ev.end;
@@ -534,6 +540,7 @@ export function handleTimelineMouseDown(e: MouseEvent) {
         dragOverlayEl = dom.timelineClipsContainer.querySelector(`[data-graphic-id="${activeOverlayId}"]`) as HTMLElement;
         document.addEventListener('mousemove', onTimelineMouseMove);
         document.addEventListener('mouseup', handleTimelineMouseUp);
+        ui.renderTimelineEditor();
         return;
       }
     }
@@ -550,8 +557,8 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     if (seg) {
       timelineState.saveSnapshot();
       activeAudioSegId = seg.id;
-      timelineState.setSelectedAudioSegmentId(seg.id);
-      if (segIdx !== null) timelineState.setSelectedAudioSplitIndex(segIdx);
+      timelineState.setSelectedAudioSegmentId(seg.id, isMulti);
+      if (segIdx !== null && !isMulti) timelineState.setSelectedAudioSplitIndex(segIdx);
 
       audioSegDragStartX = e.clientX;
       audioSegOriginalStart = seg.startTime;
@@ -647,9 +654,20 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     const clip = findClipById(clipId);
     if (!clip) return;
 
-    // Always select the clip regardless of audio_locked mode
-    timelineState.setSelectedClipId(clipId);
+    const isAlreadySelected = timelineState.isClipSelected(clipId);
+    if (isMulti) {
+      timelineState.setSelectedClipId(clipId, true);
+    } else if (!isAlreadySelected) {
+      timelineState.setSelectedClipId(clipId, false);
+    }
     ui.renderTimelineEditor();
+
+    // Populate multiDragOriginalStarts for dragging all selected clips synchronously
+    multiDragOriginalStarts.clear();
+    for (const selId of timelineState.selectedClipIds) {
+      const selClip = findClipById(selId);
+      if (selClip) multiDragOriginalStarts.set(selId, selClip.startTime ?? 0);
+    }
 
     // Only initiate timing dragging if unlocked, OR if in slip mode (which slips offset without shifting timing)
     if (!isLocked || timelineState.editMode === 'slip') {
@@ -674,6 +692,20 @@ export function handleTimelineMouseDown(e: MouseEvent) {
       document.addEventListener('mousemove', onTimelineMouseMove);
       document.addEventListener('mouseup', handleTimelineMouseUp);
     }
+    return;
+  }
+
+  // Empty timeline space: Marquee Box Selection or clear selection
+  if (!clipId && !overlayClip && !audioSegClip && !transBtn && !transZone) {
+    if (!isMulti) {
+      timelineState.clearAllSelection();
+      ui.renderTimelineEditor();
+    }
+    isMarqueeSelecting = true;
+    marqueeStartX = e.clientX;
+    marqueeStartY = e.clientY;
+    document.addEventListener('mousemove', onTimelineMouseMove);
+    document.addEventListener('mouseup', handleTimelineMouseUp);
   }
 }
 
@@ -692,6 +724,83 @@ function handleTimelineMouseMove(e: MouseEvent) {
   markInteraction();
   if (Math.abs(e.clientX - timelineClickStartX) > 3) {
       hasTimelineDragged = true;
+  }
+
+  if (isMarqueeSelecting) {
+    let box = document.getElementById('timeline-marquee-box');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'timeline-marquee-box';
+      box.className = 'fixed pointer-events-none z-[9999] border border-indigo-400 bg-indigo-500/20 rounded shadow-sm backdrop-blur-[1px]';
+      document.body.appendChild(box);
+    }
+    const minX = Math.min(marqueeStartX, e.clientX);
+    const maxX = Math.max(marqueeStartX, e.clientX);
+    const minY = Math.min(marqueeStartY, e.clientY);
+    const maxY = Math.max(marqueeStartY, e.clientY);
+    box.style.left = `${minX}px`;
+    box.style.top = `${minY}px`;
+    box.style.width = `${maxX - minX}px`;
+    box.style.height = `${maxY - minY}px`;
+
+    // Compute overlapping items based on timeline time
+    const containerRect = dom.timelineClipsContainer?.getBoundingClientRect();
+    if (containerRect) {
+      const pps = getPixelsPerSecond();
+      const scrollLeft = dom.timelineClipsContainer.scrollLeft || 0;
+      const timeStart = Math.max(0, (minX - containerRect.left + scrollLeft) / pps);
+      const timeEnd = Math.max(0, (maxX - containerRect.left + scrollLeft) / pps);
+
+      const matchingClips: string[] = [];
+      for (const c of (timelineState.clips || [])) {
+        const cStart = c.startTime ?? 0;
+        const cEnd = c.endTime ?? (cStart + c.duration);
+        if (cEnd > timeStart && cStart < timeEnd) {
+          matchingClips.push(c.id);
+        }
+      }
+
+      const matchingAudio: string[] = [];
+      const segments = timelineState.ensureAudioSegments();
+      for (const seg of segments) {
+        if (seg.endTime > timeStart && seg.startTime < timeEnd) {
+          matchingAudio.push(seg.id);
+        }
+      }
+
+      const matchingGraphics: string[] = [];
+      for (const g of (timelineState.graphics || [])) {
+        if (g.end > timeStart && g.start < timeEnd) {
+          matchingGraphics.push(g.id);
+        }
+      }
+
+      timelineState.setMultiSelection(matchingClips, matchingAudio, matchingGraphics);
+
+      // Fast visual feedback without whole timeline re-rendering
+      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.timeline-clip').forEach(el => {
+        const id = el.dataset.clipId;
+        const isSel = id ? matchingClips.includes(id) : false;
+        el.classList.toggle('ring-2', isSel);
+        el.classList.toggle('ring-indigo-400', isSel);
+        el.classList.toggle('border-white', isSel);
+      });
+
+      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.audio-clip-overlay').forEach(el => {
+        const id = el.dataset.audioSegId;
+        const isSel = id ? matchingAudio.includes(id) : false;
+        el.classList.toggle('ring-2', isSel);
+        el.classList.toggle('ring-indigo-400', isSel);
+      });
+
+      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.timeline-overlay-clip').forEach(el => {
+        const id = el.dataset.graphicId;
+        const isSel = id ? matchingGraphics.includes(id) : false;
+        el.classList.toggle('ring-2', isSel);
+        el.classList.toggle('ring-amber-400', isSel);
+      });
+    }
+    return;
   }
 
   if (isResizingOverlay && activeOverlayId) {
@@ -867,6 +976,21 @@ function handleTimelineMouseMove(e: MouseEvent) {
         clip.endTime = newStart + draggedClipDuration;
         timelineState.bumpClipsVersion();
         updateClipDOM(clip.id, clip.startTime, clip.endTime);
+
+        // Move all other selected clips synchronously by the same delta
+        if (multiDragOriginalStarts.size > 1 && timelineState.isClipSelected(clip.id)) {
+          const effectiveDelta = newStart - draggedClipOriginalStart;
+          for (const [sId, origStart] of multiDragOriginalStarts.entries()) {
+            if (sId === clip.id) continue;
+            const otherClip = findClipById(sId);
+            if (otherClip) {
+              const dur = otherClip.duration || ((otherClip.endTime ?? 0) - (otherClip.startTime ?? 0));
+              otherClip.startTime = Math.max(0, origStart + effectiveDelta);
+              otherClip.endTime = otherClip.startTime + dur;
+              updateClipDOM(otherClip.id, otherClip.startTime, otherClip.endTime);
+            }
+          }
+        }
       }
 
       const now = performance.now();
@@ -1065,6 +1189,21 @@ function handleTimelineMouseUp() {
   flushTimelineMove();
   dragOverlayEl = null;
   cachedDragSnapPoints = null;
+
+  if (isMarqueeSelecting) {
+    isMarqueeSelecting = false;
+    const box = document.getElementById('timeline-marquee-box');
+    if (box) box.remove();
+    document.removeEventListener('mousemove', onTimelineMouseMove);
+    document.removeEventListener('mouseup', handleTimelineMouseUp);
+    ui.renderTimelineEditor();
+    const count = timelineState.getTotalSelectedCount();
+    if (count > 0) {
+      ui.showStatus(`Selected ${count} item${count > 1 ? 's' : ''}. Shift/Ctrl+Click to toggle, Delete to remove.`, false, 2000);
+    }
+    return;
+  }
+
   if (isDraggingOverlay || isResizingOverlay) {
     isDraggingOverlay = false;
     isResizingOverlay = false;
@@ -1116,7 +1255,15 @@ function handleTimelineMouseUp() {
     isDraggingClip = false;
     draggedClipId = null;
 
-    if (didMove && movedClip) {
+    if (multiDragOriginalStarts.size > 1) {
+      if (didMove) {
+        timelineState.setClips([...timelineState.clips], false);
+        refreshPerClipWordTimestamps();
+        updateVideoContext();
+        ui.renderTimelineEditor();
+      }
+      multiDragOriginalStarts.clear();
+    } else if (didMove && movedClip) {
       if (timelineState.editMode === 'slip' || movedClip.displayMode === 'pip_overlay') {
         timelineState.setClips([...timelineState.clips], false);
         refreshPerClipWordTimestamps();
@@ -3310,7 +3457,105 @@ export function handleDeleteAudioClip(index: number, ripple: boolean = false) {
     ui.showStatus(`Audio ${ripple ? 'ripple-deleted' : 'silenced'} (${durationRemoved.toFixed(1)}s).`, false, 2000);
 }
 
+export function handleBatchDelete() {
+    const totalCount = timelineState.getTotalSelectedCount();
+    if (totalCount === 0) return;
+
+    timelineState.saveSnapshot();
+    forcePausePlayback();
+
+    let deletedClipsCount = 0;
+    let deletedAudioCount = 0;
+    let deletedGraphicsCount = 0;
+
+    // 1. Delete selected Graphic Overlays / SFX (Track V2)
+    if (timelineState.selectedGraphicIds.length > 0) {
+        const idsToDelete = new Set(timelineState.selectedGraphicIds);
+        deletedGraphicsCount = idsToDelete.size;
+        const nextGraphics = (timelineState.graphics || []).filter(g => !idsToDelete.has(g.id));
+        timelineState.setGraphics(nextGraphics);
+        for (const id of idsToDelete) {
+            try {
+                const el = document.getElementById(`hf-clip-${id}`);
+                if (el) el.remove();
+            } catch {}
+        }
+        try {
+            HyperFramesEngine.seek(state.lastRenderedTime || state.videoPauseTime || 0, nextGraphics);
+        } catch {}
+    }
+
+    // 2. Delete selected Audio Segments (Track A1)
+    if (timelineState.selectedAudioSegmentIds.length > 0) {
+        const audioIdsToDelete = new Set(timelineState.selectedAudioSegmentIds);
+        deletedAudioCount = audioIdsToDelete.size;
+        const currentSegments = timelineState.ensureAudioSegments();
+        const remainingSegments = currentSegments.filter(s => !audioIdsToDelete.has(s.id));
+
+        if (timelineState.editMode === 'ripple') {
+            let cursor = 0;
+            for (const seg of remainingSegments) {
+                const dur = seg.duration;
+                seg.startTime = cursor;
+                seg.endTime = cursor + dur;
+                cursor = seg.endTime;
+            }
+        }
+        timelineState.setAudioSegments(remainingSegments, true);
+    }
+
+    // 3. Delete selected Video Clips (Track V1)
+    if (timelineState.selectedClipIds.length > 0) {
+        const clipIdsToDelete = new Set(timelineState.selectedClipIds);
+        const currentClips = [...(timelineState.clips || [])];
+
+        // Ensure user does not delete all clips from the project
+        if (clipIdsToDelete.size >= currentClips.length) {
+            ui.showStatus('Cannot delete all video clips. At least one shot must remain.', true, 2500);
+            timelineState.clearAllSelection();
+            ui.renderTimelineEditor();
+            return;
+        }
+
+        deletedClipsCount = clipIdsToDelete.size;
+        const remainingClips = currentClips.filter(c => !clipIdsToDelete.has(c.id));
+
+        if (timelineState.editMode === 'ripple') {
+            let cursor = 0;
+            for (const c of remainingClips) {
+                if (c.displayMode === 'pip_overlay') continue;
+                const dur = c.duration || ((c.endTime ?? 0) - (c.startTime ?? 0));
+                c.startTime = cursor;
+                c.endTime = cursor + dur;
+                cursor = c.endTime;
+            }
+        }
+
+        timelineState.setClips(remainingClips, false);
+    }
+
+    timelineState.clearAllSelection();
+    refreshPerClipWordTimestamps();
+    try { SubtitleEngine.clearBitmapCache(); } catch {}
+    updateVideoContext();
+    ui.renderTimelineEditor();
+    if (videoRenderContext) {
+        drawVideoFrame(state.videoPauseTime || 0);
+    }
+
+    const parts: string[] = [];
+    if (deletedClipsCount) parts.push(`${deletedClipsCount} clip${deletedClipsCount > 1 ? 's' : ''}`);
+    if (deletedAudioCount) parts.push(`${deletedAudioCount} audio segment${deletedAudioCount > 1 ? 's' : ''}`);
+    if (deletedGraphicsCount) parts.push(`${deletedGraphicsCount} overlay${deletedGraphicsCount > 1 ? 's' : ''}`);
+    ui.showStatus(`🗑️ Batch deleted ${parts.join(', ')}.`, false, 2500);
+}
+
 export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: string } = {}) {
+    if (timelineState.hasMultiSelection() || timelineState.getTotalSelectedCount() > 1) {
+        handleBatchDelete();
+        return;
+    }
+
     // 1. Delete selected or targeted SFX / Graphic clip
     if (timelineState.selectedGraphicId) {
       const gId = timelineState.selectedGraphicId;

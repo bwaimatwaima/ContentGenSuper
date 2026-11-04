@@ -83,6 +83,9 @@ class TimelineState {
     private _activeTool: 'select' | 'razor' = 'select';
     private _selectedAudioSegmentId: string | null = null;
     private _selectedGraphicId: string | null = null;
+    private _selectedClipIds: Set<string> = new Set();
+    private _selectedAudioSegmentIds: Set<string> = new Set();
+    private _selectedGraphicIds: Set<string> = new Set();
     private _videoGenerated: boolean = false;
     private _savedVideoTimelineMetadata: any[] | null = null;
     private _showSubtitles: boolean = false;
@@ -242,13 +245,31 @@ class TimelineState {
     get audioSegmentsInitialized(): boolean { return this._audioSegmentsInitialized; }
     setAudioSegmentsInitialized(val: boolean) { this._audioSegmentsInitialized = Boolean(val); }
     get selectedAudioSegmentId(): string | null { return this._selectedAudioSegmentId; }
+    get selectedAudioSegmentIds(): string[] { return Array.from(this._selectedAudioSegmentIds); }
+    isAudioSegmentSelected(id: string): boolean { return this._selectedAudioSegmentIds.has(id) || this._selectedAudioSegmentId === id; }
 
-    setSelectedAudioSegmentId(id: string | null) {
-        this._selectedAudioSegmentId = id;
-        if (id !== null) {
+    setSelectedAudioSegmentId(id: string | null, multi = false) {
+        if (!multi) {
+            this._selectedClipIds.clear();
+            this._selectedAudioSegmentIds.clear();
+            this._selectedGraphicIds.clear();
             this._selectedClipId = null;
             this._selectedAudioSplitIndex = null;
             this._selectedGraphicId = null;
+            this._selectedAudioSegmentId = id;
+            if (id) this._selectedAudioSegmentIds.add(id);
+        } else {
+            if (id) {
+                if (this._selectedAudioSegmentIds.has(id)) {
+                    this._selectedAudioSegmentIds.delete(id);
+                    if (this._selectedAudioSegmentId === id) {
+                        this._selectedAudioSegmentId = Array.from(this._selectedAudioSegmentIds)[0] || null;
+                    }
+                } else {
+                    this._selectedAudioSegmentIds.add(id);
+                    this._selectedAudioSegmentId = id;
+                }
+            }
         }
         this.emitSettingChange();
     }
@@ -383,12 +404,31 @@ class TimelineState {
         return this._audioSegments;
     }
 
-    setSelectedGraphicId(id: string | null) {
-        this._selectedGraphicId = id;
-        if (id !== null) {
+    get selectedGraphicIds(): string[] { return Array.from(this._selectedGraphicIds); }
+    isGraphicSelected(id: string): boolean { return this._selectedGraphicIds.has(id) || this._selectedGraphicId === id; }
+
+    setSelectedGraphicId(id: string | null, multi = false) {
+        if (!multi) {
+            this._selectedClipIds.clear();
+            this._selectedAudioSegmentIds.clear();
+            this._selectedGraphicIds.clear();
             this._selectedClipId = null;
             this._selectedAudioSplitIndex = null;
             this._selectedAudioSegmentId = null;
+            this._selectedGraphicId = id;
+            if (id) this._selectedGraphicIds.add(id);
+        } else {
+            if (id) {
+                if (this._selectedGraphicIds.has(id)) {
+                    this._selectedGraphicIds.delete(id);
+                    if (this._selectedGraphicId === id) {
+                        this._selectedGraphicId = Array.from(this._selectedGraphicIds)[0] || null;
+                    }
+                } else {
+                    this._selectedGraphicIds.add(id);
+                    this._selectedGraphicId = id;
+                }
+            }
         }
         this.emitSettingChange();
     }
@@ -402,13 +442,66 @@ class TimelineState {
         this.emitSettingChange();
     }
 
-    setSelectedClipId(clipId: string | null) {
-        this._selectedClipId = clipId;
-        if (clipId !== null) {
-            this._selectedAudioSplitIndex = null; // mutually exclusive
+    get selectedClipIds(): string[] { return Array.from(this._selectedClipIds); }
+    isClipSelected(id: string): boolean { return this._selectedClipIds.has(id) || this._selectedClipId === id; }
+    hasMultiSelection(): boolean { return (this._selectedClipIds.size + this._selectedAudioSegmentIds.size + this._selectedGraphicIds.size) > 1; }
+    getTotalSelectedCount(): number { return this._selectedClipIds.size + this._selectedAudioSegmentIds.size + this._selectedGraphicIds.size; }
+
+    setSelectedClipId(clipId: string | null, multi = false) {
+        if (!multi) {
+            this._selectedClipIds.clear();
+            this._selectedAudioSegmentIds.clear();
+            this._selectedGraphicIds.clear();
+            this._selectedAudioSplitIndex = null;
             this._selectedAudioSegmentId = null;
             this._selectedGraphicId = null;
+            this._selectedClipId = clipId;
+            if (clipId) this._selectedClipIds.add(clipId);
+        } else {
+            if (clipId) {
+                if (this._selectedClipIds.has(clipId)) {
+                    this._selectedClipIds.delete(clipId);
+                    if (this._selectedClipId === clipId) {
+                        this._selectedClipId = Array.from(this._selectedClipIds)[0] || null;
+                    }
+                } else {
+                    this._selectedClipIds.add(clipId);
+                    this._selectedClipId = clipId;
+                }
+            }
         }
+        this.emitSettingChange();
+    }
+
+    clearAllSelection() {
+        this._selectedClipId = null;
+        this._selectedAudioSegmentId = null;
+        this._selectedGraphicId = null;
+        this._selectedAudioSplitIndex = null;
+        this._selectedClipIds.clear();
+        this._selectedAudioSegmentIds.clear();
+        this._selectedGraphicIds.clear();
+        this.emitSettingChange();
+    }
+
+    selectAll() {
+        this._selectedClipIds.clear();
+        this._selectedAudioSegmentIds.clear();
+        this._selectedGraphicIds.clear();
+        for (const c of this._clips) this._selectedClipIds.add(c.id);
+        for (const s of this._audioSegments) this._selectedAudioSegmentIds.add(s.id);
+        for (const g of this._graphics) this._selectedGraphicIds.add(g.id);
+        this._selectedClipId = this._clips[0]?.id || null;
+        this.emitSettingChange();
+    }
+
+    setMultiSelection(clipIds: string[], audioSegmentIds: string[] = [], graphicIds: string[] = []) {
+        this._selectedClipIds = new Set(clipIds || []);
+        this._selectedAudioSegmentIds = new Set(audioSegmentIds || []);
+        this._selectedGraphicIds = new Set(graphicIds || []);
+        this._selectedClipId = clipIds && clipIds.length > 0 ? clipIds[0] : null;
+        this._selectedAudioSegmentId = audioSegmentIds && audioSegmentIds.length > 0 ? audioSegmentIds[0] : null;
+        this._selectedGraphicId = graphicIds && graphicIds.length > 0 ? graphicIds[0] : null;
         this.emitSettingChange();
     }
 

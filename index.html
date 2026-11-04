@@ -7139,6 +7139,133 @@
         </div>
     </div>
 
+    <!-- Keyboard Shortcuts & Multi-Selection Guide Modal -->
+    <div id="shortcut-guide-modal" class="hidden fixed inset-0 z-[650] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-hidden animate-fade-in">
+        <div class="bg-gray-900 border border-indigo-500/40 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-gray-200">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-gray-800 bg-gray-950/80 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-950/80 border border-indigo-600/40 flex items-center justify-center text-lg text-indigo-400 shadow-sm">
+                        ⌨️
+                    </div>
+                    <div>
+                        <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                            Keyboard Shortcuts & Timeline Controls
+                        </h2>
+                        <p class="text-xs text-gray-400">Pro multi-selection, trimming, cutting & playback hotkeys</p>
+                    </div>
+                </div>
+                <button type="button" class="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition cursor-pointer" onclick="document.getElementById('shortcut-guide-modal').classList.add('hidden')">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Content Area -->
+            <div class="p-6 overflow-y-auto space-y-5 custom-scrollbar text-xs">
+                <!-- Multi-Selection Section -->
+                <div class="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-sm text-indigo-300 flex items-center gap-1.5">
+                            <span>✨</span> Multi-Item Selection & Batch Operations
+                        </span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">NEW</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-gray-300 pt-1">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5">
+                            <span>Add / Toggle Item</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-indigo-300 border border-gray-700">Shift + Click</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5">
+                            <span>Marquee Box Select</span>
+                            <span class="font-mono text-indigo-300">Click & Drag Empty Space</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5">
+                            <span>Select All Timeline</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-indigo-300 border border-gray-700">Ctrl / Cmd + A</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5">
+                            <span>Clear Selection</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-indigo-300 border border-gray-700">Escape</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5 sm:col-span-2">
+                            <span>Batch Delete All Selected</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-rose-300 border border-gray-700">Delete / Backspace</kbd>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline Editing Section -->
+                <div class="space-y-2">
+                    <h4 class="font-bold text-xs uppercase tracking-wider text-gray-400">Editing & Tools</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-300">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Split Shot at Playhead</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">S or Ctrl+B</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Razor Tool (Click to Cut)</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">C</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Selection Tool</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">V</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Ripple Mode Toggle</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">R</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Slip Mode Toggle</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">T</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Ripple Trim Left (In)</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">Q</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Ripple Trim Right (Out)</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">W</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Undo / Redo</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-amber-300 border border-gray-700">Ctrl+Z / Ctrl+Y</kbd>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Playback & Navigation -->
+                <div class="space-y-2">
+                    <h4 class="font-bold text-xs uppercase tracking-wider text-gray-400">Playback & Navigation</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-300">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Play / Pause</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-sky-300 border border-gray-700">Space</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Nudge ±1 Frame</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-sky-300 border border-gray-700">← / →</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Shuttle ±5 Frames</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-sky-300 border border-gray-700">J / L</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-gray-950/60 border border-gray-800">
+                            <span>Toggle This Guide</span>
+                            <kbd class="px-2 py-0.5 rounded bg-gray-800 font-mono text-sky-300 border border-gray-700">?</kbd>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-3 border-t border-gray-800 bg-gray-950/80 flex items-center justify-end shrink-0">
+                <button type="button" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-1.5 rounded-lg text-xs cursor-pointer transition shadow-sm" onclick="document.getElementById('shortcut-guide-modal').classList.add('hidden')">
+                    Got It
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

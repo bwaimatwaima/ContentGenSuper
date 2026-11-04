@@ -2077,8 +2077,13 @@ export function renderBrollEditor(
 
       const el = document.createElement("div");
       const isPiPOverlay = clip.displayMode === 'pip_overlay';
+      const isSelected = timelineState.isClipSelected(clip.id);
       el.className =
-        `timeline-clip absolute h-14 backdrop-blur-sm rounded-md border-2 hover:border-indigo-400 flex items-center justify-center overflow-hidden z-10 shadow-sm transition-colors ${isPiPOverlay ? 'bg-indigo-950/60 border-indigo-400/80 ring-1 ring-indigo-400/30 shadow-[0_0_10px_rgba(99,102,241,0.2)]' : 'bg-gray-800/80 border-indigo-500/50'}`;
+        `timeline-clip absolute h-14 backdrop-blur-sm rounded-md border-2 hover:border-indigo-400 flex items-center justify-center overflow-hidden z-10 shadow-sm transition-all ${
+          isSelected
+            ? 'border-indigo-300 ring-2 ring-indigo-400 ring-offset-2 ring-offset-black bg-indigo-950/80 shadow-[0_0_15px_rgba(99,102,241,0.5)] z-20 scale-[1.01]'
+            : (isPiPOverlay ? 'bg-indigo-950/60 border-indigo-400/80 ring-1 ring-indigo-400/30 shadow-[0_0_10px_rgba(99,102,241,0.2)]' : 'bg-gray-800/80 border-indigo-500/50')
+        }`;
       el.dataset.clipId = clip.id;
       el.style.left = `${clip.startTime * pps}px`;
       el.style.width = `${clip.duration * pps}px`;
@@ -2262,8 +2267,8 @@ export function renderBrollEditor(
         if (seg.duration < 0.02) return;
 
         const isSelected =
-          timelineState.selectedAudioSegmentId === seg.id ||
-          timelineState.selectedAudioSplitIndex === i;
+          timelineState.isAudioSegmentSelected(seg.id) ||
+          (!timelineState.hasMultiSelection() && timelineState.selectedAudioSplitIndex === i);
 
         const clipDiv = document.createElement('div');
         clipDiv.className = `audio-clip-overlay absolute top-0.5 bottom-0.5 rounded border pointer-events-auto cursor-grab active:cursor-grabbing transition-colors group overflow-hidden ${
@@ -2489,7 +2494,7 @@ export function renderBrollEditor(
             const icon = sfxIcons[sfxType] || "🔊";
             const title = ev.title || sfxType;
 
-            const isSelected = ev.id === timelineState.selectedGraphicId;
+            const isSelected = timelineState.isGraphicSelected(ev.id);
             const borderClasses = isSelected
               ? "border-amber-300 ring-2 ring-amber-400 shadow-amber-500/50 scale-[1.01]"
               : "border-amber-500/70 hover:border-amber-300";

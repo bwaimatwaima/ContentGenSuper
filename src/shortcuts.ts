@@ -139,14 +139,30 @@ export function initKeyboardShortcuts() {
         const mod = e.ctrlKey || e.metaKey;
         const key = e.key.toLowerCase();
 
-        // Escape: Close Video Director and return to storyboard
+        // Escape: Clear multi-selection first, or close modal
         if (key === 'escape') {
+            if (timelineState.getTotalSelectedCount() > 0) {
+                e.preventDefault();
+                timelineState.clearAllSelection();
+                ui.renderTimelineEditor();
+                return;
+            }
             const modal = dom.videoDirectorModal || (document.getElementById('video-director-modal') as HTMLElement | null);
             if (modal && !modal.classList.contains('hidden') && modal.style.display !== 'none') {
                 e.preventDefault();
                 import('./videoController').then(m => m.handleCloseVideoDirectorModal());
                 return;
             }
+        }
+
+        // Select All (Ctrl/Cmd+A) on timeline
+        if (mod && key === 'a') {
+            e.preventDefault();
+            timelineState.selectAll();
+            ui.renderTimelineEditor();
+            const count = timelineState.getTotalSelectedCount();
+            ui.showStatus(`Selected all (${count} items on timeline).`, false, 1500);
+            return;
         }
 
         // Undo / Redo

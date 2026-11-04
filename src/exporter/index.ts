@@ -473,16 +473,30 @@ async function runExport(format: 'mp4' | 'webm' | 'mp4-ffmpeg', preferHardware: 
     const hasSoloOrMutedClips = (timelineState.clips || []).some((c: any) => c.soloAudio || c.muteNarration);
     const needsMultiBusMix = hasSecondaryAudioBuses || hasSoloOrMutedClips;
 
+    const isAudioTrackUntouched = () => {
+        if (!timelineState.audioSegmentsInitialized) return true;
+        const segs = timelineState.audioSegments || [];
+        if (!timelineState.masterAudioBuffer) return segs.length === 0;
+        if (segs.length !== 1) return false;
+        const seg = segs[0];
+        return !seg.muted &&
+            Math.abs(seg.startTime) < 0.01 &&
+            Math.abs(seg.sourceIn) < 0.01 &&
+            Math.abs(seg.duration - timelineState.masterAudioBuffer.duration) < 0.05;
+    };
+
+    const isAudioUntouched = isAudioTrackUntouched();
+
     // If the project ONLY has the standalone masterAudioBuffer (no BGM/SFX/clip audio) and exceeds
     // the device's continuous mix ceiling, pass masterAudioBuffer directly with 0 MB extra allocation!
-    const useDirectMasterBuffer = hasMasterAudio && !needsMultiBusMix && (exportMinutes > memProfile.maxContinuousAudioMinutes || state.autoNormalizeAudio === false);
+    const useDirectMasterBuffer = hasMasterAudio && isAudioUntouched && !needsMultiBusMix && (exportMinutes > memProfile.maxContinuousAudioMinutes || state.autoNormalizeAudio === false);
 
-    // Only use 30s chunked mixing when there are multiple buses (BGM/SFX/clip audio) AND the project
+    // Only use 30s chunked mixing when there are multiple buses (BGM/SFX/clip audio or edited audio track) AND the project
     // exceeds the device tier's safe continuous audio ceiling (4 min on Low RAM, 12 min on Balanced, 30 min on Pro).
     const useChunkedAudio =
         !useLongElectronSegmentedPipeline &&
         format !== 'mp4-ffmpeg' &&
-        needsMultiBusMix &&
+        (needsMultiBusMix || !isAudioUntouched) &&
         exportMinutes > memProfile.maxContinuousAudioMinutes;
 
     const shouldBuildFullAudioMix = !useLongElectronSegmentedPipeline && !useChunkedAudio && !useDirectMasterBuffer;

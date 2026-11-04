@@ -277,6 +277,7 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
         graphics: timelineState.graphics,
         audioSplits: timelineState.audioSplits,
         audioSegments: timelineState.audioSegments,
+        audioSegmentsInitialized: timelineState.audioSegmentsInitialized,
         // Save audio metadata
         audioMetadata: timelineState.masterAudioBuffer ? {
             duration: timelineState.masterAudioBuffer.duration,
@@ -863,7 +864,9 @@ export async function loadProject() {
             timelineState.setMode(projectData.timelineMode || 'free');
             timelineState.setGraphics(projectData.graphics || []);
             timelineState.setAudioSplits(projectData.audioSplits || []);
-            if (Array.isArray(projectData.audioSegments) && projectData.audioSegments.length > 0) {
+            if (projectData.audioSegmentsInitialized) {
+                timelineState.setAudioSegments(projectData.audioSegments || [], false);
+            } else if (Array.isArray(projectData.audioSegments) && projectData.audioSegments.length > 0) {
                 timelineState.setAudioSegments(projectData.audioSegments, false);
             }
             

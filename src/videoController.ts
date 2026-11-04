@@ -1081,6 +1081,7 @@ function handleTimelineMouseUp() {
     timelineState.setAudioSegments(segments, false);
     updateVideoContext();
     ui.renderTimelineEditor();
+    saveVersion(false);
   }
 
   if (isDraggingClip && draggedClipId) {
@@ -1188,13 +1189,16 @@ export function updateVideoContext(skipUIRender = false) {
 
   ensureClipIds();
   const sorted = getSortedTimeline();
-  const audioDur = timelineState.masterAudioBuffer?.duration;
+  const audioSegs = timelineState.audioSegments || [];
+  const maxAudioEnd = (timelineState.audioSegmentsInitialized && audioSegs.length > 0)
+    ? audioSegs.reduce((m, s) => Math.max(m, s.endTime ?? 0), 0)
+    : (timelineState.audioSegmentsInitialized && audioSegs.length === 0)
+      ? 0
+      : (timelineState.masterAudioBuffer?.duration ?? 0);
   const maxVisualEnd = sorted.reduce((m, c) =>
     Math.max(m, isNum(c.endTime) ? c.endTime : (isNum(c.startTime) ? c.startTime : 0) + (c.duration || 0)), 0
   );
-  const totalDuration = isNum(audioDur)
-    ? Math.max(audioDur as number, maxVisualEnd)
-    : maxVisualEnd;
+  const totalDuration = Math.max(maxAudioEnd, maxVisualEnd);
 
   state.videoPauseTime = Math.max(0, Math.min(state.videoPauseTime, totalDuration));
 
@@ -1374,16 +1378,20 @@ export function syncPreviewMasterAudioAtTime(timelineTime: number) {
 
   const segments = timelineState.ensureAudioSegments?.() || [];
 
-  // Legacy fallback if no segments exist
+  // If segments are initialized and empty, user deleted all audio
   if (segments.length === 0) {
-    if (!state.videoAudioSource && timelineTime < timelineState.masterAudioBuffer.duration) {
-      const audioCtx = utils.getAudioContext();
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      const src = audioCtx.createBufferSource();
-      src.buffer = timelineState.masterAudioBuffer;
-      src.connect(audioCtx.destination);
-      src.start(0, timelineTime);
-      state.videoAudioSource = src;
+    if (!timelineState.audioSegmentsInitialized) {
+      if (!state.videoAudioSource && timelineTime < timelineState.masterAudioBuffer.duration) {
+        const audioCtx = utils.getAudioContext();
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        const src = audioCtx.createBufferSource();
+        src.buffer = timelineState.masterAudioBuffer;
+        src.connect(audioCtx.destination);
+        src.start(0, timelineTime);
+        state.videoAudioSource = src;
+      }
+    } else {
+      stopPreviewMasterAudio();
     }
     return;
   }
@@ -2806,6 +2814,7 @@ export function handleSplitClip() {
         timelineState.setSelectedAudioSegmentId(rightSeg.id);
         timelineState.setSelectedAudioSplitIndex(segIdx + 1);
         ui.renderTimelineEditor();
+        saveVersion(false);
         ui.showStatus('✂️ Audio segment split at playhead.', false, 1500);
         return;
     }
@@ -2924,6 +2933,7 @@ export function handleDeleteAudioSegment(segmentId?: string, forceRipple?: boole
 
     updateVideoContext();
     ui.renderTimelineEditor();
+    saveVersion(false);
     ui.showStatus(
         isRipple
             ? `🗑️ Ripple-deleted audio segment (${durRemoved.toFixed(1)}s)${isLinked ? ' + linked video' : ''}.`

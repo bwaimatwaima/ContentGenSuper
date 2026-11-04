@@ -139,7 +139,7 @@ export async function extractTimelineAudioMixdown(skipBGM: boolean = true): Prom
                     1.0
                 );
             }
-        } else {
+        } else if (!timelineState.audioSegmentsInitialized) {
             await mixInNative(
                 voiceBus,
                 timelineState.masterAudioBuffer,

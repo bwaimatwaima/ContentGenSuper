@@ -2187,21 +2187,28 @@ export function renderBrollEditor(
     existingAudioLabels.forEach((el) => el.remove());
 
     const masterAudioBuf = timelineState.masterAudioBuffer;
+    const audioSegments = timelineState.ensureAudioSegments?.() || [];
+    const isAudioInitialized = timelineState.audioSegmentsInitialized;
     if (waveformCanvas && masterAudioBuf) {
-      waveformCanvas.style.display = "block";
-      const buffer = masterAudioBuf;
-      const audioDur = buffer.duration;
-      const audioWidthPx = Math.max(1, audioDur * pps);
+      if (isAudioInitialized && audioSegments.length === 0) {
+        waveformCanvas.style.display = "none";
+      } else {
+        waveformCanvas.style.display = "block";
+        const buffer = masterAudioBuf;
+        const audioDur = (isAudioInitialized && audioSegments.length > 0)
+          ? audioSegments.reduce((m, s) => Math.max(m, s.endTime ?? 0), 0)
+          : buffer.duration;
+        const audioWidthPx = Math.max(1, audioDur * pps);
 
-      const SAFE_CANVAS_LIMIT = 8000;
-      const canvasStartX = Math.max(0, Math.floor(visibleStartX));
-      const canvasEndX = Math.min(audioWidthPx, Math.ceil(visibleEndX));
-      const canvasWidth = Math.max(
-        1,
-        Math.min(canvasEndX - canvasStartX, SAFE_CANVAS_LIMIT),
-      );
+        const SAFE_CANVAS_LIMIT = 8000;
+        const canvasStartX = Math.max(0, Math.floor(visibleStartX));
+        const canvasEndX = Math.min(audioWidthPx, Math.ceil(visibleEndX));
+        const canvasWidth = Math.max(
+          1,
+          Math.min(canvasEndX - canvasStartX, SAFE_CANVAS_LIMIT),
+        );
 
-      waveformCanvas.style.left = `${canvasStartX}px`;
+        waveformCanvas.style.left = `${canvasStartX}px`;
       waveformCanvas.width = canvasWidth;
       waveformCanvas.style.width = `${canvasWidth}px`;
       waveformCanvas.height = 48;
@@ -2209,7 +2216,6 @@ export function renderBrollEditor(
       const ctx = waveformCanvas.getContext("2d", { alpha: true });
       const audioBuffer = masterAudioBuf;
       const globalMax = 1.0;
-      const audioSegments = timelineState.ensureAudioSegments?.() || [];
       if (ctx && audioBuffer) {
         const rawData = audioBuffer.getChannelData(0);
         const sampleRate = audioBuffer.sampleRate;
@@ -2296,6 +2302,7 @@ export function renderBrollEditor(
 
         trackAudio.appendChild(clipDiv);
       });
+      }
     } else {
       if (waveformCanvas) {
         waveformCanvas.style.display = "none";

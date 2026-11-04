@@ -237,7 +237,7 @@ export function initKeyboardShortcuts() {
             }
             if (key === 'delete' || key === 'backspace') {
                 e.preventDefault();
-                handleDeleteClip({ deleteAudio: e.shiftKey });
+                handleDeleteClip({ deleteAudio: e.shiftKey ? true : undefined });
                 return;
             }
         }
@@ -272,7 +272,7 @@ export function initKeyboardShortcuts() {
                 break;
             case key === 'delete' || key === 'backspace':
                 e.preventDefault();
-                handleDeleteClip({ deleteAudio: e.shiftKey });
+                handleDeleteClip({ deleteAudio: e.shiftKey ? true : undefined });
                 break;
             case key === '[':
                 e.preventDefault();

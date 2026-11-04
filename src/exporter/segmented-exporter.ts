@@ -61,7 +61,11 @@ function hasSegmentAudioSources(): boolean {
     const clips = timelineState.clips || [];
     const graphics = (timelineState as any).graphics || [];
 
-    if (timelineState.masterAudioBuffer) return true;
+    const hasVoice = timelineState.masterAudioBuffer && (
+        !timelineState.audioSegmentsInitialized ||
+        (timelineState.audioSegments && timelineState.audioSegments.some(s => !s.muted && s.duration > 0.01))
+    );
+    if (hasVoice) return true;
     if (state._bgAudioBuffer) return true;
     if (state.cinematicDroneAudio) return true;
 
@@ -316,47 +320,90 @@ export async function mixSegmentAudio(
     };
 
     const clips = timelineState.clips || [];
+    const segments = timelineState.audioSegments || [];
+    const isInitialized = timelineState.audioSegmentsInitialized;
 
-    // 1. Voiceover track — slice ONLY [segStartSec, segEndSec] so we never attach or resample a 30+ min buffer per chunk
-    if (timelineState.masterAudioBuffer && segStartSec < timelineState.masterAudioBuffer.duration) {
-        const masterEnd = Math.min(segEndSec, timelineState.masterAudioBuffer.duration);
-        if (masterEnd > segStartSec + 0.01) {
-            const voiceSlice = (segStartSec === 0 && masterEnd >= timelineState.masterAudioBuffer.duration - 0.05)
-                ? timelineState.masterAudioBuffer
-                : sliceAudioBuffer(timelineState.masterAudioBuffer, segStartSec, masterEnd);
+    // Helper to apply solo/muteNarration ducking envelopes
+    const applySoloMuteEnvelope = (g: GainNode, baseVol = 1.0) => {
+        const FADE_SEC = 0.025;
+        g.gain.setValueAtTime(baseVol, 0);
+        const hasSoloClips = clips.some((c: any) => c.soloAudio || c.muteNarration);
+        if (!hasSoloClips) return;
+        let lastMuteTime = 0;
+        for (const clip of clips) {
+            if (clip.soloAudio || clip.muteNarration) {
+                const cStart = Number(clip.startTime) || 0;
+                const cEnd = Number.isFinite(clip.endTime) ? Number(clip.endTime) : (cStart + (Number(clip.duration) || 0));
+                const muteStart = Math.max(0, cStart - segStartSec);
+                const muteEnd = Math.min(segDur, Math.max(muteStart, cEnd - segStartSec));
+                if (muteEnd <= 0 || muteStart >= segDur || muteEnd <= muteStart) continue;
 
-            const hasSoloClips = clips.some((c: any) => c.soloAudio || c.muteNarration);
-            await mixInNative(voiceBus, voiceSlice, segStartSec, false, (g) => {
-                const FADE_SEC = 0.025;
-                g.gain.setValueAtTime(1.0, 0);
-                if (!hasSoloClips) return;
-                let lastMuteTime = 0;
-                for (const clip of clips) {
-                    if (clip.soloAudio || clip.muteNarration) {
-                        const cStart = Number(clip.startTime) || 0;
-                        const cEnd = Number.isFinite(clip.endTime) ? Number(clip.endTime) : (cStart + (Number(clip.duration) || 0));
-                        const muteStart = Math.max(0, cStart - segStartSec);
-                        const muteEnd = Math.min(segDur, Math.max(muteStart, cEnd - segStartSec));
-                        if (muteEnd <= 0 || muteStart >= segDur || muteEnd <= muteStart) continue;
+                const t1 = Math.max(lastMuteTime, muteStart - FADE_SEC);
+                const t2 = Math.max(t1, muteStart);
+                const t3 = Math.max(t2, muteEnd - FADE_SEC);
+                const t4 = Math.min(segDur, Math.max(t3, muteEnd));
 
-                        const t1 = Math.max(lastMuteTime, muteStart - FADE_SEC);
-                        const t2 = Math.max(t1, muteStart);
-                        const t3 = Math.max(t2, muteEnd - FADE_SEC);
-                        const t4 = Math.min(segDur, Math.max(t3, muteEnd));
+                if (t1 > lastMuteTime) g.gain.setValueAtTime(baseVol, t1);
+                if (t2 > t1) g.gain.linearRampToValueAtTime(0.0, t2);
+                else g.gain.setValueAtTime(0.0, t1);
 
-                        if (t1 > lastMuteTime) g.gain.setValueAtTime(1.0, t1);
-                        if (t2 > t1) g.gain.linearRampToValueAtTime(0.0, t2);
-                        else g.gain.setValueAtTime(0.0, t1);
+                if (t3 > t2) g.gain.setValueAtTime(0.0, t3);
+                if (t4 > t3) g.gain.linearRampToValueAtTime(baseVol, t4);
+                else g.gain.setValueAtTime(baseVol, t3);
 
-                        if (t3 > t2) g.gain.setValueAtTime(0.0, t3);
-                        if (t4 > t3) g.gain.linearRampToValueAtTime(1.0, t4);
-                        else g.gain.setValueAtTime(1.0, t3);
-
-                        lastMuteTime = t4;
-                    }
-                }
-            });
+                lastMuteTime = t4;
+            }
         }
+    };
+
+    // 1. Voiceover track — segment-aware rendering respecting trims, moves, mutes, and deletions
+    if (timelineState.masterAudioBuffer) {
+        if (segments.length > 0) {
+            for (const seg of segments) {
+                if (seg.muted || seg.duration <= 0.01) continue;
+                const segTimelineStart = Number(seg.startTime) || 0;
+                const segTimelineEnd = Number(seg.endTime) || (segTimelineStart + (Number(seg.duration) || 0));
+                if (segTimelineEnd <= segStartSec || segTimelineStart >= segEndSec) continue;
+
+                const overlapStart = Math.max(segTimelineStart, segStartSec);
+                const overlapEnd = Math.min(segTimelineEnd, segEndSec);
+                const overlapDur = overlapEnd - overlapStart;
+                if (overlapDur <= 0.01) continue;
+
+                const segVol = typeof seg.volume === 'number' ? seg.volume : 1.0;
+                const offsetIntoSeg = overlapStart - segTimelineStart;
+                const safeSourceOffset = Math.max(0, Math.min(
+                    (Number(seg.sourceIn) || 0) + offsetIntoSeg,
+                    timelineState.masterAudioBuffer.duration - 0.01
+                ));
+                const safeDur = Math.max(0.01, Math.min(overlapDur, timelineState.masterAudioBuffer.duration - safeSourceOffset));
+
+                const voiceSlice = sliceAudioBuffer(
+                    timelineState.masterAudioBuffer,
+                    safeSourceOffset,
+                    safeSourceOffset + safeDur
+                );
+
+                await mixInNative(
+                    voiceBus,
+                    voiceSlice,
+                    overlapStart,
+                    false,
+                    (g) => applySoloMuteEnvelope(g, segVol)
+                );
+            }
+        } else if (!isInitialized && segStartSec < timelineState.masterAudioBuffer.duration) {
+            // Uninitialized fallback: raw full-length buffer slice
+            const masterEnd = Math.min(segEndSec, timelineState.masterAudioBuffer.duration);
+            if (masterEnd > segStartSec + 0.01) {
+                const voiceSlice = (segStartSec === 0 && masterEnd >= timelineState.masterAudioBuffer.duration - 0.05)
+                    ? timelineState.masterAudioBuffer
+                    : sliceAudioBuffer(timelineState.masterAudioBuffer, segStartSec, masterEnd);
+
+                await mixInNative(voiceBus, voiceSlice, segStartSec, false, (g) => applySoloMuteEnvelope(g, 1.0));
+            }
+        }
+        // If isInitialized is true and segments.length === 0, voice track remains silent (all segments deleted)
     }
 
     // 2. Sound Effects & Native Clip Audio
@@ -598,25 +645,12 @@ export async function encodeSingleSegmentToFile(
     const videoSource = new EncodedVideoPacketSource(selectedVideoCodec.muxerCodec as any);
     output.addVideoTrack(videoSource, { frameRate: fps });
 
-    // Render audio only for this segment
-    const segAudio = await mixSegmentAudio(segment.startSec, segment.endSec, 48000);
-    const hasAudio = !!(segAudio && segAudio.duration > 0.05);
-
-    let audioSource: EncodedAudioPacketSource | null = null;
-    if (hasAudio) {
-        audioSource = new EncodedAudioPacketSource('aac');
-        output.addAudioTrack(audioSource);
-    }
-
     await output.start();
 
     // Configure VideoEncoder
     let videoEncoder: VideoEncoder | null = null;
-    let audioEncoder: AudioEncoder | null = null;
     let pendingVideoAdd: Promise<void> | null = null;
-    let pendingAudioAdd: Promise<void> | null = null;
     let videoError: Error | null = null;
-    let audioError: Error | null = null;
 
     videoEncoder = new VideoEncoder({
         output: (chunk, meta) => {
@@ -668,32 +702,6 @@ export async function encodeSingleSegmentToFile(
         },
     } as any);
 
-    if (hasAudio && segAudio && audioSource) {
-        const audioCodec = await selectSupportedAudioCodec('mp4', segAudio.sampleRate, segAudio.numberOfChannels, 128000);
-        audioEncoder = new AudioEncoder({
-            output: (chunk, meta) => {
-                const packet = EncodedPacket.fromEncodedChunk(chunk);
-                const prev = pendingAudioAdd || Promise.resolve();
-                const next = prev
-                    .catch(() => {})
-                    .then(() => audioSource!.add(packet, meta))
-                    .finally(() => {
-                        if (pendingAudioAdd === next) pendingAudioAdd = null;
-                    });
-                pendingAudioAdd = next;
-            },
-            error: (e) => {
-                audioError = e instanceof Error ? e : new Error(String(e));
-            }
-        });
-        audioEncoder.configure({
-            codec: audioCodec,
-            sampleRate: segAudio.sampleRate,
-            numberOfChannels: segAudio.numberOfChannels,
-            bitrate: 128000
-        });
-    }
-
     const exportCanvas = typeof OffscreenCanvas !== 'undefined'
         ? new OffscreenCanvas(width, height)
         : document.createElement('canvas');
@@ -706,155 +714,86 @@ export async function encodeSingleSegmentToFile(
 
     const totalSegFrames = segment.frameCount;
     let localFrameIdx = 0;
-    let localAudioSampleIdx = 0;
-    const totalSegSamples = hasAudio && segAudio ? segAudio.length : 0;
-    const sampleRate = segAudio ? segAudio.sampleRate : 48000;
-    const numChannels = segAudio ? segAudio.numberOfChannels : 2;
-    const audioFramesPerChunk = Math.max(1024, sampleRate);
     let lastYieldTime = performance.now();
 
-    while (localFrameIdx < totalSegFrames || localAudioSampleIdx < totalSegSamples) {
+    while (localFrameIdx < totalSegFrames) {
         if (videoError) throw videoError;
-        if (audioError) throw audioError;
         if (!state.isVideoProductionRunning) throw new Error("Cancelled by user.");
 
-        const videoTime = localFrameIdx < totalSegFrames ? (localFrameIdx / fps) : Infinity;
-        const audioTime = localAudioSampleIdx < totalSegSamples ? (localAudioSampleIdx / sampleRate) : Infinity;
-
-        if (videoTime <= audioTime) {
-            while (videoEncoder.encodeQueueSize > 2) {
-                await yieldToMain();
-                if (!state.isVideoProductionRunning) throw new Error("Cancelled by user.");
-            }
-            if (pendingVideoAdd) await pendingVideoAdd;
-
-            const globalTime = segment.startSec + (localFrameIdx / fps);
-            const segmentTimestampUs = Math.round(localFrameIdx * (1_000_000 / fps));
-
-            const isAbs = timelineState.mode === 'audio_locked';
-            const match = findClipAtExportTime(globalTime, isAbs);
-            const currentShotIndex = match?.clipIndex ?? 0;
-            await withExportTimeout(
-              () => prepareFrameImageWindow(
-                currentShotIndex,
-                videoRenderContext?.clips || timelineState.clips || [],
-                width,
-                height
-              ),
-              10_000,
-              `Preparing images at segment frame ${localFrameIdx}`
-            );
-
-            await withExportTimeout(
-              () => syncVideosForExportTime(globalTime, fps, height),
-              12_000,
-              `Synchronizing video at segment frame ${localFrameIdx}`
-            );
-
-            await withExportTimeout(
-              () => drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any),
-              15_000,
-              `Rendering segment frame ${localFrameIdx}`
-            );
-
-            let frame: VideoFrame | null = null;
-            try {
-                frame = new VideoFrame(exportCanvas, {
-                    timestamp: segmentTimestampUs,
-                    duration: Math.round(1_000_000 / fps)
-                });
-                videoEncoder.encode(frame, { keyFrame: localFrameIdx === 0 || localFrameIdx % (fps * 4) === 0 });
-            } finally {
-                if (frame) {
-                    try { frame.close(); } catch {}
-                }
-            }
-
-            const now = performance.now();
-            if (now - lastYieldTime >= 16) {
-                await yieldToMain();
-                lastYieldTime = performance.now();
-            }
-
-            if (localFrameIdx % 15 === 0 || localFrameIdx === totalSegFrames - 1) {
-                const pct = Math.round((localFrameIdx / totalSegFrames) * 100);
-                onProgress(pct, `Frame ${localFrameIdx + 1}/${totalSegFrames}`);
-            }
-
-            localFrameIdx++;
-        } else {
-            while (audioEncoder && audioEncoder.encodeQueueSize > 2) {
-                await yieldToMain();
-                if (!state.isVideoProductionRunning) throw new Error("Cancelled by user.");
-            }
-            if (pendingAudioAdd) await pendingAudioAdd;
-
-            const len = Math.min(audioFramesPerChunk, totalSegSamples - localAudioSampleIdx);
-            const interleaved = new Float32Array(len * numChannels);
-            const ch0 = segAudio!.getChannelData(0);
-            const ch1 = numChannels > 1 ? segAudio!.getChannelData(1) : ch0;
-
-            for (let s = 0; s < len; s++) {
-                const srcIdx = localAudioSampleIdx + s;
-                interleaved[s * numChannels] = ch0[srcIdx];
-                if (numChannels > 1) {
-                    interleaved[s * numChannels + 1] = ch1[srcIdx];
-                }
-            }
-
-            const timestampUs = Math.round((localAudioSampleIdx / sampleRate) * 1_000_000);
-            let audioData: AudioData | null = null;
-            try {
-                audioData = new AudioData({
-                    format: 'f32',
-                    sampleRate,
-                    numberOfFrames: len,
-                    numberOfChannels: numChannels,
-                    timestamp: timestampUs,
-                    data: interleaved.buffer
-                });
-                if (audioEncoder) audioEncoder.encode(audioData);
-            } finally {
-                if (audioData) {
-                    try { audioData.close(); } catch {}
-                }
-            }
-
-            const now = performance.now();
-            if (now - lastYieldTime >= 16) {
-                await yieldToMain();
-                lastYieldTime = performance.now();
-            }
-
-            localAudioSampleIdx += len;
+        while (videoEncoder.encodeQueueSize > 2) {
+            await yieldToMain();
+            if (!state.isVideoProductionRunning) throw new Error("Cancelled by user.");
         }
+        if (pendingVideoAdd) await pendingVideoAdd;
+
+        const globalTime = segment.startSec + (localFrameIdx / fps);
+        const segmentTimestampUs = Math.round(localFrameIdx * (1_000_000 / fps));
+
+        const isAbs = timelineState.mode === 'audio_locked';
+        const match = findClipAtExportTime(globalTime, isAbs);
+        const currentShotIndex = match?.clipIndex ?? 0;
+        await withExportTimeout(
+          () => prepareFrameImageWindow(
+            currentShotIndex,
+            videoRenderContext?.clips || timelineState.clips || [],
+            width,
+            height
+          ),
+          10_000,
+          `Preparing images at segment frame ${localFrameIdx}`
+        );
+
+        await withExportTimeout(
+          () => syncVideosForExportTime(globalTime, fps, height),
+          12_000,
+          `Synchronizing video at segment frame ${localFrameIdx}`
+        );
+
+        await withExportTimeout(
+          () => drawExportFrameCached(globalTime, exportCanvas as any, exportCtx as any),
+          15_000,
+          `Rendering segment frame ${localFrameIdx}`
+        );
+
+        let frame: VideoFrame | null = null;
+        try {
+            frame = new VideoFrame(exportCanvas, {
+                timestamp: segmentTimestampUs,
+                duration: Math.round(1_000_000 / fps)
+            });
+            videoEncoder.encode(frame, { keyFrame: localFrameIdx === 0 || localFrameIdx % (fps * 4) === 0 });
+        } finally {
+            if (frame) {
+                try { frame.close(); } catch {}
+            }
+        }
+
+        const now = performance.now();
+        if (now - lastYieldTime >= 16) {
+            await yieldToMain();
+            lastYieldTime = performance.now();
+        }
+
+        if (localFrameIdx % 15 === 0 || localFrameIdx === totalSegFrames - 1) {
+            const pct = Math.round((localFrameIdx / totalSegFrames) * 100);
+            onProgress(pct, `Frame ${localFrameIdx + 1}/${totalSegFrames}`);
+        }
+
+        localFrameIdx++;
     }
 
     await Promise.race([
         videoEncoder.flush(),
         new Promise((_, rej) => setTimeout(() => rej(new Error('Segment videoEncoder flush timed out')), 10000))
     ]);
-    if (audioEncoder) {
-        await Promise.race([
-            audioEncoder.flush(),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('Segment audioEncoder flush timed out')), 6000))
-        ]);
-    }
     if (pendingVideoAdd) {
         await Promise.race([
             pendingVideoAdd,
             new Promise((_, rej) => setTimeout(() => rej(new Error('Segment pendingVideoAdd timed out')), 10000))
         ]);
     }
-    if (pendingAudioAdd) {
-        await Promise.race([
-            pendingAudioAdd,
-            new Promise((_, rej) => setTimeout(() => rej(new Error('Segment pendingAudioAdd timed out')), 10000))
-        ]);
-    }
 
     if (videoEncoder.state !== 'closed') videoEncoder.close();
-    if (audioEncoder && audioEncoder.state !== 'closed') audioEncoder.close();
 
     await output.finalize();
     await writeChain;

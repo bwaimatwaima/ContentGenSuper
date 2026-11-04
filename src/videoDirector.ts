@@ -273,7 +273,9 @@ function applyTransitions(transitions: { id: string; transition: string }[]) {
   }
 
   // Filter only main-track clips so transitions only bridge sequential main video shots
-  const mainTrackClips = timelineState.clips.filter((c) => c && c.displayMode !== 'pip_overlay');
+  const mainTrackClips = timelineState.clips
+    .filter((c) => c && c.displayMode !== 'pip_overlay')
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
   const lastMainClipId = mainTrackClips.length > 0 ? String(mainTrackClips[mainTrackClips.length - 1].id) : null;
 
   const newClips = timelineState.clips.map((c) => {
@@ -848,10 +850,7 @@ export async function handleAnalyzeTransitions(isSilent = false) {
           const directMatch = resultById.get(String(s.id)) ||
                               resultById.get(`shot_${s.index}`) ||
                               resultById.get(`shot-${s.index}`) ||
-                              resultById.get(`shot_${s.index + 1}`) ||
-                              resultById.get(`shot-${s.index + 1}`) ||
-                              resultById.get(String(s.index)) ||
-                              resultById.get(String(s.index + 1));
+                              resultById.get(String(s.index));
           if (directMatch) {
             allTransitions.push({ id: s.id, transition: directMatch });
           } else {

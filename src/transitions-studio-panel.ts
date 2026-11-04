@@ -396,13 +396,13 @@ function setupSpeedChips(panel: HTMLElement) {
   const speedLabels: Record<string, string> = {
     ultrafast: '0.3s (Ultra)',
     fast: '0.5s (Fast)',
-    medium: '1.0s (Med)',
-    slow: '1.5s (Slow)',
+    medium: '0.8s (Med)',
+    slow: '1.2s (Slow)',
   };
 
   const updateActiveChip = (speed: string) => {
     chips.forEach(c => c.classList.toggle('is-active', c.dataset.speed === speed));
-    if (readout) readout.textContent = speedLabels[speed] || '1.0s (Med)';
+    if (readout) readout.textContent = speedLabels[speed] || '0.8s (Med)';
   };
 
   chips.forEach(chip => {

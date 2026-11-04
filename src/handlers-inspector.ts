@@ -796,7 +796,8 @@ export function openInspectorForShot(shotId?: string) {
     }
 
     // Duration
-    const durationVal = shot.duration_seconds || 3.0;
+    const selectedClip = getSelectedClip();
+    const durationVal = selectedClip?.duration || shot.duration_seconds || 3.0;
     if (dom.inspectorDurationSlider) dom.inspectorDurationSlider.value = String(durationVal);
     if (dom.inspectorDurationInput) dom.inspectorDurationInput.value = String(durationVal);
 
@@ -1427,15 +1428,6 @@ export function findMatchingTimelineClips(shotIdOrShot: string | any): any[] {
     if (shotText && shotText.trim()) {
         const textMatches = clips.filter(c => c.text && c.text.trim() === shotText.trim());
         if (textMatches.length > 0) return textMatches;
-    }
-
-    // 3. Positional index fallback
-    if (shotObj) {
-        const allShots = getAllStoryboardShots();
-        const sIndex = allShots.findIndex(item => item.shot === shotObj || item.shot.id === shotId);
-        if (sIndex !== -1 && sIndex < clips.length) {
-            return [clips[sIndex]];
-        }
     }
 
     return [];

@@ -11,7 +11,7 @@ import { timelineState } from './state-timeline';
 import * as ui from './ui';
 import * as dom from './dom';
 import { drawVideoFrame, videoRenderContext } from './videoRenderer';
-import { forcePausePlayback, handleVideoPlayPause, normalizeTimeline, handleSplitClip, handleTrimClip, handleSetEditMode, handleSetActiveTool, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, rippleCutMasterAudio, resyncTimeline } from './videoController';
+import { forcePausePlayback, handleVideoPlayPause, normalizeTimeline, handleSplitClip, handleTrimClip, handleSetEditMode, handleSetActiveTool, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, rippleCutMasterAudio, resyncTimeline, handleToggleSnapping } from './videoController';
 import { clearAIDirectorCache } from './videoDirector';
 import { getImageBlobFromClipboardEvent, processAndRoutePastedImage } from './handlers-images';
 import { initStudioCommandPalette } from './director-workspace';
@@ -259,6 +259,11 @@ export function initKeyboardShortcuts() {
             if (key === 't') {
                 e.preventDefault();
                 handleSetEditMode('slip');
+                return;
+            }
+            if (key === 'n') {
+                e.preventDefault();
+                handleToggleSnapping();
                 return;
             }
             if (key === 'delete' || key === 'backspace') {

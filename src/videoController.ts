@@ -51,6 +51,12 @@ let draggedClipOriginalOffset = 0;
 let isMarqueeSelecting = false;
 let marqueeStartX = 0;
 let marqueeStartY = 0;
+let lastMarqueeClientX = 0;
+let lastMarqueeClientY = 0;
+let marqueeIsAdditive = false;
+let marqueeBaseSelectedClipIds = new Set<string>();
+let marqueeBaseSelectedAudioIds = new Set<string>();
+let marqueeBaseSelectedGraphicIds = new Set<string>();
 const multiDragOriginalStarts = new Map<string, number>();
 
 const narrationIndex = new ActiveClipIndex();
@@ -161,6 +167,12 @@ export function getTimelineSnapPoints(): number[] {
       if (typeof c.endTime === 'number') points.add(c.endTime);
     }
   }
+  if (Array.isArray(timelineState.audioSegments)) {
+    for (const seg of timelineState.audioSegments) {
+      if (typeof seg.startTime === 'number') points.add(seg.startTime);
+      if (typeof seg.endTime === 'number') points.add(seg.endTime);
+    }
+  }
   if (Array.isArray(timelineState.graphics)) {
     for (const g of timelineState.graphics) {
       if (typeof g.start === 'number') points.add(g.start);
@@ -179,6 +191,28 @@ export function getTimelineSnapPoints(): number[] {
     }
   }
   return Array.from(points).filter(n => Number.isFinite(n) && n >= 0).sort((a, b) => a - b);
+}
+
+export function handleToggleSnapping(force?: boolean) {
+  const next = typeof force === 'boolean' ? force : !timelineState.snappingEnabled;
+  timelineState.setSnappingEnabled(next);
+  updateSnapToggleButtonUI();
+  ui.showStatus(next ? '🧲 Magnet Snapping ON' : '🔓 Magnet Snapping OFF (Free-form)', false, 1500);
+}
+
+export function updateSnapToggleButtonUI() {
+  const btn = dom.timelineSnapToggleBtn || (document.getElementById('timeline-snap-toggle') as HTMLButtonElement | null);
+  if (!btn) return;
+  const isEnabled = timelineState.snappingEnabled;
+  if (isEnabled) {
+    btn.className = 'p-1 px-1.5 text-[11px] font-bold bg-amber-600/90 hover:bg-amber-500 text-white rounded-md transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs ring-1 ring-amber-400/50';
+    btn.title = "Magnet Snapping: ON (Click or press 'N' to disable) - Snaps to Playhead, Clip Edges, Audio Cuts, and Words";
+    btn.innerHTML = '<span>🧲</span>';
+  } else {
+    btn.className = 'p-1 px-1.5 text-[11px] font-bold bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 border border-white/10 rounded-md transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs opacity-60';
+    btn.title = "Magnet Snapping: OFF (Click or press 'N' to enable) - Free-form sub-frame movement without magnetic snap";
+    btn.innerHTML = '<span class="opacity-40 grayscale">🧲</span>';
+  }
 }
 
 export function getSnappedTime(t: number, points?: number[] | null): number {
@@ -695,15 +729,53 @@ export function handleTimelineMouseDown(e: MouseEvent) {
     return;
   }
 
+  // Ruler / Playhead scrub interaction
+  const isRuler = Boolean(target.closest('#timeline-ruler, #timeline-playhead'));
+  if (isRuler) {
+    const track = dom.timelineClipsContainer?.querySelector('.timeline-track') as HTMLElement | null;
+    if (track && videoRenderContext) {
+      const seekFromMouse = (clientX: number) => {
+        const rect = track.getBoundingClientRect();
+        const clickX = clientX - rect.left;
+        const seekTime = clickX / getPixelsPerSecond();
+        let clampedTime = Math.max(0, Math.min(seekTime, videoRenderContext!.totalDuration));
+        if (timelineState.snappingEnabled) {
+          clampedTime = getSnappedTime(clampedTime);
+        }
+        state.videoPauseTime = clampedTime;
+        drawVideoFrame(clampedTime);
+        ui.updateVideoTime(clampedTime, videoRenderContext!.totalDuration);
+      };
+      seekFromMouse(e.clientX);
+      const onRulerMove = (mv: MouseEvent) => seekFromMouse(mv.clientX);
+      const onRulerUp = () => {
+        document.removeEventListener('mousemove', onRulerMove);
+        document.removeEventListener('mouseup', onRulerUp);
+      };
+      document.addEventListener('mousemove', onRulerMove);
+      document.addEventListener('mouseup', onRulerUp);
+      return;
+    }
+  }
+
   // Empty timeline space: Marquee Box Selection or clear selection
   if (!clipId && !overlayClip && !audioSegClip && !transBtn && !transZone) {
-    if (!isMulti) {
-      timelineState.clearAllSelection();
-      ui.renderTimelineEditor();
-    }
-    isMarqueeSelecting = true;
     marqueeStartX = e.clientX;
     marqueeStartY = e.clientY;
+    lastMarqueeClientX = e.clientX;
+    lastMarqueeClientY = e.clientY;
+    marqueeIsAdditive = isMulti;
+    marqueeBaseSelectedClipIds = new Set(timelineState.selectedClipIds);
+    marqueeBaseSelectedAudioIds = new Set(timelineState.selectedAudioSegmentIds);
+    marqueeBaseSelectedGraphicIds = new Set(timelineState.selectedGraphicIds);
+
+    if (!isMulti) {
+      timelineState.clearAllSelection();
+      dom.timelineClipsContainer?.querySelectorAll('.ring-2, .ring-indigo-400, .ring-amber-400, .ring-emerald-400, .border-white').forEach(el => {
+        el.classList.remove('ring-2', 'ring-indigo-400', 'ring-amber-400', 'ring-emerald-400', 'border-white', 'scale-[1.01]');
+      });
+    }
+    isMarqueeSelecting = true;
     document.addEventListener('mousemove', onTimelineMouseMove);
     document.addEventListener('mouseup', handleTimelineMouseUp);
   }
@@ -727,11 +799,17 @@ function handleTimelineMouseMove(e: MouseEvent) {
   }
 
   if (isMarqueeSelecting) {
+    lastMarqueeClientX = e.clientX;
+    lastMarqueeClientY = e.clientY;
+
+    const dragDist = Math.hypot(e.clientX - marqueeStartX, e.clientY - marqueeStartY);
+    if (dragDist < 3) return;
+
     let box = document.getElementById('timeline-marquee-box');
     if (!box) {
       box = document.createElement('div');
       box.id = 'timeline-marquee-box';
-      box.className = 'fixed pointer-events-none z-[9999] border border-indigo-400 bg-indigo-500/20 rounded shadow-sm backdrop-blur-[1px]';
+      box.className = 'fixed pointer-events-none z-[9999] border-2 border-dashed border-indigo-400 bg-indigo-500/20 rounded-md shadow-[0_0_12px_rgba(99,102,241,0.35)] backdrop-blur-[0.5px]';
       document.body.appendChild(box);
     }
     const minX = Math.min(marqueeStartX, e.clientX);
@@ -743,63 +821,90 @@ function handleTimelineMouseMove(e: MouseEvent) {
     box.style.width = `${maxX - minX}px`;
     box.style.height = `${maxY - minY}px`;
 
-    // Compute overlapping items based on timeline time
-    const containerRect = dom.timelineClipsContainer?.getBoundingClientRect();
-    if (containerRect) {
-      const pps = getPixelsPerSecond();
-      const scrollLeft = dom.timelineClipsContainer.scrollLeft || 0;
-      const timeStart = Math.max(0, (minX - containerRect.left + scrollLeft) / pps);
-      const timeEnd = Math.max(0, (maxX - containerRect.left + scrollLeft) / pps);
-
-      const matchingClips: string[] = [];
-      for (const c of (timelineState.clips || [])) {
-        const cStart = c.startTime ?? 0;
-        const cEnd = c.endTime ?? (cStart + c.duration);
-        if (cEnd > timeStart && cStart < timeEnd) {
-          matchingClips.push(c.id);
-        }
+    // Edge autoscroll when dragging near scroll container boundaries
+    const scrollContainer = document.getElementById('timeline-multi-track-scroll') as HTMLElement | null;
+    if (scrollContainer) {
+      const sRect = scrollContainer.getBoundingClientRect();
+      const edgeMargin = 40;
+      if (e.clientX > sRect.right - edgeMargin) {
+        scrollContainer.scrollLeft += 14;
+      } else if (e.clientX < sRect.left + edgeMargin) {
+        scrollContainer.scrollLeft -= 14;
       }
-
-      const matchingAudio: string[] = [];
-      const segments = timelineState.ensureAudioSegments();
-      for (const seg of segments) {
-        if (seg.endTime > timeStart && seg.startTime < timeEnd) {
-          matchingAudio.push(seg.id);
-        }
-      }
-
-      const matchingGraphics: string[] = [];
-      for (const g of (timelineState.graphics || [])) {
-        if (g.end > timeStart && g.start < timeEnd) {
-          matchingGraphics.push(g.id);
-        }
-      }
-
-      timelineState.setMultiSelection(matchingClips, matchingAudio, matchingGraphics);
-
-      // Fast visual feedback without whole timeline re-rendering
-      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.timeline-clip').forEach(el => {
-        const id = el.dataset.clipId;
-        const isSel = id ? matchingClips.includes(id) : false;
-        el.classList.toggle('ring-2', isSel);
-        el.classList.toggle('ring-indigo-400', isSel);
-        el.classList.toggle('border-white', isSel);
-      });
-
-      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.audio-clip-overlay').forEach(el => {
-        const id = el.dataset.audioSegId;
-        const isSel = id ? matchingAudio.includes(id) : false;
-        el.classList.toggle('ring-2', isSel);
-        el.classList.toggle('ring-indigo-400', isSel);
-      });
-
-      dom.timelineClipsContainer.querySelectorAll<HTMLElement>('.timeline-overlay-clip').forEach(el => {
-        const id = el.dataset.graphicId;
-        const isSel = id ? matchingGraphics.includes(id) : false;
-        el.classList.toggle('ring-2', isSel);
-        el.classList.toggle('ring-amber-400', isSel);
-      });
     }
+
+    // Precise 2D geometric intersection against rendered timeline elements
+    const matchingClips: string[] = marqueeIsAdditive ? Array.from(marqueeBaseSelectedClipIds) : [];
+    const matchingAudio: string[] = marqueeIsAdditive ? Array.from(marqueeBaseSelectedAudioIds) : [];
+    const matchingGraphics: string[] = marqueeIsAdditive ? Array.from(marqueeBaseSelectedGraphicIds) : [];
+
+    // 1. Video Clips (.timeline-clip)
+    const clipElements = dom.timelineClipsContainer?.querySelectorAll<HTMLElement>('.timeline-clip') || [];
+    clipElements.forEach(el => {
+      const id = el.dataset.clipId;
+      if (!id) return;
+      const r = el.getBoundingClientRect();
+      const intersects = r.right >= minX && r.left <= maxX && r.bottom >= minY && r.top <= maxY;
+      if (intersects) {
+        if (!matchingClips.includes(id)) matchingClips.push(id);
+      }
+    });
+
+    // 2. Audio Segments (.audio-clip-overlay)
+    const audioElements = dom.timelineClipsContainer?.querySelectorAll<HTMLElement>('.audio-clip-overlay') || [];
+    audioElements.forEach(el => {
+      const id = el.dataset.audioSegId;
+      if (!id) return;
+      const r = el.getBoundingClientRect();
+      const intersects = r.right >= minX && r.left <= maxX && r.bottom >= minY && r.top <= maxY;
+      if (intersects) {
+        if (!matchingAudio.includes(id)) matchingAudio.push(id);
+      }
+    });
+
+    // 3. Graphics & Overlays & SFX (.timeline-overlay-clip)
+    const overlayElements = dom.timelineClipsContainer?.querySelectorAll<HTMLElement>('.timeline-overlay-clip') || [];
+    overlayElements.forEach(el => {
+      const id = el.dataset.graphicId;
+      if (!id) return;
+      const r = el.getBoundingClientRect();
+      const intersects = r.right >= minX && r.left <= maxX && r.bottom >= minY && r.top <= maxY;
+      if (intersects) {
+        if (!matchingGraphics.includes(id)) matchingGraphics.push(id);
+      }
+    });
+
+    timelineState.setMultiSelection(matchingClips, matchingAudio, matchingGraphics);
+
+    // Fast visual feedback without whole timeline re-rendering
+    clipElements.forEach(el => {
+      const id = el.dataset.clipId;
+      const isSel = id ? matchingClips.includes(id) : false;
+      el.classList.toggle('ring-2', isSel);
+      el.classList.toggle('ring-indigo-400', isSel);
+      el.classList.toggle('ring-offset-2', isSel);
+      el.classList.toggle('ring-offset-black', isSel);
+      el.classList.toggle('border-indigo-300', isSel);
+      el.classList.toggle('scale-[1.01]', isSel);
+    });
+
+    audioElements.forEach(el => {
+      const id = el.dataset.audioSegId;
+      const isSel = id ? matchingAudio.includes(id) : false;
+      el.classList.toggle('ring-1', isSel);
+      el.classList.toggle('ring-emerald-400', isSel);
+      el.classList.toggle('border-emerald-400', isSel);
+    });
+
+    overlayElements.forEach(el => {
+      const id = el.dataset.graphicId;
+      const isSel = id ? matchingGraphics.includes(id) : false;
+      el.classList.toggle('ring-2', isSel);
+      el.classList.toggle('ring-amber-400', isSel);
+      el.classList.toggle('border-white', isSel);
+      el.classList.toggle('scale-[1.01]', isSel);
+    });
+
     return;
   }
 
@@ -1198,8 +1303,9 @@ function handleTimelineMouseUp() {
     document.removeEventListener('mouseup', handleTimelineMouseUp);
     ui.renderTimelineEditor();
     const count = timelineState.getTotalSelectedCount();
-    if (count > 0) {
-      ui.showStatus(`Selected ${count} item${count > 1 ? 's' : ''}. Shift/Ctrl+Click to toggle, Delete to remove.`, false, 2000);
+    const dragDist = Math.hypot(lastMarqueeClientX - marqueeStartX, lastMarqueeClientY - marqueeStartY);
+    if (count > 0 && dragDist > 5) {
+      ui.showStatus(`Selected ${count} item${count > 1 ? 's' : ''}. Drag to move together, or press Delete to remove.`, false, 2500);
     }
     return;
   }
@@ -3548,6 +3654,7 @@ export function handleBatchDelete() {
     if (deletedAudioCount) parts.push(`${deletedAudioCount} audio segment${deletedAudioCount > 1 ? 's' : ''}`);
     if (deletedGraphicsCount) parts.push(`${deletedGraphicsCount} overlay${deletedGraphicsCount > 1 ? 's' : ''}`);
     ui.showStatus(`🗑️ Batch deleted ${parts.join(', ')}.`, false, 2500);
+    void saveVersion(false);
 }
 
 export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: string } = {}) {

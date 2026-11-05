@@ -1492,6 +1492,11 @@ export function renderBrollEditor(
         if (trackContainer) {
           trackContainer.addEventListener("click", handleTimelineClick);
           trackContainer.addEventListener("mousedown", handleTimelineMouseDown);
+          scrollContainer.addEventListener("mousedown", (e) => {
+            if (e.target === scrollContainer) {
+              handleTimelineMouseDown(e);
+            }
+          });
           trackContainer.addEventListener("dragover", (e) => {
             e.preventDefault();
             if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
@@ -1999,8 +2004,13 @@ export function renderBrollEditor(
         ? "Custom Image"
         : (ev.title || (ev as any).text || typeText);
 
+      const isSelected = timelineState.isGraphicSelected(ev.id);
+      const selectionClasses = isSelected
+        ? "ring-2 ring-amber-400 border-white shadow-amber-500/50 scale-[1.01] z-30"
+        : "z-20";
+
       const el = document.createElement("div");
-      el.className = `timeline-overlay-clip absolute h-10 rounded border-2 ${styleClasses} backdrop-blur-sm flex items-center justify-between px-1.5 overflow-hidden z-20 cursor-pointer shadow-md group transition-all hover:brightness-125`;
+      el.className = `timeline-overlay-clip absolute h-10 rounded border-2 ${styleClasses} backdrop-blur-sm flex items-center justify-between px-1.5 overflow-hidden cursor-pointer shadow-md group transition-all hover:brightness-125 ${selectionClasses}`;
       el.dataset.graphicId = ev.id;
       el.style.left = `${evLeft}px`;
       el.style.width = `${evWidth}px`;

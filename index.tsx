@@ -1533,17 +1533,7 @@ function registerEventListeners() {
     };
 
     const updateSnapToggleUI = () => {
-        if (!dom.timelineSnapToggleBtn) return;
-        const isEnabled = timelineState.snappingEnabled;
-        if (isEnabled) {
-            dom.timelineSnapToggleBtn.classList.remove('bg-zinc-800', 'text-gray-400', 'hover:bg-zinc-700');
-            dom.timelineSnapToggleBtn.classList.add('bg-amber-600', 'hover:bg-amber-500', 'text-white');
-            dom.timelineSnapToggleBtn.innerHTML = `<span>🧲</span><span id="timeline-snap-text" class="hidden lg:inline">Snap: ON</span>`;
-        } else {
-            dom.timelineSnapToggleBtn.classList.remove('bg-amber-600', 'hover:bg-amber-500', 'text-white');
-            dom.timelineSnapToggleBtn.classList.add('bg-zinc-800', 'hover:bg-zinc-700', 'text-gray-400', 'hover:text-white');
-            dom.timelineSnapToggleBtn.innerHTML = `<span>🧲</span><span id="timeline-snap-text" class="hidden lg:inline">Snap: OFF</span>`;
-        }
+        videoController.updateSnapToggleButtonUI();
     };
 
     const handleToggleTimeline = () => {
@@ -1614,10 +1604,7 @@ function registerEventListeners() {
     // Magnet Snapping Toggle
     updateSnapToggleUI();
     dom.timelineSnapToggleBtn?.addEventListener('click', () => {
-        const nextState = !timelineState.snappingEnabled;
-        timelineState.setSnappingEnabled(nextState);
-        updateSnapToggleUI();
-        ui.showStatus(nextState ? '🧲 Magnet Snapping ON' : '🧲 Magnet Snapping OFF', false, 1500);
+        videoController.handleToggleSnapping();
     });
 
     window.addEventListener('resize', debounce(() => {

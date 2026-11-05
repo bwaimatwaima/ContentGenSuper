@@ -1528,6 +1528,15 @@ export function initStudioCommandPalette(): void {
       },
     },
     {
+      id: 'toggle-snapping',
+      title: 'Toggle Magnet Snapping (Clips, Cuts & Words)',
+      category: 'Editing',
+      shortcut: 'N',
+      action: () => {
+        import('./videoController').then(m => m.handleToggleSnapping());
+      },
+    },
+    {
       id: 'edit-split',
       title: 'Split Clip at Playhead',
       category: 'Editing',

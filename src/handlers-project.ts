@@ -865,10 +865,10 @@ export async function loadProject() {
             state.smartCaptionPlacementEnabled = Boolean(projectData.smartCaptionPlacementEnabled);
             timelineState.setMode(projectData.timelineMode || 'free');
             if (projectData.timelineEditMode) {
-                import('./videoController').then(m => m.handleSetEditMode(projectData.timelineEditMode));
+                import('./videoController').then(m => m.handleSetEditMode(projectData.timelineEditMode, false));
             }
             if (typeof projectData.snappingEnabled === 'boolean') {
-                import('./videoController').then(m => m.handleToggleSnapping(projectData.snappingEnabled));
+                import('./videoController').then(m => m.handleToggleSnapping(projectData.snappingEnabled, false));
             }
             timelineState.setGraphics(projectData.graphics || []);
             timelineState.setAudioSplits(projectData.audioSplits || []);

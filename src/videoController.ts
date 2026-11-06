@@ -193,11 +193,13 @@ export function getTimelineSnapPoints(): number[] {
   return Array.from(points).filter(n => Number.isFinite(n) && n >= 0).sort((a, b) => a - b);
 }
 
-export function handleToggleSnapping(force?: boolean) {
+export function handleToggleSnapping(force?: boolean, notifyUser: boolean = true) {
   const next = typeof force === 'boolean' ? force : !timelineState.snappingEnabled;
   timelineState.setSnappingEnabled(next);
   updateSnapToggleButtonUI();
-  ui.showStatus(next ? '🧲 Magnet Snapping ON' : '🔓 Magnet Snapping OFF (Free-form)', false, 1500);
+  if (notifyUser) {
+    ui.showStatus(next ? '🧲 Magnet Snapping ON' : '🔓 Magnet Snapping OFF (Free-form)', false, 1500);
+  }
 }
 
 export function updateSnapToggleButtonUI() {
@@ -2970,9 +2972,11 @@ export function handleRedoTimeline() {
     }
 }
 
-export function handleSetEditMode(mode: 'ripple' | 'lift' | 'slip') {
+export function handleSetEditMode(mode: 'ripple' | 'lift' | 'slip', notifyUser: boolean = true) {
     timelineState.setEditMode(mode);
-    ui.showStatus(`Timeline mode: ${mode.toUpperCase()}`, false, 1500);
+    if (notifyUser) {
+        ui.showStatus(`Timeline mode: ${mode.toUpperCase()}`, false, 1500);
+    }
     if (dom.timelineModeRippleBtn && dom.timelineModeLiftBtn && dom.timelineModeSlipBtn) {
       dom.timelineModeRippleBtn.classList.toggle('bg-indigo-600', mode === 'ripple');
       dom.timelineModeRippleBtn.classList.toggle('text-white', mode === 'ripple');
@@ -4563,16 +4567,19 @@ export function handleTimelineZoomFit() {
   
   const totalDuration = videoRenderContext.totalDuration;
   if (totalDuration <= 0) {
-    timelineState.setZoomLevel(1);
+    if (timelineState.zoomLevel !== 1) timelineState.setZoomLevel(1);
     return;
   }
 
   const targetWidth = Math.max(200, containerWidth - 30);
   const requiredPps = targetWidth / totalDuration;
-  const newZoom = requiredPps / utils.BASE_PIXELS_PER_SECOND;
-  timelineState.setZoomLevel(utils.clamp(newZoom, utils.MIN_ZOOM, utils.MAX_ZOOM));
+  const targetZoom = utils.clamp(requiredPps / utils.BASE_PIXELS_PER_SECOND, utils.MIN_ZOOM, utils.MAX_ZOOM);
   
-  if (container) {
+  if (Math.abs(targetZoom - timelineState.zoomLevel) > 0.001) {
+    timelineState.setZoomLevel(targetZoom);
+  }
+  
+  if (container && container.scrollLeft !== 0) {
     container.scrollLeft = 0;
   }
 }

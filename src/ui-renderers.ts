@@ -1967,7 +1967,8 @@ export function renderBrollEditor(
     trackVideo.innerHTML = "";
     trackCaptions.innerHTML = "";
 
-    // Render Track: Overlays & B-Roll (N-Tracks) — exclude pure SFX
+    // Render Track: Overlays & B-Roll (N-Tracks) — batched via DocumentFragment
+    const overlaysFrag = document.createDocumentFragment();
     visualEvents.forEach((ev) => {
       if ((ev.end ?? 0) < visibleStartTime || (ev.start ?? 0) > visibleEndTime)
         return;
@@ -2019,7 +2020,7 @@ export function renderBrollEditor(
       el.innerHTML = `
               <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-white/40"></div>
               <div class="flex items-center gap-1.5 truncate pointer-events-none w-full">
-                  ${isBroll ? `<img src="${(ev as any).customImageUrl}" class="h-6 w-6 object-cover rounded shadow border border-white/20">` : `<span class="text-xs flex-shrink-0">${iconSymbol}</span>`}
+                  ${isBroll ? `<img src="${(ev as any).customImageUrl}" loading="lazy" class="h-6 w-6 object-cover rounded shadow border border-white/20">` : `<span class="text-xs flex-shrink-0">${iconSymbol}</span>`}
                   <div class="flex flex-col truncate leading-tight">
                       <span class="text-[9px] font-bold truncate drop-shadow">${escapeHtml(overlayTitle)}</span>
                       <span class="text-[8px] opacity-80 font-mono">${(ev.start ?? 0).toFixed(1)}s - ${(ev.end ?? 0).toFixed(1)}s</span>
@@ -2053,52 +2054,71 @@ export function renderBrollEditor(
       el.addEventListener("dblclick", () => {
         openGraphicEditor(ev.id);
       });
-      trackOverlays?.appendChild(el);
+      overlaysFrag.appendChild(el);
     });
+    trackOverlays.appendChild(overlaysFrag);
 
-    // Render Track: Main Video Shots
+    // Render Track: Main Video Shots with Adaptive Level of Detail (LOD) & Batching
+    const videoFrag = document.createDocumentFragment();
     clips.forEach((clip, index) => {
       if (clip.endTime < visibleStartTime || clip.startTime > visibleEndTime)
         return;
 
+      const clipWidth = clip.duration * pps;
+      const isMicroClip = clipWidth < 22;
+      const isCompactClip = !isMicroClip && clipWidth < 48;
+
       const displayText = clip.text || (clip.talkingHeadVideoElement || clip.videoElement ? (state.musicMode ? 'Uploaded Video (Music Sync)' : 'Uploaded Video') : `Shot ${index + 1}`);
-      const hasMedia = Boolean(clip.image || clip.videoElement || clip.talkingHeadVideoElement || clip._videoObjectURL || clip._imageObjectURL);
-      const mediaThumb = clip.image
-        ? `<img src="${clip.image.src}" class="absolute inset-0 w-full h-full object-cover opacity-40">`
-        : (clip.videoElement || clip.talkingHeadVideoElement
-          ? `<div class="absolute inset-0 bg-indigo-950/40 flex items-center justify-center opacity-40"><span class="text-xs">🎥</span></div>`
-          : (!hasMedia
-            ? `<div class="absolute inset-0 bg-red-950/40 border border-red-500/30 flex items-center justify-center gap-1 opacity-80 text-[9px] text-red-300"><span>⚠️</span><span>Missing Media</span></div>`
-            : ""));
-
       const isVideoSource = Boolean(clip.videoElement || clip.talkingHeadVideoElement || clip._videoObjectURL);
-      const deviceTagDisplay = clip.deviceTag ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-sky-900/80 text-sky-200 border border-sky-400/30 rounded font-mono uppercase tracking-wider">${clip.deviceTag === 'screen_recording' ? 'REC' : clip.deviceTag}</span>` : '';
-      const arollTag = clip.displayMode === 'pip_overlay'
-        ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-indigo-500 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-indigo-400">🪟 Pop-Up PiP</span>`
-        : clip.talkingHeadMode === 'full'
-        ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-indigo-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-indigo-400/40">👤 A-Roll</span>`
-        : clip.talkingHeadMode === 'split'
-        ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-purple-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-purple-400/40">🌓 Split</span>`
-        : (clip.talkingHeadMode && clip.talkingHeadMode.startsWith('pip'))
-        ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-cyan-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-cyan-400/40">🎭 PiP</span>`
-        : (state.uploadedVideoElement && clip.talkingHeadMode === 'none'
-        ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-amber-600/80 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-amber-400/40">🖼️ B-Roll</span>`
-        : '');
-
-      const el = document.createElement("div");
       const isPiPOverlay = clip.displayMode === 'pip_overlay';
       const isSelected = timelineState.isClipSelected(clip.id);
+
+      const el = document.createElement("div");
       el.className =
-        `timeline-clip absolute h-14 backdrop-blur-sm rounded-md border-2 hover:border-indigo-400 flex items-center justify-center overflow-hidden z-10 shadow-sm transition-all ${
+        `timeline-clip tl-clip kind-video absolute h-14 backdrop-blur-sm rounded-md border-2 hover:border-indigo-400 flex items-center justify-center overflow-hidden z-10 shadow-sm transition-all ${
           isSelected
             ? 'border-indigo-300 ring-2 ring-indigo-400 ring-offset-2 ring-offset-black bg-indigo-950/80 shadow-[0_0_15px_rgba(99,102,241,0.5)] z-20 scale-[1.01]'
             : (isPiPOverlay ? 'bg-indigo-950/60 border-indigo-400/80 ring-1 ring-indigo-400/30 shadow-[0_0_10px_rgba(99,102,241,0.2)]' : 'bg-gray-800/80 border-indigo-500/50')
         }`;
       el.dataset.clipId = clip.id;
       el.style.left = `${clip.startTime * pps}px`;
-      el.style.width = `${clip.duration * pps}px`;
-      el.innerHTML = `<div class="clip-content w-full h-full relative flex items-center px-2">${mediaThumb}<span class="relative text-white text-[10px] font-medium truncate px-1 drop-shadow-md z-10 flex items-center gap-1">${isVideoSource ? '<span class="text-[10px]">🎥</span>' : '<span class="text-[10px]">🎬</span>'}<span class="truncate">${escapeHtml(displayText)}</span>${deviceTagDisplay}${arollTag}</span></div><div class="resize-handle left-handle"></div><div class="resize-handle right-handle"></div>`;
-      trackVideo.appendChild(el);
+      el.style.width = `${clipWidth}px`;
+      el.title = `Shot ${index + 1}: ${displayText} (${clip.duration.toFixed(1)}s)`;
+
+      if (isMicroClip) {
+        // Micro LOD: suppress heavy <img> decodes, resize handles, and interior layout DOM nodes
+        el.innerHTML = `<div class="w-full h-full bg-gradient-to-r from-indigo-950/70 to-slate-900/80 pointer-events-none"></div>`;
+      } else if (isCompactClip) {
+        // Compact LOD: show minimal shot index label, suppress heavy badges and avoid large image decodes when zoomed far out
+        const thumb = (pps >= 12 && clip.image)
+          ? `<img src="${clip.image.src}" loading="lazy" class="absolute inset-0 w-full h-full object-cover opacity-35">`
+          : '';
+        el.innerHTML = `<div class="clip-content w-full h-full relative flex items-center px-1">${thumb}<span class="relative text-white text-[9px] font-bold truncate drop-shadow z-10 select-none">#${index + 1}</span></div><div class="resize-handle left-handle"></div><div class="resize-handle right-handle"></div>`;
+      } else {
+        // Full fidelity LOD
+        const hasMedia = Boolean(clip.image || clip.videoElement || clip.talkingHeadVideoElement || clip._videoObjectURL || clip._imageObjectURL);
+        const mediaThumb = clip.image
+          ? `<img src="${clip.image.src}" loading="lazy" class="absolute inset-0 w-full h-full object-cover opacity-40">`
+          : (clip.videoElement || clip.talkingHeadVideoElement
+            ? `<div class="absolute inset-0 bg-indigo-950/40 flex items-center justify-center opacity-40"><span class="text-xs">🎥</span></div>`
+            : (!hasMedia
+              ? `<div class="absolute inset-0 bg-red-950/40 border border-red-500/30 flex items-center justify-center gap-1 opacity-80 text-[9px] text-red-300"><span>⚠️</span><span>Missing Media</span></div>`
+              : ""));
+        const deviceTagDisplay = clip.deviceTag ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-sky-900/80 text-sky-200 border border-sky-400/30 rounded font-mono uppercase tracking-wider">${clip.deviceTag === 'screen_recording' ? 'REC' : clip.deviceTag}</span>` : '';
+        const arollTag = clip.displayMode === 'pip_overlay'
+          ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-indigo-500 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-indigo-400">🪟 Pop-Up PiP</span>`
+          : clip.talkingHeadMode === 'full'
+          ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-indigo-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-indigo-400/40">👤 A-Roll</span>`
+          : clip.talkingHeadMode === 'split'
+          ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-purple-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-purple-400/40">🌓 Split</span>`
+          : (clip.talkingHeadMode && clip.talkingHeadMode.startsWith('pip'))
+          ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-cyan-600/90 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-cyan-400/40">🎭 PiP</span>`
+          : (state.uploadedVideoElement && clip.talkingHeadMode === 'none'
+          ? `<span class="ml-1 px-1 py-0.2 text-[8px] bg-amber-600/80 text-white rounded font-bold uppercase tracking-wider shrink-0 shadow-xs border border-amber-400/40">🖼️ B-Roll</span>`
+          : '');
+        el.innerHTML = `<div class="clip-content w-full h-full relative flex items-center px-2">${mediaThumb}<span class="relative text-white text-[10px] font-medium truncate px-1 drop-shadow-md z-10 flex items-center gap-1">${isVideoSource ? '<span class="text-[10px]">🎥</span>' : '<span class="text-[10px]">🎬</span>'}<span class="truncate">${escapeHtml(displayText)}</span>${deviceTagDisplay}${arollTag}</span></div><div class="resize-handle left-handle"></div><div class="resize-handle right-handle"></div>`;
+      }
+      videoFrag.appendChild(el);
 
       // Render transition visual indicator between this clip and next
       if (index < clips.length - 1) {
@@ -2114,7 +2134,7 @@ export function renderBrollEditor(
               "timeline-cut-seam absolute h-full top-0 z-15 pointer-events-none border-r-2 border-dashed border-amber-400/80";
             gapSeam.style.left = `${seamX}px`;
             gapSeam.title = "Transition skipped: timeline gap detected";
-            trackVideo.appendChild(gapSeam);
+            videoFrag.appendChild(gapSeam);
           }
         } else if (isTransitionActive && typeof clip._transitionStart === 'number') {
           const startX = clip._transitionStart * pps;
@@ -2128,7 +2148,7 @@ export function renderBrollEditor(
             transitionZone.style.left = `${startX}px`;
             transitionZone.style.width = `${zoneWidth}px`;
             transitionZone.innerHTML = `<span class="text-[8px] font-black text-white/95 uppercase tracking-widest px-0.5 whitespace-nowrap overflow-hidden drop-shadow">⚡ TRANSITION</span>`;
-            trackVideo.appendChild(transitionZone);
+            videoFrag.appendChild(transitionZone);
           }
         } else {
           if (seamX >= visibleStartX && seamX <= visibleEndX) {
@@ -2136,14 +2156,14 @@ export function renderBrollEditor(
             cutSeam.className =
               "timeline-cut-seam absolute h-full top-0 z-15 pointer-events-none border-r-2 border-dashed border-gray-500/50";
             cutSeam.style.left = `${seamX}px`;
-            trackVideo.appendChild(cutSeam);
+            videoFrag.appendChild(cutSeam);
           }
         }
 
         if (seamX >= visibleStartX && seamX <= visibleEndX) {
-          // At very low zoom levels (e.g. Fit or zoom < 0.2), don't stack oversized buttons that crowd each other
           const minNeighborWidth = Math.min(clip.duration, nextClip.duration) * pps;
-          if (minNeighborWidth >= 20 || pps >= 15 || isTransitionActive) {
+          // When zoomed far out or Fit to Timeline, only show interactive transition button if space permits or if custom transition is active
+          if ((isTransitionActive && minNeighborWidth >= 16) || (minNeighborWidth >= 30 && pps >= 14)) {
             const transBtn = document.createElement("button");
             transBtn.type = "button";
             transBtn.className = isTransitionActive
@@ -2153,15 +2173,19 @@ export function renderBrollEditor(
             transBtn.dataset.clipIndex = String(index);
             transBtn.title = `Transition to Shot ${index + 2}: ${getTransitionLabel(currentTransition)}. Click to change transition.`;
             transBtn.innerHTML = `<span>${getTransitionIcon(currentTransition)}</span><span class="${isTransitionActive ? "font-medium" : "hidden sm:inline text-[9px] font-semibold"}">${getTransitionLabel(currentTransition)}</span>`;
-            trackVideo.appendChild(transBtn);
+            videoFrag.appendChild(transBtn);
           }
         }
       }
     });
+    trackVideo.appendChild(videoFrag);
 
-    // Render Track: Captions / Subtitles (Dynamically synchronized with edited AudioSegments)
+    // Render Track: Captions / Subtitles (Dynamically synchronized with edited AudioSegments & LOD)
     const words = timelineState.getTimelineWordTimestamps();
     if (words && words.length > 0) {
+      const captionsFrag = document.createDocumentFragment();
+      // LOD threshold: when zoomed far out (pps < 14), avoid rendering 300+ micro phrase divs
+      const minPhraseWidthPx = pps < 8 ? 24 : (pps < 14 ? 14 : 6);
       let currentPhrase: any[] = [];
       for (let i = 0; i < words.length; i++) {
         currentPhrase.push(words[i]);
@@ -2178,23 +2202,26 @@ export function renderBrollEditor(
             const capW = Math.max(16, (pEnd - pStart) * pps);
             const capL = pStart * pps;
 
-            const capEl = document.createElement("div");
-            capEl.className =
-              "absolute h-6 top-2 rounded bg-cyan-950/70 border border-cyan-500/40 text-cyan-200 text-[8px] font-mono flex items-center px-1 overflow-hidden truncate";
-            capEl.style.left = `${capL}px`;
-            capEl.style.width = `${capW}px`;
-            capEl.title = `[${pStart.toFixed(1)}s - ${pEnd.toFixed(1)}s] ${pText}`;
-            capEl.textContent = pText;
-            trackCaptions.appendChild(capEl);
+            if (capW >= minPhraseWidthPx) {
+              const capEl = document.createElement("div");
+              capEl.className =
+                "absolute h-6 top-2 rounded bg-cyan-950/70 border border-cyan-500/40 text-cyan-200 text-[8px] font-mono flex items-center px-1 overflow-hidden truncate";
+              capEl.style.left = `${capL}px`;
+              capEl.style.width = `${capW}px`;
+              capEl.title = `[${pStart.toFixed(1)}s - ${pEnd.toFixed(1)}s] ${pText}`;
+              capEl.textContent = pText;
+              captionsFrag.appendChild(capEl);
+            }
           }
           currentPhrase = [];
         }
       }
+      trackCaptions.appendChild(captionsFrag);
     } else {
       trackCaptions.innerHTML = `<div class="text-[9px] text-gray-500 italic pl-3">No timed caption data available.</div>`;
     }
 
-    // Render Track: Audio Waveform (High-Performance Cached Peak Rendering)
+    // Render Track: Audio Waveform (High-Performance Cached Peak Rendering & Batching)
     const waveformCanvas = trackAudio.querySelector(
       "#timeline-waveform",
     ) as HTMLCanvasElement;
@@ -2224,99 +2251,118 @@ export function renderBrollEditor(
         );
 
         waveformCanvas.style.left = `${canvasStartX}px`;
-      waveformCanvas.width = canvasWidth;
-      waveformCanvas.style.width = `${canvasWidth}px`;
-      waveformCanvas.height = 48;
+        if (waveformCanvas.width !== canvasWidth) {
+          waveformCanvas.width = canvasWidth;
+        }
+        if (waveformCanvas.height !== 48) {
+          waveformCanvas.height = 48;
+        }
+        waveformCanvas.style.width = `${canvasWidth}px`;
 
-      const ctx = waveformCanvas.getContext("2d", { alpha: true });
-      const audioBuffer = masterAudioBuf;
-      const globalMax = 1.0;
-      if (ctx && audioBuffer) {
-        const rawData = audioBuffer.getChannelData(0);
-        const sampleRate = audioBuffer.sampleRate;
-        ctx.fillStyle = "#10b981";
-        ctx.beginPath();
+        const ctx = waveformCanvas.getContext("2d", { alpha: true });
+        const audioBuffer = masterAudioBuf;
+        const globalMax = 1.0;
+        if (ctx && audioBuffer) {
+          ctx.clearRect(0, 0, canvasWidth, 48);
+          const rawData = audioBuffer.getChannelData(0);
+          const sampleRate = audioBuffer.sampleRate;
+          ctx.fillStyle = "#10b981";
+          ctx.beginPath();
 
-        // Draw waveform peaks per AudioSegment using each segment's [startTime, endTime] and sourceIn offset
-        for (const seg of audioSegments) {
-          if (seg.muted || seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) continue;
+          // Draw waveform peaks per AudioSegment using each segment's [startTime, endTime] and sourceIn offset
+          for (const seg of audioSegments) {
+            if (seg.muted || seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) continue;
 
-          const segVisStart = Math.max(seg.startTime, visibleStartTime);
-          const segVisEnd = Math.min(seg.endTime, visibleEndTime);
-          const startPx = Math.max(0, Math.floor((segVisStart - visibleStartTime) * pps));
-          const endPx = Math.min(canvasWidth, Math.ceil((segVisEnd - visibleStartTime) * pps));
+            const segVisStart = Math.max(seg.startTime, visibleStartTime);
+            const segVisEnd = Math.min(seg.endTime, visibleEndTime);
+            const startPx = Math.max(0, Math.floor((segVisStart - visibleStartTime) * pps));
+            const endPx = Math.min(canvasWidth, Math.ceil((segVisEnd - visibleStartTime) * pps));
 
-          for (let localX = startPx; localX < endPx; localX += 3) {
-            const timelineTime = visibleStartTime + (localX / pps);
-            const offsetInSeg = timelineTime - seg.startTime;
-            const sourceTime = seg.sourceIn + offsetInSeg;
-            if (sourceTime < 0 || sourceTime >= audioBuffer.duration) continue;
+            for (let localX = startPx; localX < endPx; localX += 3) {
+              const timelineTime = visibleStartTime + (localX / pps);
+              const offsetInSeg = timelineTime - seg.startTime;
+              const sourceTime = seg.sourceIn + offsetInSeg;
+              if (sourceTime < 0 || sourceTime >= audioBuffer.duration) continue;
 
-            const sampleIdx = Math.floor(sourceTime * sampleRate);
-            const step = Math.max(1, Math.floor((3 / pps) * sampleRate));
-            let maxPeak = 0;
-            for (let s = 0; s < step && sampleIdx + s < rawData.length; s += Math.max(1, Math.floor(step / 16))) {
-              const val = Math.abs(rawData[sampleIdx + s]);
-              if (val > maxPeak) maxPeak = val;
+              const sampleIdx = Math.floor(sourceTime * sampleRate);
+              const step = Math.max(1, Math.floor((3 / pps) * sampleRate));
+              // Decimated peak sampling for large steps (low zoom/fit to timeline)
+              const innerProbeStride = Math.max(1, Math.floor(step / 16));
+              let maxPeak = 0;
+              for (let s = 0; s < step && sampleIdx + s < rawData.length; s += innerProbeStride) {
+                const val = Math.abs(rawData[sampleIdx + s]);
+                if (val > maxPeak) maxPeak = val;
+              }
+              const norm = Math.min(1, maxPeak / globalMax);
+              const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
+              const y = Math.floor((48 - h) / 2);
+              ctx.rect(localX, y, 2, h);
             }
-            const norm = Math.min(1, maxPeak / globalMax);
-            const h = Math.max(2, Math.min(44, Math.round(norm * 44)));
-            const y = Math.floor((48 - h) / 2);
-            ctx.rect(localX, y, 2, h);
           }
-        }
-        ctx.fill();
-      }
-
-      // Render interactive AudioSegments as draggable/trimmable clip blocks
-      const existingClipOverlays = trackAudio.querySelectorAll('.audio-clip-overlay');
-      existingClipOverlays.forEach(el => el.remove());
-
-      audioSegments.forEach((seg, i) => {
-        if (seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) return;
-        if (seg.duration < 0.02) return;
-
-        const isSelected =
-          timelineState.isAudioSegmentSelected(seg.id) ||
-          (!timelineState.hasMultiSelection() && timelineState.selectedAudioSplitIndex === i);
-
-        const clipDiv = document.createElement('div');
-        clipDiv.className = `audio-clip-overlay absolute top-0.5 bottom-0.5 rounded border pointer-events-auto cursor-grab active:cursor-grabbing transition-colors group overflow-hidden ${
-          isSelected
-            ? 'bg-emerald-500/25 border-emerald-400 ring-1 ring-emerald-400/40 z-20'
-            : 'bg-emerald-950/30 border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-900/25 z-10'
-        } ${seg.muted ? 'opacity-40 grayscale' : ''}`;
-        clipDiv.dataset.audioSegId = seg.id;
-        clipDiv.dataset.audioSegIndex = String(i);
-        clipDiv.style.left = `${seg.startTime * pps}px`;
-        clipDiv.style.width = `${Math.max(12, seg.duration * pps)}px`;
-
-        clipDiv.innerHTML = `
-          <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
-          <div class="absolute top-1 left-2.5 flex items-center gap-1.5 pointer-events-none select-none z-20">
-            <span class="text-[9px] font-mono px-1 rounded-xs ${
-              isSelected ? 'bg-emerald-900 text-emerald-100 font-bold' : 'bg-black/60 text-emerald-300'
-            }">🎙️ Voice ${i + 1}</span>
-            <span class="audio-time-badge text-[8px] font-mono text-emerald-200/80 hidden sm:inline">${seg.startTime.toFixed(1)}s–${seg.endTime.toFixed(1)}s</span>
-          </div>
-          <div class="resize-handle right-handle right-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
-        `;
-
-        if (isSelected) {
-          const deleteBtn = document.createElement('button');
-          deleteBtn.type = 'button';
-          deleteBtn.className = 'delete-btn absolute top-1 right-2.5 text-white bg-red-600/85 hover:bg-red-500 rounded p-1 pointer-events-auto shadow z-30 cursor-pointer';
-          deleteBtn.title = 'Delete Voice Segment (Delete / Backspace)';
-          deleteBtn.innerHTML = '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
-          deleteBtn.onmousedown = (e) => {
-            e.stopPropagation();
-            import('./videoController').then(m => m.handleDeleteAudioSegment(seg.id));
-          };
-          clipDiv.appendChild(deleteBtn);
+          ctx.fill();
         }
 
-        trackAudio.appendChild(clipDiv);
-      });
+        // Render interactive AudioSegments as draggable/trimmable clip blocks via DocumentFragment
+        const existingClipOverlays = trackAudio.querySelectorAll('.audio-clip-overlay');
+        existingClipOverlays.forEach(el => el.remove());
+
+        const audioFrag = document.createDocumentFragment();
+        audioSegments.forEach((seg, i) => {
+          if (seg.endTime < visibleStartTime || seg.startTime > visibleEndTime) return;
+          if (seg.duration < 0.02) return;
+
+          const isSelected =
+            timelineState.isAudioSegmentSelected(seg.id) ||
+            (!timelineState.hasMultiSelection() && timelineState.selectedAudioSplitIndex === i);
+
+          const segW = Math.max(12, seg.duration * pps);
+          const isCompactSeg = segW < 32;
+
+          const clipDiv = document.createElement('div');
+          clipDiv.className = `audio-clip-overlay absolute top-0.5 bottom-0.5 rounded border pointer-events-auto cursor-grab active:cursor-grabbing transition-colors group overflow-hidden ${
+            isSelected
+              ? 'bg-emerald-500/25 border-emerald-400 ring-1 ring-emerald-400/40 z-20'
+              : 'bg-emerald-950/30 border-emerald-500/40 hover:border-emerald-400/80 hover:bg-emerald-900/25 z-10'
+          } ${seg.muted ? 'opacity-40 grayscale' : ''}`;
+          clipDiv.dataset.audioSegId = seg.id;
+          clipDiv.dataset.audioSegIndex = String(i);
+          clipDiv.style.left = `${seg.startTime * pps}px`;
+          clipDiv.style.width = `${segW}px`;
+
+          if (isCompactSeg) {
+            clipDiv.innerHTML = `
+              <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+              <div class="resize-handle right-handle right-0 top-0 bottom-0 w-2 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+            `;
+          } else {
+            clipDiv.innerHTML = `
+              <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+              <div class="absolute top-1 left-2.5 flex items-center gap-1.5 pointer-events-none select-none z-20">
+                <span class="text-[9px] font-mono px-1 rounded-xs ${
+                  isSelected ? 'bg-emerald-900 text-emerald-100 font-bold' : 'bg-black/60 text-emerald-300'
+                }">🎙️ Voice ${i + 1}</span>
+                <span class="audio-time-badge text-[8px] font-mono text-emerald-200/80 hidden sm:inline">${seg.startTime.toFixed(1)}s–${seg.endTime.toFixed(1)}s</span>
+              </div>
+              <div class="resize-handle right-handle right-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-emerald-300/40"></div>
+            `;
+          }
+
+          if (isSelected) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'delete-btn absolute top-1 right-2.5 text-white bg-red-600/85 hover:bg-red-500 rounded p-1 pointer-events-auto shadow z-30 cursor-pointer';
+            deleteBtn.title = 'Delete Voice Segment (Delete / Backspace)';
+            deleteBtn.innerHTML = '<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
+            deleteBtn.onmousedown = (e) => {
+              e.stopPropagation();
+              import('./videoController').then(m => m.handleDeleteAudioSegment(seg.id));
+            };
+            clipDiv.appendChild(deleteBtn);
+          }
+
+          audioFrag.appendChild(clipDiv);
+        });
+        trackAudio.appendChild(audioFrag);
       }
     } else {
       if (waveformCanvas) {
@@ -2491,6 +2537,7 @@ export function renderBrollEditor(
         if (sfxEvents.length === 0) {
           trackSfx.innerHTML = `<div class="text-[9px] text-gray-500 italic pl-3 flex items-center h-full select-none">No sound effects yet. Click "+ SFX" or drop cues from the Background Music panel to place SFX at playhead.</div>`;
         } else {
+          const sfxFrag = document.createDocumentFragment();
           sfxEvents.forEach((ev) => {
             if ((ev.end ?? 0) < visibleStartTime || (ev.start ?? 0) > visibleEndTime)
               return;
@@ -2536,7 +2583,7 @@ export function renderBrollEditor(
             `;
 
             const canvasEl = el.querySelector(".sfx-clip-waveform-canvas") as HTMLCanvasElement | null;
-            if (canvasEl) {
+            if (canvasEl && evWidth >= 30) {
               if ((ev as any)._sfxBuffer) {
                 requestAnimationFrame(() => {
                   drawSfxClipWaveformCanvas(canvasEl, (ev as any)._sfxBuffer, (ev as any).startOffset || 0, (ev.end ?? 0) - (ev.start ?? 0));
@@ -2608,8 +2655,9 @@ export function renderBrollEditor(
               import("./sfx-trimmer").then((m) => m.openSfxTrimmerForGraphic(ev.id));
             });
 
-            trackSfx.appendChild(el);
+            sfxFrag.appendChild(el);
           });
+          trackSfx.appendChild(sfxFrag);
         }
       }
 

@@ -956,7 +956,10 @@ export function enhanceTimelineDom(): void {
     let lanesChanged = false;
     const decorateSubtree = (element: HTMLElement) => {
       if (element.matches('.tl-lane, tr, [data-track-lane]')) lanesChanged = true;
-      if (element.matches('.tl-clip, [data-clip-id]')) decorateTimelineClip(element);
+      if (element.matches('.tl-clip, [data-clip-id]')) {
+        decorateTimelineClip(element);
+        return;
+      }
       element.querySelectorAll<HTMLElement>('.tl-clip, [data-clip-id]').forEach(decorateTimelineClip);
       if (element.querySelector('.tl-lane, tr, [data-track-lane]')) lanesChanged = true;
     };

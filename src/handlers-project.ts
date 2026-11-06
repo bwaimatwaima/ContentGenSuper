@@ -274,6 +274,8 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
         smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
         customFonts: state.customFonts,
         timelineMode: timelineState.mode,
+        timelineEditMode: timelineState.editMode,
+        snappingEnabled: timelineState.snappingEnabled,
         graphics: timelineState.graphics,
         audioSplits: timelineState.audioSplits,
         audioSegments: timelineState.audioSegments,
@@ -862,6 +864,12 @@ export async function loadProject() {
             state.videoSubtitleColors = projectData.videoSubtitleColors || {};
             state.smartCaptionPlacementEnabled = Boolean(projectData.smartCaptionPlacementEnabled);
             timelineState.setMode(projectData.timelineMode || 'free');
+            if (projectData.timelineEditMode) {
+                import('./videoController').then(m => m.handleSetEditMode(projectData.timelineEditMode));
+            }
+            if (typeof projectData.snappingEnabled === 'boolean') {
+                import('./videoController').then(m => m.handleToggleSnapping(projectData.snappingEnabled));
+            }
             timelineState.setGraphics(projectData.graphics || []);
             timelineState.setAudioSplits(projectData.audioSplits || []);
             if (projectData.audioSegmentsInitialized) {

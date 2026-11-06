@@ -312,17 +312,20 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       };
     }
 
-    // 1. Ensure clip 0 starts at 0
+    // 1. Ensure clip 0 starts at 0 ONLY in Ripple or Audio Locked mode
     if (Math.abs((sorted[0].startTime ?? 0) - 0) > 0.0001) {
-      sorted[0].startTime = 0;
-      fixedGaps++;
-      adjustedClips++;
+      if (isLocked || timelineState.editMode === 'ripple') {
+        sorted[0].startTime = 0;
+        fixedGaps++;
+        adjustedClips++;
+      }
     }
     sorted[0].duration = Math.max(minDuration, sorted[0].duration || ((sorted[0].endTime ?? minDuration) - sorted[0].startTime));
     sorted[0].endTime = sorted[0].startTime + sorted[0].duration;
 
     // 2. Reconcile sequential continuity WITHOUT crushing overlapped shots into 0.05s flashes
-    // or shifting the entire remaining timeline off its audio anchors!
+    // In Ripple / Audio Locked mode: close gaps and align shots back-to-back
+    // In Lift Mode: preserve intentional gaps between shots
     let i = 1;
     while (i < sorted.length) {
       const prev = sorted[i - 1];
@@ -330,9 +333,7 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       const expectedStart = prev.endTime;
 
       if (isLocked && cur.startTime < expectedStart - 0.001) {
-        // OVERLAP DETECTED in audio_locked mode (e.g. `prev` stretched too far over subsequent shots).
-        // Find the next valid anchor shot `k` whose endTime is safely beyond `expectedStart`
-        // and distribute the time proportionally instead of crushing shots into 50ms flashes!
+        // OVERLAP DETECTED in audio_locked mode
         let k = i;
         while (k < sorted.length && (sorted[k].endTime ?? 0) <= expectedStart + minDuration * (k - i + 1)) {
           k++;
@@ -342,7 +343,6 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
           ? Math.max(expectedStart + (k - i + 1) * 0.5, sorted[k].startTime)
           : (targetAudioDur ?? Math.max(expectedStart + (k - i) * 2.0, sorted[sorted.length - 1].endTime));
 
-        // Re-distribute [windowStart, windowEnd] proportionally across [prev, ...sorted[i..k-1]]
         const group = sorted.slice(i - 1, k);
         const weights = group.map(c => Math.max(1, (c.text || '').trim().split(/\s+/).filter(Boolean).length || 5));
         const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -366,17 +366,37 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       }
 
       if (Math.abs((cur.startTime ?? 0) - expectedStart) > 0.0001) {
-        if (isLocked && cur.endTime > expectedStart + minDuration) {
-          // Anchor endTime to audio in audio_locked mode so downstream clips never drift!
-          cur.startTime = expectedStart;
-          cur.duration = cur.endTime - cur.startTime;
-        } else {
-          cur.startTime = expectedStart;
-          cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
-          cur.endTime = cur.startTime + cur.duration;
+        if (cur.startTime < expectedStart - 0.001) {
+          // OVERLAP DETECTED
+          if (isLocked || timelineState.editMode === 'ripple') {
+            cur.startTime = expectedStart;
+            cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
+            cur.endTime = cur.startTime + cur.duration;
+            fixedGaps++;
+            adjustedClips++;
+          } else {
+            // Lift / Overwrite mode: trim preceding clip's tail so it ends at cur's start
+            if (prev.startTime < cur.startTime) {
+              prev.endTime = cur.startTime;
+              prev.duration = Math.max(minDuration, prev.endTime - prev.startTime);
+              adjustedClips++;
+            }
+          }
+        } else if (cur.startTime > expectedStart + 0.001) {
+          // GAP DETECTED
+          if (isLocked || timelineState.editMode === 'ripple') {
+            // Ripple or Audio Locked mode: close gap
+            cur.startTime = expectedStart;
+            cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
+            cur.endTime = cur.startTime + cur.duration;
+            fixedGaps++;
+            adjustedClips++;
+          } else {
+            // Free Pacing + Lift Mode: PRESERVE INTENTIONAL GAPS!
+            cur.duration = Math.max(minDuration, (cur.endTime ?? (cur.startTime + minDuration)) - cur.startTime);
+            cur.endTime = cur.startTime + cur.duration;
+          }
         }
-        fixedGaps++;
-        adjustedClips++;
       } else {
         cur.duration = Math.max(minDuration, (cur.endTime ?? (cur.startTime + minDuration)) - cur.startTime);
         cur.endTime = cur.startTime + cur.duration;

@@ -347,7 +347,8 @@ function buildEffectsStudioPanel(): HTMLElement {
     if (scopeUpdateInterval !== null) window.clearInterval(scopeUpdateInterval);
     const updateScope = () => {
         // Signal-scope sampling performs canvas readback. Do not compete with the
-        // export renderer, and do not spend CPU painting a panel while its tab is hidden.
+        // export renderer, and do not spend CPU painting a panel while its tab is hidden or in background.
+        if (typeof document !== 'undefined' && document.hidden) return;
         if (state.isExporting || !canvas.isConnected || canvas.closest('.hidden')) return;
       renderSignalScope(canvas, currentScopeMode);
     };

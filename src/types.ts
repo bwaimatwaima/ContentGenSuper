@@ -303,7 +303,15 @@ export interface DirectorSuggestion {
     title?: string;
     severity?: string;
     applied: boolean;
+    status?: 'pending' | 'applying' | 'applied' | 'failed';
+    error?: string;
     confidence?: number;
+}
+
+export interface DirectorActionResult {
+    success: boolean;
+    changed: boolean;
+    message?: string;
 }
 
 export interface DirectorReviewResult {

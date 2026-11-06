@@ -18,7 +18,7 @@ import { saveVersion } from './handlers-project';
 import type { GraphicEvent } from './graphics-engine';
 import type { ProceduralSfxType } from './audioSynthesizer';
 import { HYPERFRAME_PRESETS } from './hyperframes-engine';
-import type { DirectorReviewResult, DirectorSuggestion, DirectorActionResult } from './types';
+import type { DirectorReviewResult, DirectorSuggestion, DirectorActionResult, CameraKeyframesConfig } from './types';
 
 interface NarrationDirection {
   reading_style: string;
@@ -1787,29 +1787,37 @@ async function buildShotThumbnailParts(clips: any[], maxShots = 20): Promise<any
   const parts: any[] = [];
   if (!clips || clips.length === 0) return parts;
 
-  // Two-stage intelligent visual sampling:
-  // 1. Anchor essential storytelling beats: first shot (hook), last shot (climax/resolution),
-  //    and duration extremes that could disrupt pacing rhythm.
-  // 2. Evenly distribute representative frames across the rest of the timeline up to maxShots.
-  const indicesToSample = new Set<number>();
-  indicesToSample.add(0);
+  // Proportional, unbiased visual sampling across the entire project duration:
+  // 1. Guaranteed Story Arc Anchors: Opening (0), Midpoint (floor(N/2)), Climax/Resolution (N-1)
+  // 2. Outliers: Top duration extremes (up to 4 clips)
+  // 3. Proportional Grid: Remaining slots distributed evenly from 0 to N-1
+  const selectedIndices = new Set<number>();
+  selectedIndices.add(0);
+  if (clips.length > 2) {
+    selectedIndices.add(Math.floor(clips.length / 2));
+  }
   if (clips.length > 1) {
-    indicesToSample.add(clips.length - 1);
+    selectedIndices.add(clips.length - 1);
   }
 
-  for (let i = 0; i < clips.length; i++) {
-    const c = clips[i];
-    if (c.duration > 6.0 || c.duration < 1.0) {
-      indicesToSample.add(i);
-    }
+  // Find top duration outliers without crowding out later shots
+  const durationOutliers = clips
+    .map((c, i) => ({ i, dur: c.duration || 0 }))
+    .filter(item => item.dur > 6.0 || item.dur < 1.0)
+    .sort((a, b) => b.dur - a.dur)
+    .slice(0, 4);
+  for (const item of durationOutliers) {
+    selectedIndices.add(item.i);
   }
 
-  const step = Math.max(1, Math.ceil(clips.length / maxShots));
-  for (let i = 0; i < clips.length; i += step) {
-    indicesToSample.add(i);
+  // Evenly distribute remaining quota across the entire project duration
+  const targetCount = Math.min(clips.length, maxShots);
+  for (let k = 0; k < targetCount; k++) {
+    const proportionalIdx = Math.round((k / (targetCount - 1 || 1)) * (clips.length - 1));
+    selectedIndices.add(proportionalIdx);
   }
 
-  const sortedIndices = Array.from(indicesToSample).sort((a, b) => a - b).slice(0, maxShots);
+  const sortedIndices = Array.from(selectedIndices).sort((a, b) => a - b).slice(0, maxShots);
 
   for (const i of sortedIndices) {
     const clip = clips[i];
@@ -1894,16 +1902,20 @@ export async function handleDirectorReviewLoop(isSilent = false): Promise<Direct
     s: Number((c.startTime || 0).toFixed(2)),
     e: Number((c.endTime || 0).toFixed(2)),
     d: Number((c.duration || 0).toFixed(2)),
+    mode: c.displayMode || 'fullscreen',
     t: (c.text || c.text_reference || '').slice(0, 80),
+    p: (c.image_prompt || c.prompt || '').slice(0, 60),
     cam: c.cameraMovement,
+    kf: c.cameraKeyframes ? JSON.stringify(c.cameraKeyframes) : '',
     trans: c.transitionToNext,
     img: c.image_id || c._imageObjectURL || (c.src ? c.src.slice(-30) : '')
   }));
   const audioFingerprint = {
     audioDur: Number((timelineState.masterAudioBuffer?.duration || 0).toFixed(2)),
+    assetId: (timelineState as any)._masterAudioAssetId || '',
     audioSegmentsCount: (timelineState.audioSegments || []).length,
-    silences: (timelineState.globalSilences || []).length,
-    wordsCount: (timelineState.globalWordTimestamps || []).length,
+    silences: (timelineState.globalSilences || []).slice(0, 5).map(s => `${s.start.toFixed(1)}-${s.end.toFixed(1)}`),
+    wordsSample: (timelineState.globalWordTimestamps || []).slice(0, 5).map((w: any) => `${w.word || ''}_${(w.start || 0).toFixed(1)}`),
     mode: timelineState.mode,
     version: timelineState.clipsVersion
   };
@@ -1912,7 +1924,10 @@ export async function handleDirectorReviewLoop(isSilent = false): Promise<Direct
     type: g.type,
     start: Number((g.start || 0).toFixed(2)),
     end: Number((g.end || 0).toFixed(2)),
-    title: g.title
+    pos: g.position || 'bottom',
+    col: g.color || '',
+    title: (g.title || '').slice(0, 40),
+    sub: (g.subtitle || '').slice(0, 40)
   }));
 
   const cacheKey = getCacheKey('director_review_v3', {
@@ -2039,7 +2054,30 @@ Provide:
                       targetDuration: { type: Type.NUMBER },
                       trimPercent: { type: Type.NUMBER },
                       cameraMovement: { type: Type.STRING },
-                      cameraKeyframes: { type: Type.STRING },
+                      cameraKeyframes: {
+                        type: Type.OBJECT,
+                        properties: {
+                          start: {
+                            type: Type.OBJECT,
+                            properties: {
+                              x: { type: Type.NUMBER },
+                              y: { type: Type.NUMBER },
+                              scale: { type: Type.NUMBER },
+                              rotation: { type: Type.NUMBER },
+                            },
+                          },
+                          end: {
+                            type: Type.OBJECT,
+                            properties: {
+                              x: { type: Type.NUMBER },
+                              y: { type: Type.NUMBER },
+                              scale: { type: Type.NUMBER },
+                              rotation: { type: Type.NUMBER },
+                            },
+                          },
+                          easing: { type: Type.STRING, enum: ['linear', 'easeInOut', 'easeIn', 'easeOut', 'whip'] },
+                        },
+                      },
                       transitionToNext: { type: Type.STRING },
                       graphicType: { type: Type.STRING, enum: ['lowerThird', 'titleCard', 'icon'] },
                       graphicText: { type: Type.STRING },
@@ -2081,6 +2119,47 @@ Provide:
     if (!isSilent) ui.showStatus(`AI Director Review error: ${error.message || error}`, true, 4000);
     return null;
   }
+}
+
+/**
+ * Sanitizes camera keyframe configurations returned from AI suggestions,
+ * ensuring valid coordinate, scale, rotation boundaries and easing types.
+ */
+function sanitizeCameraKeyframes(
+  raw: any,
+  movementPreset: string,
+  focalPoint?: { x: number; y: number }
+): CameraKeyframesConfig {
+  if (!raw || typeof raw !== 'object') {
+    return utils.presetToKeyframes(movementPreset, focalPoint);
+  }
+  const clampNum = (val: any, fallback: number, min: number, max: number): number => {
+    const num = Number(val);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(min, Math.min(max, num));
+  };
+  const validEasings = new Set<string>(['linear', 'easeInOut', 'easeIn', 'easeOut', 'whip']);
+  const rawEasing = typeof raw.easing === 'string' ? raw.easing : '';
+  const easing = validEasings.has(rawEasing) ? (rawEasing as any) : 'easeInOut';
+
+  const startRaw = raw.start || {};
+  const endRaw = raw.end || {};
+
+  return {
+    start: {
+      x: clampNum(startRaw.x, 0.5, 0.0, 1.0),
+      y: clampNum(startRaw.y, 0.5, 0.0, 1.0),
+      scale: clampNum(startRaw.scale, 1.0, 0.8, 3.0),
+      rotation: clampNum(startRaw.rotation, 0, -45, 45),
+    },
+    end: {
+      x: clampNum(endRaw.x, 0.5, 0.0, 1.0),
+      y: clampNum(endRaw.y, 0.5, 0.0, 1.0),
+      scale: clampNum(endRaw.scale, 1.1, 0.8, 3.0),
+      rotation: clampNum(endRaw.rotation, 0, -45, 45),
+    },
+    easing,
+  };
 }
 
 export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot = false): Promise<DirectorActionResult> {
@@ -2128,10 +2207,26 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
       return { success: true, changed: false, message: `Shot duration is already at ${oldDur.toFixed(2)}s.` };
     }
 
+    // PiP overlay clips adjust duration independently without shifting the main track
+    const isPip = targetClip.displayMode === 'pip_overlay';
+    if (isPip) {
+      targetClip.duration = clampedDesired;
+      targetClip.endTime = targetClip.startTime + clampedDesired;
+      return {
+        success: true,
+        changed: true,
+        message: `Adjusted PiP overlay duration from ${oldDur.toFixed(1)}s to ${clampedDesired.toFixed(1)}s.`,
+      };
+    }
+
+    // Main-track clips: filter main-track clips to prevent displacing PiP overlays
+    const mainClips = clips.filter((c: any) => c && c.displayMode !== 'pip_overlay');
+    const mainIndex = mainClips.findIndex((c: any) => c.id === targetClip.id);
+
     if (timelineState.mode === 'audio_locked') {
-      // Rolling edit: adjust shared boundary with neighbor
-      const neighbor = clips[targetIndex + 1];
-      if (neighbor) {
+      // Rolling edit: adjust shared boundary with adjacent main-track neighbor
+      if (mainIndex >= 0 && mainIndex < mainClips.length - 1) {
+        const neighbor = mainClips[mainIndex + 1];
         const combinedEnd = neighbor.endTime;
         const maxTargetDur = combinedEnd - targetClip.startTime - MIN_CLIP_DUR;
         if (maxTargetDur < MIN_CLIP_DUR) {
@@ -2146,8 +2241,8 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
         neighbor.startTime = targetClip.endTime;
         neighbor.duration = Math.max(MIN_CLIP_DUR, combinedEnd - neighbor.startTime);
         return { success: true, changed: true, message: `Rolling trim: adjusted shot to ${finalDur.toFixed(1)}s (neighbor: ${neighbor.duration.toFixed(1)}s).` };
-      } else if (targetIndex > 0) {
-        const prev = clips[targetIndex - 1];
+      } else if (mainIndex > 0) {
+        const prev = mainClips[mainIndex - 1];
         const fixedEnd = targetClip.endTime;
         const maxTargetDur = fixedEnd - prev.startTime - MIN_CLIP_DUR;
         if (maxTargetDur < MIN_CLIP_DUR) {
@@ -2169,10 +2264,12 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
       targetClip.duration = clampedDesired;
       targetClip.endTime = targetClip.startTime + clampedDesired;
       let currentStart = targetClip.endTime;
-      for (let i = targetIndex + 1; i < clips.length; i++) {
-        clips[i].startTime = currentStart;
-        clips[i].endTime = currentStart + clips[i].duration;
-        currentStart = clips[i].endTime;
+      if (mainIndex >= 0) {
+        for (let i = mainIndex + 1; i < mainClips.length; i++) {
+          mainClips[i].startTime = currentStart;
+          mainClips[i].endTime = currentStart + mainClips[i].duration;
+          currentStart = mainClips[i].endTime;
+        }
       }
       return { success: true, changed: true, message: `Rippled shot duration from ${oldDur.toFixed(1)}s to ${clampedDesired.toFixed(1)}s.` };
     }
@@ -2222,8 +2319,12 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
           const movChanged = targetClip.cameraMovement !== resolvedMov;
           targetClip.cameraMovement = resolvedMov;
           if (suggestion.actionPayload?.cameraKeyframes) {
-            targetClip.cameraKeyframes = suggestion.actionPayload.cameraKeyframes;
-            actionResult = { success: true, changed: true, message: `Updated camera movement to ${resolvedMov} with custom keyframes.` };
+            targetClip.cameraKeyframes = sanitizeCameraKeyframes(
+              suggestion.actionPayload.cameraKeyframes,
+              resolvedMov,
+              targetClip.focalPoint
+            );
+            actionResult = { success: true, changed: true, message: `Updated camera movement to ${resolvedMov} with validated custom keyframes.` };
           } else if (movChanged) {
             actionResult = { success: true, changed: true, message: `Set camera movement to ${resolvedMov}.` };
           } else {
@@ -2280,22 +2381,79 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
           (targetClip as any).image_prompt = imagePrompt;
         }
 
-        // Check if there is an associated scene shot item in state or DOM
-        const promptItems = document.querySelectorAll('.prompt-item');
-        const shotItem = promptItems[targetIndex] as HTMLElement | null;
+        const shotId = (targetClip as any).shotId || targetClip.id;
+
+        // 1. Resolve storyboard data model and update its prompt
+        let modelShot: any = null;
+        if (state.currentScenes && state.currentScenes.length > 0) {
+          for (const scene of state.currentScenes) {
+            if (scene && scene.id === shotId) {
+              modelShot = scene;
+              break;
+            }
+            if (scene && Array.isArray(scene.lines)) {
+              for (const line of scene.lines) {
+                if (line && line.id === shotId) {
+                  modelShot = line;
+                  break;
+                }
+              }
+              if (modelShot) break;
+            }
+          }
+        }
+        if (modelShot && imagePrompt) {
+          modelShot.image_prompt = imagePrompt;
+        }
+
+        // 2. Find storyboard card element in DOM by persistent shot ID
+        let shotItem: HTMLElement | null = null;
+        if (shotId && typeof dom !== 'undefined' && dom.resultsContainer) {
+          shotItem = dom.resultsContainer.querySelector(`.prompt-item[data-id="${shotId}"]`);
+        }
+        if (!shotItem && typeof document !== 'undefined') {
+          if (shotId) {
+            shotItem = document.querySelector(`.prompt-item[data-id="${shotId}"]`);
+          }
+          if (!shotItem) {
+            const promptItems = document.querySelectorAll('.prompt-item');
+            shotItem = (promptItems[targetIndex] as HTMLElement) || null;
+          }
+        }
+
         if (shotItem) {
+          // If modelShot wasn't found by ID, attempt lookup via data attributes
+          if (!modelShot && state.currentScenes && state.currentScenes.length > 0) {
+            const sceneIdx = parseInt(shotItem.dataset.sceneIndex || '-1', 10);
+            const lineIdx = parseInt(shotItem.dataset.lineIndex || '-1', 10);
+            const isPaced = typeof state.currentScenes[0]?.shot_number !== 'undefined';
+            if (isPaced && lineIdx >= 0 && state.currentScenes[lineIdx]) {
+              modelShot = state.currentScenes[lineIdx];
+            } else if (sceneIdx >= 0 && state.currentScenes[sceneIdx]) {
+              const scene = state.currentScenes[sceneIdx];
+              const lines = scene?.lines || [scene];
+              if (lineIdx >= 0 && lines[lineIdx]) {
+                modelShot = lines[lineIdx];
+              }
+            }
+            if (modelShot && imagePrompt) {
+              modelShot.image_prompt = imagePrompt;
+            }
+          }
+
           const promptTextarea = shotItem.querySelector('.prompt-textarea') as HTMLTextAreaElement | null;
           if (promptTextarea && imagePrompt) {
             promptTextarea.value = imagePrompt;
             promptTextarea.dispatchEvent(new Event('input', { bubbles: true }));
           }
+
           const generateBtn = shotItem.querySelector('.generate-btn') as HTMLButtonElement | null;
           if (generateBtn) {
             try {
               const { generateImageForShot } = await import('./handlers-images/generation');
               const genRes = await generateImageForShot(generateBtn);
               if (genRes.success) {
-                actionResult = { success: true, changed: true, message: `Shot #${targetIndex + 1} successfully regenerated with new image!` };
+                actionResult = { success: true, changed: true, message: `Shot #${targetIndex + 1} image regenerated successfully!` };
               } else {
                 actionResult = { success: false, changed: false, message: 'Image generation could not be completed.' };
               }
@@ -2303,11 +2461,11 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
               actionResult = { success: false, changed: false, message: `Generation error: ${genErr?.message || genErr}` };
             }
           } else {
-            actionResult = { success: true, changed: true, message: `Updated shot prompt to: "${imagePrompt.slice(0, 50)}..."` };
+            actionResult = { success: true, changed: true, message: `Prompt updated for Shot #${targetIndex + 1}. (Generate button not available)` };
           }
         } else {
-          // In timeline-only view, update clip image prompt
-          actionResult = { success: true, changed: true, message: `Updated clip image prompt for Shot #${targetIndex + 1}.` };
+          // Timeline-only view or off-screen storyboard card
+          actionResult = { success: true, changed: true, message: `Prompt updated for Shot #${targetIndex + 1} in storyboard model.` };
         }
         break;
       }
@@ -2321,16 +2479,30 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
   }
 
   // Final validation pass on timeline clips:
-  // Ensure non-negative timestamps, monotonic ordering, non-zero durations
-  for (let i = 0; i < clips.length; i++) {
-    const c = clips[i];
-    if (c.startTime < 0) c.startTime = 0;
+  // Validate main-track clips sequentially, and validate PiP overlays independently
+  // so PiP overlays are never displaced by main-track ripple/sequential alignment
+  const mainTrackClips = clips.filter((c: any) => c && c.displayMode !== 'pip_overlay');
+  const pipClips = clips.filter((c: any) => c && c.displayMode === 'pip_overlay');
+
+  let mainCursor = 0;
+  for (let i = 0; i < mainTrackClips.length; i++) {
+    const c = mainTrackClips[i];
     if (c.duration <= 0) c.duration = MIN_CLIP_DUR;
-    if (c.endTime <= c.startTime) c.endTime = c.startTime + c.duration;
-    if (i > 0 && c.startTime < clips[i - 1].endTime - 0.001) {
-      c.startTime = clips[i - 1].endTime;
+    if (i === 0) {
+      if (c.startTime < 0) c.startTime = 0;
       c.endTime = c.startTime + c.duration;
+      mainCursor = c.endTime;
+    } else {
+      c.startTime = mainCursor;
+      c.endTime = c.startTime + c.duration;
+      mainCursor = c.endTime;
     }
+  }
+
+  for (const pc of pipClips) {
+    if (pc.startTime < 0) pc.startTime = 0;
+    if (pc.duration <= 0) pc.duration = MIN_CLIP_DUR;
+    pc.endTime = pc.startTime + pc.duration;
   }
 
   // Update state and applied flag ONLY if changes actually occurred

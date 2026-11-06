@@ -4,7 +4,8 @@
  *
  * MediaPoolManager
  * High-performance asynchronous video ingestion, metadata probing,
- * base64 WebP thumbnail extraction, and hardware decoder pool management.
+ * base64 WebP thumbnail extraction, compact audio waveform peaks extraction,
+ * and hardware decoder pooling with mediaId affinity & coalesced seeking.
  */
 
 export interface MediaMetadata {
@@ -14,9 +15,12 @@ export interface MediaMetadata {
   width: number;
   height: number;
   thumbnailUrl?: string; // Base64 WebP Data URI to prevent Blob URL memory leaks
-  status: 'queued' | 'ready' | 'error';
+  waveformPeaks?: Float32Array; // Compact ~50Hz audio peaks (~2.4KB per minute)
+  status: 'queued' | 'probing' | 'ready' | 'error';
   mimeType?: string;
 }
+
+export type AssetUpdateListener = (meta: MediaMetadata) => void;
 
 interface DecoderBinding {
   video: HTMLVideoElement;
@@ -26,16 +30,30 @@ interface DecoderBinding {
   lastUsedTime: number;
 }
 
+interface DecoderSeekState {
+  isSeeking: boolean;
+  pendingSeekTime: number | null;
+}
+
 class MediaPoolManager {
   private blobs = new Map<string, Blob>();
   private objectUrls = new Map<string, string>();
+  private metadataCache = new Map<string, MediaMetadata>();
   private decoderPool: HTMLVideoElement[] = [];
   private activeBindings = new Map<string, DecoderBinding>();
-  private ingestQueue: Array<() => Promise<void>> = [];
-  private activeWorkers = 0;
-  private readonly MAX_CONCURRENT_INGEST = 2;
+  private seekStates = new WeakMap<HTMLVideoElement, DecoderSeekState>();
+
+  // Two-Tier Concurrency Queues
+  private fastQueue: Array<() => Promise<void>> = [];
+  private heavyQueue: Array<() => Promise<void>> = [];
+  private activeFast = 0;
+  private activeHeavy = 0;
+  private readonly MAX_FAST_CONCURRENCY = 3;
+  private readonly MAX_HEAVY_CONCURRENCY = 1;
   private readonly MAX_DECODERS = 6;
   private readonly PROBE_TIMEOUT_MS = 2500;
+
+  private sharedAudioCtx: AudioContext | null = null;
 
   constructor() {
     if (typeof document !== 'undefined') {
@@ -44,25 +62,54 @@ class MediaPoolManager {
         video.preload = 'auto';
         video.muted = true;
         video.playsInline = true;
+
+        const seekState: DecoderSeekState = {
+          isSeeking: false,
+          pendingSeekTime: null,
+        };
+        this.seekStates.set(video, seekState);
+
+        // Coalesced "Latest-Wins" Seek Gate
+        video.addEventListener('seeked', () => {
+          const state = this.seekStates.get(video);
+          if (!state) return;
+          if (state.pendingSeekTime !== null) {
+            const nextTarget = state.pendingSeekTime;
+            state.pendingSeekTime = null;
+            try {
+              video.currentTime = nextTarget;
+            } catch {}
+          } else {
+            state.isSeeking = false;
+          }
+        });
+
         this.decoderPool.push(video);
       }
     }
   }
 
   /**
-   * Register a file immediately without blocking the UI thread.
+   * Ingest a File/Blob without blocking the main thread.
+   * Deduplicates by id so multiple clips share one ObjectURL & metadata.
    */
-  enqueueFile(
+  public enqueueFile(
     id: string,
     file: Blob,
     name: string,
-    onUpdate: (meta: MediaMetadata) => void
-  ): void {
+    onUpdate?: AssetUpdateListener
+  ): MediaMetadata {
+    const existing = this.metadataCache.get(id);
+    if (existing) {
+      onUpdate?.(existing);
+      return existing;
+    }
+
     this.blobs.set(id, file);
     const url = URL.createObjectURL(file);
     this.objectUrls.set(id, url);
 
-    onUpdate({
+    const initialMeta: MediaMetadata = {
       id,
       name,
       duration: 0,
@@ -70,47 +117,65 @@ class MediaPoolManager {
       height: 0,
       status: 'queued',
       mimeType: file.type,
-    });
+    };
+    this.metadataCache.set(id, initialMeta);
+    onUpdate?.(initialMeta);
 
-    this.ingestQueue.push(async () => {
+    // Tier 1: Fast metadata & WebP thumbnail extraction
+    this.fastQueue.push(async () => {
       try {
+        initialMeta.status = 'probing';
+        onUpdate?.({ ...initialMeta });
+
         const meta = await this.probeAndExtractThumbnailWithTimeout(id, name, url);
-        onUpdate(meta);
+        meta.status = 'ready';
+        this.metadataCache.set(id, meta);
+        onUpdate?.({ ...meta });
+
+        // Tier 2: Heavy background audio peaks extraction (only if audio/video and reasonable size)
+        if (file.size > 0 && (file.type.startsWith('video') || file.type.startsWith('audio') || !file.type)) {
+          this.enqueueHeavyAnalysis(id, file, onUpdate);
+        }
       } catch (err) {
-        console.warn(`MediaPoolManager: Probe failed for ${name}`, err);
-        onUpdate({
-          id,
-          name,
-          duration: 0,
-          width: 0,
-          height: 0,
-          status: 'error',
-          mimeType: file.type,
-        });
+        console.warn(`MediaPoolManager: Fast probe failed for ${name}`, err);
+        initialMeta.status = 'error';
+        this.metadataCache.set(id, initialMeta);
+        onUpdate?.({ ...initialMeta });
       }
     });
 
-    this.processQueue();
+    this.pumpFastQueue();
+    return initialMeta;
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.activeWorkers >= this.MAX_CONCURRENT_INGEST || this.ingestQueue.length === 0) {
-      return;
+  public getMetadata(id: string): MediaMetadata | undefined {
+    return this.metadataCache.get(id);
+  }
+
+  private pumpFastQueue(): void {
+    while (this.activeFast < this.MAX_FAST_CONCURRENCY && this.fastQueue.length > 0) {
+      const task = this.fastQueue.shift()!;
+      this.activeFast++;
+      task().finally(() => {
+        this.activeFast--;
+        this.pumpFastQueue();
+      });
     }
-    this.activeWorkers++;
-    const task = this.ingestQueue.shift()!;
-    try {
-      await task();
-    } catch (e) {
-      console.error('MediaPoolManager queue task error:', e);
-    } finally {
-      this.activeWorkers--;
-      this.processQueue();
+  }
+
+  private pumpHeavyQueue(): void {
+    while (this.activeHeavy < this.MAX_HEAVY_CONCURRENCY && this.heavyQueue.length > 0) {
+      const task = this.heavyQueue.shift()!;
+      this.activeHeavy++;
+      task().finally(() => {
+        this.activeHeavy--;
+        this.pumpHeavyQueue();
+      });
     }
   }
 
   /**
-   * Probes video metadata and extracts a low-res base64 WebP poster with a safety timeout.
+   * Fast Tier: Probes video metadata and extracts low-res base64 WebP poster with safety timeout.
    */
   private probeAndExtractThumbnailWithTimeout(
     id: string,
@@ -213,16 +278,85 @@ class MediaPoolManager {
   }
 
   /**
-   * Acquire a hardware decoder for a timeline clip, with playhead proximity priority.
+   * Heavy Tier: Extracts compact 50Hz audio waveform peaks in the background without UI hitch.
    */
-  acquireDecoder(
+  private enqueueHeavyAnalysis(id: string, file: Blob, onUpdate?: AssetUpdateListener): void {
+    // Only analyze files under 120MB to avoid large uncompressed PCM heap spikes
+    if (file.size > 120 * 1024 * 1024) return;
+
+    this.heavyQueue.push(async () => {
+      try {
+        const peaks = await this.extractCompactPeaks(file, 50);
+        if (peaks) {
+          const meta = this.metadataCache.get(id);
+          if (meta) {
+            meta.waveformPeaks = peaks;
+            onUpdate?.({ ...meta });
+          }
+        }
+      } catch (e) {
+        console.warn(`MediaPoolManager: Background waveform peak extraction skipped for ${id}`, e);
+      }
+    });
+
+    this.pumpHeavyQueue();
+  }
+
+  /**
+   * Fast Stride-Optimized Waveform Scan (8x faster sample scan).
+   * Generates a compact ~50Hz Float32Array and immediately releases decoded AudioBuffer RAM.
+   */
+  private async extractCompactPeaks(file: Blob, peaksPerSecond: number): Promise<Float32Array | undefined> {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      if (!this.sharedAudioCtx && typeof window !== 'undefined') {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) {
+          this.sharedAudioCtx = new AudioCtx();
+        }
+      }
+      if (!this.sharedAudioCtx) return undefined;
+
+      const audioBuffer = await this.sharedAudioCtx.decodeAudioData(arrayBuffer);
+      // Safety limit: if audio duration exceeds 15 minutes, abort peak analysis to prevent RAM pressure
+      if (audioBuffer.duration > 900) return undefined;
+
+      const channelData = audioBuffer.getChannelData(0);
+      const totalPeaks = Math.max(1, Math.ceil(audioBuffer.duration * peaksPerSecond));
+      const samplesPerPeak = Math.floor(channelData.length / totalPeaks);
+      const peaks = new Float32Array(totalPeaks);
+
+      for (let i = 0; i < totalPeaks; i++) {
+        let max = 0;
+        const start = i * samplesPerPeak;
+        // Stride by 8 samples for 8x faster peak scan
+        for (let j = 0; j < samplesPerPeak; j += 8) {
+          const val = Math.abs(channelData[start + j] || 0);
+          if (val > max) max = val;
+        }
+        peaks[i] = max;
+      }
+      // audioBuffer goes out of scope here, freeing 50-200MB uncompressed PCM from memory
+      return peaks;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Acquire a hardware decoder for a timeline clip with:
+   * 1. Clip identity reuse (already bound).
+   * 2. MediaId affinity (free slot with matching mediaId loaded -> 0 reload cost for split clips).
+   * 3. Playhead-proximity eviction when all slots are occupied.
+   */
+  public acquireDecoder(
     clipId: string,
     mediaId: string,
     playheadTime: number = 0,
     clipStart: number = 0,
     clipEnd: number = Number.MAX_SAFE_INTEGER
   ): HTMLVideoElement | null {
-    // If already bound to this clip, refresh last used timestamp and return
+    // 1. If already bound to this clip, refresh last used timestamp and return
     const existing = this.activeBindings.get(clipId);
     if (existing) {
       existing.lastUsedTime = performance.now();
@@ -232,11 +366,17 @@ class MediaPoolManager {
     const url = this.objectUrls.get(mediaId);
     if (!url) return null;
 
-    // Search for a free video decoder in the pool
     const boundVideos = new Set(Array.from(this.activeBindings.values()).map((b) => b.video));
-    let targetVideo = this.decoderPool.find((v) => !boundVideos.has(v));
 
-    // If pool is exhausted (starvation prevention), evict decoder furthest from playhead
+    // 2. MediaId Affinity: Prefer an unbound video that ALREADY has the same src loaded!
+    let targetVideo = this.decoderPool.find((v) => !boundVideos.has(v) && v.src === url);
+
+    // If no mediaId-matched free video, take any free video in the pool
+    if (!targetVideo) {
+      targetVideo = this.decoderPool.find((v) => !boundVideos.has(v));
+    }
+
+    // 3. If pool is exhausted, evict decoder furthest from playhead
     if (!targetVideo && this.activeBindings.size >= this.MAX_DECODERS) {
       let furthestClipId: string | null = null;
       let maxDist = -1;
@@ -259,7 +399,9 @@ class MediaPoolManager {
 
       if (furthestClipId) {
         this.releaseDecoder(furthestClipId);
-        targetVideo = this.decoderPool.find((v) => !Array.from(this.activeBindings.values()).some((b) => b.video === v));
+        targetVideo = this.decoderPool.find(
+          (v) => !Array.from(this.activeBindings.values()).some((b) => b.video === v)
+        );
       }
     }
 
@@ -281,12 +423,41 @@ class MediaPoolManager {
   }
 
   /**
+   * Coalesced "Latest-Wins" Seek Gate for smooth, zero-stutter scrubbing.
+   */
+  public coalescedSeek(video: HTMLVideoElement, targetTime: number): void {
+    const clamped = Math.max(0, targetTime);
+    let state = this.seekStates.get(video);
+    if (!state) {
+      state = { isSeeking: false, pendingSeekTime: null };
+      this.seekStates.set(video, state);
+    }
+
+    if (state.isSeeking || video.seeking) {
+      state.pendingSeekTime = clamped; // Overwrite intermediate position with latest scrub target
+      return;
+    }
+
+    state.isSeeking = true;
+    try {
+      video.currentTime = clamped;
+    } catch {
+      state.isSeeking = false;
+    }
+  }
+
+  /**
    * Release hardware decoder bound to clip and detach GPU resources (Safari / WebKit fix).
    */
-  releaseDecoder(clipId: string): void {
+  public releaseDecoder(clipId: string): void {
     const binding = this.activeBindings.get(clipId);
     if (binding) {
       const video = binding.video;
+      const state = this.seekStates.get(video);
+      if (state) {
+        state.isSeeking = false;
+        state.pendingSeekTime = null;
+      }
       try {
         video.pause();
         video.removeAttribute('src');
@@ -296,24 +467,15 @@ class MediaPoolManager {
     }
   }
 
-  /**
-   * Get object URL for a registered media asset.
-   */
-  getObjectUrl(mediaId: string): string | undefined {
+  public getObjectUrl(mediaId: string): string | undefined {
     return this.objectUrls.get(mediaId);
   }
 
-  /**
-   * Get blob for a registered media asset.
-   */
-  getBlob(mediaId: string): Blob | undefined {
+  public getBlob(mediaId: string): Blob | undefined {
     return this.blobs.get(mediaId);
   }
 
-  /**
-   * Dispose media object and clean up Object URLs.
-   */
-  disposeMedia(mediaId: string): void {
+  public disposeMedia(mediaId: string): void {
     const url = this.objectUrls.get(mediaId);
     if (url) {
       try {
@@ -322,6 +484,7 @@ class MediaPoolManager {
     }
     this.objectUrls.delete(mediaId);
     this.blobs.delete(mediaId);
+    this.metadataCache.delete(mediaId);
 
     // Release any decoders using this media asset
     const toRelease: string[] = [];
@@ -333,10 +496,7 @@ class MediaPoolManager {
     toRelease.forEach((clipId) => this.releaseDecoder(clipId));
   }
 
-  /**
-   * Clear all allocated decoders and Object URLs.
-   */
-  disposeAll(): void {
+  public disposeAll(): void {
     Array.from(this.activeBindings.keys()).forEach((clipId) => this.releaseDecoder(clipId));
     this.objectUrls.forEach((url) => {
       try {
@@ -345,6 +505,7 @@ class MediaPoolManager {
     });
     this.objectUrls.clear();
     this.blobs.clear();
+    this.metadataCache.clear();
   }
 }
 

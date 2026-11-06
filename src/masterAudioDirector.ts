@@ -9,6 +9,7 @@ import * as ui from './ui';
 import { transcribeAudioLocal } from './api/audio';
 import * as utils from './utils';
 import { assetStorage } from './assetStorage';
+import { mediaPool } from './mediaPoolManager';
 import { timelineState } from './state-timeline';
 import { loadAndShowWaveform, hideAndCleanupWaveform } from './audioWaveformVisualizer';
 import { getAllStoryboardShots } from './handlers-inspector';
@@ -396,6 +397,8 @@ export async function handleMasterAudioUpload(file: File) {
             state.uploadedVideoFileName = file.name;
             try {
                 state.uploadedVideoAssetId = await assetStorage.storeAsset(file, 'video');
+                // Enqueue in mediaPool for fast metadata probing and background waveform peaks
+                mediaPool.enqueueFile(state.uploadedVideoAssetId, file, file.name);
             } catch (storeErr) {
                 console.warn('Video asset store error:', storeErr);
             }

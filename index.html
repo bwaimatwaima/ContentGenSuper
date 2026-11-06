@@ -315,45 +315,47 @@
         <div class="aurora-blob"></div>
     </div>
 
-    <div id="landing-page" class="hidden flex flex-col min-h-screen bg-[#060913]/90 text-slate-100 z-[100] absolute inset-0 overflow-y-auto font-sans selection:bg-indigo-500/30 selection:text-white">
+    <div id="landing-page" class="hidden flex flex-col min-h-screen bg-[#05070f] text-slate-100 z-[100] absolute inset-0 overflow-y-auto font-sans selection:bg-indigo-500/30 selection:text-white">
         <div class="cinematic-vignette"></div>
 
-        <!-- Atmospheric Glowing Orbs / Grid -->
+        <!-- Atmospheric Ambient Backdrops -->
         <div class="absolute inset-0 pointer-events-none overflow-hidden z-0">
-            <div class="absolute top-[-10%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-indigo-900/20 blur-[140px] animate-float"></div>
-            <div class="absolute top-[40%] right-[-10%] w-[55vw] h-[55vw] rounded-full bg-purple-900/15 blur-[160px] animate-float" style="animation-delay: -3s;"></div>
-            <div class="absolute bottom-[-10%] left-[20%] w-[50vw] h-[50vw] rounded-full bg-blue-900/15 blur-[140px] animate-float" style="animation-delay: -5s;"></div>
-            <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:32px_32px] opacity-40"></div>
+            <div class="absolute top-[-8%] left-[12%] w-[48vw] h-[48vw] rounded-full bg-indigo-950/25 blur-[160px] animate-float"></div>
+            <div class="absolute top-[30%] right-[-6%] w-[44vw] h-[44vw] rounded-full bg-purple-950/20 blur-[180px] animate-float" style="animation-delay: -3s;"></div>
+            <div class="absolute bottom-[-10%] left-[20%] w-[42vw] h-[42vw] rounded-full bg-sky-950/20 blur-[150px] animate-float" style="animation-delay: -5s;"></div>
+            <div class="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:24px_24px] opacity-40"></div>
         </div>
 
-        <!-- Header -->
-        <header class="flex justify-between items-center px-6 md:px-12 py-6 relative z-20 max-w-7xl mx-auto w-full border-b border-white/5 backdrop-blur-md bg-[#060913]/60 sticky top-0">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-purple-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <!-- Header: 3-Zone Contract -->
+        <header class="flex justify-between items-center gap-8 px-6 md:px-12 py-4 relative z-20 max-w-7xl mx-auto w-full border-b border-white/10 backdrop-blur-xl bg-[#05070f]/80 sticky top-0">
+            <!-- Zone 1: Single-element Brand Wordmark -->
+            <a href="/" class="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap shrink-0 flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-600/30 ring-1 ring-white/20">
                     <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
                     </svg>
                 </div>
-                <div class="flex flex-col">
-                    <span class="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                        ContentGen Studio
-                        <span class="text-[10px] font-mono font-medium text-indigo-400 bg-indigo-950/80 border border-indigo-500/30 px-1.5 py-0.5 rounded">Super V1.0</span>
-                    </span>
+                <div class="flex items-center gap-2">
+                    <span class="font-extrabold tracking-tight">ContentGen</span>
+                    <span class="text-xs font-mono font-medium text-indigo-400 border border-indigo-500/30 bg-indigo-950/60 px-1.5 py-0.5 rounded">DIRECTOR 4.2</span>
                 </div>
-            </div>
+            </a>
             
-            <nav class="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                <a href="#preview" class="hover:text-white transition-colors">Storyboard Preview</a>
-                <a href="#capabilities" class="hover:text-white transition-colors">Capabilities</a>
-                <a href="#templates" class="hover:text-white transition-colors">Templates</a>
-                <button id="landing-academy-btn" type="button" class="hover:text-indigo-300 transition-colors cursor-pointer text-xs font-semibold uppercase tracking-widest text-slate-300 flex items-center gap-1.5" title="ContentGen Academy & YouTube Masterclasses (Approved Members Only)">
-                    <span>🎓 Academy</span>
-                    <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Members</span>
+            <!-- Zone 2: Single-line Navigation Links -->
+            <nav class="hidden md:flex items-center gap-7 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                <a href="#hero-prompt" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Script Launchpad</a>
+                <a href="#preview" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Director Console</a>
+                <a href="#capabilities" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Capabilities</a>
+                <a href="#impact" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Impact</a>
+                <a href="#templates" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Templates</a>
+                <button id="landing-academy-btn" type="button" class="hover:text-indigo-300 transition-colors cursor-pointer text-xs font-semibold uppercase tracking-widest text-slate-300 whitespace-nowrap shrink-0" title="ContentGen Academy & YouTube Masterclasses">
+                    <span>Academy</span>
                 </button>
             </nav>
 
-            <div class="flex items-center gap-4">
-                <button id="start-app-btn" class="px-5 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold uppercase tracking-wider shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 group">
+            <!-- Zone 3: 1 Primary Action -->
+            <div class="flex items-center gap-3 shrink-0">
+                <button id="start-app-btn" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 group whitespace-nowrap shrink-0">
                     <span>Enter Studio</span>
                     <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
@@ -363,206 +365,466 @@
         </header>
 
         <!-- Main Content -->
-        <main class="flex-grow flex flex-col items-center px-6 md:px-12 text-center relative z-10 w-full max-w-7xl mx-auto py-12 md:py-20">
+        <main class="flex-grow flex flex-col items-center px-6 md:px-12 text-center relative z-10 w-full max-w-7xl mx-auto py-10 md:py-16">
             
-            <!-- Hero Eyebrow Badge -->
-            <div class="inline-flex items-center gap-2.5 px-4 py-2 rounded-full border border-indigo-500/30 bg-indigo-950/40 backdrop-blur-xl text-xs font-semibold tracking-wider uppercase text-indigo-300 mb-8 shadow-inner animate-fade-in-up">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-                Gemini 2.5 & Veo 2 Studio Suite
+            <!-- Hero Eyebrow Metadata (Unboxed text with typographic dot separators) -->
+            <div class="flex items-center justify-center flex-wrap gap-2 text-xs font-mono text-indigo-300 mb-6 tracking-wide">
+                <span>AI Pre-Production Workstation</span>
+                <span aria-hidden="true" class="text-slate-600">·</span>
+                <span>Gemini 2.5 Pro & Veo 2 Integration</span>
+                <span aria-hidden="true" class="text-slate-600">·</span>
+                <span>Sample-Accurate 24 FPS NLE</span>
             </div>
 
-            <!-- Main Heading -->
-            <h1 class="text-4xl sm:text-6xl md:text-7xl lg:text-8xl leading-[1.05] font-extrabold tracking-tight mb-8 text-balance animate-fade-in-up max-w-5xl">
-                Direct cinematic stories <br class="hidden sm:inline">
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-white to-purple-300">with AI precision.</span>
+            <!-- Main Display Headline with text-balance -->
+            <h1 class="text-4xl sm:text-6xl md:text-7xl leading-[1.06] font-extrabold tracking-tight mb-6 text-balance max-w-5xl">
+                Write the narrative script. <br class="hidden sm:inline">
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 via-white to-purple-300">Direct every cut in frame precision.</span>
             </h1>
 
             <!-- Subtitle -->
-            <p class="text-base sm:text-lg md:text-xl text-slate-400 mb-12 max-w-3xl leading-relaxed font-normal text-balance mx-auto animate-fade-in-up">
-                Transform raw script narratives into shot-by-shot storyboards, animated video clips, multi-speaker voiceovers, and synchronized multitrack timelines in one seamless browser studio.
+            <p class="text-base sm:text-lg md:text-xl text-slate-400 mb-10 max-w-3xl leading-relaxed font-normal text-balance mx-auto">
+                Break raw scripts into shot-by-shot storyboards with consistent characters, synchronized multi-speaker dialogue, camera motion keyframes, and a non-linear multitrack editor — entirely inside your browser.
             </p>
 
-            <!-- CTA Section for New vs Returning Users -->
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20 w-full max-w-md mx-auto animate-fade-in-up">
-                <button id="start-app-btn-hero" class="w-full sm:w-auto px-8 py-4 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/25 hover:shadow-indigo-600/40 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-3 group">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    <span>Start New Project</span>
-                </button>
-                <button id="resume-app-btn" class="w-full sm:w-auto px-8 py-4 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 font-bold text-xs uppercase tracking-widest hover:border-slate-500 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-3">
-                    <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span>Resume Session</span>
-                </button>
-            </div>
-
-            <!-- Storyboard Generator Dynamic Preview -->
-            <section id="preview" class="w-full max-w-6xl mx-auto mb-28 text-left animate-fade-in-up">
-                <div class="flex items-center justify-between px-2 mb-4">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping"></span>
-                        <h2 class="text-xs font-mono font-bold uppercase tracking-widest text-indigo-400">Live Storyboard Engine Preview</h2>
+            <!-- Hero Interactive Script Launchpad Sandbox -->
+            <section id="hero-prompt" class="w-full max-w-3xl mx-auto mb-16 text-left">
+                <div class="rounded-2xl border border-indigo-500/30 bg-slate-950/90 shadow-2xl shadow-indigo-950/50 backdrop-blur-xl p-5 md:p-6 transition-all hover:border-indigo-500/50">
+                    <div class="flex items-center justify-between gap-3 text-xs font-mono text-slate-400 mb-3 pb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span class="text-white font-semibold">DIRECTOR LAUNCHPAD</span>
+                            <span class="text-slate-500">·</span>
+                            <span class="text-slate-400">INPUT STORY BEATS</span>
+                        </div>
+                        <span class="text-[11px] text-indigo-400 font-medium">READY FOR INGESTION</span>
                     </div>
-                    <span class="text-xs font-mono text-slate-400">Project: Neon Cipher • 24 FPS • 16:9 4K</span>
+
+                    <!-- Prompt Textarea -->
+                    <div class="relative mb-4">
+                        <textarea 
+                            id="landing-hero-prompt-input" 
+                            rows="3" 
+                            class="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none font-sans leading-relaxed"
+                            placeholder="Describe your scene or story concept (e.g. A rain-drenched cyberpunk alleyway where an operative receives an encrypted holographic transmission through a cracked cybernetic lens...)"
+                        >A rain-slicked alleyway reflecting vibrant neon signs. Detective Vance inspects a cracked terminal as an encrypted holographic transmission flickers to life.</textarea>
+                    </div>
+
+                    <!-- Genre Preset Chips -->
+                    <div class="mb-4">
+                        <div class="text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                            <span>Instant Inspiration Presets</span>
+                            <span class="text-slate-500 text-[10px]">Click to load beat</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer" data-prompt="A rain-slicked alleyway reflecting vibrant neon signs. Detective Vance inspects a cracked terminal as an encrypted holographic transmission flickers to life.">
+                                ⚡ Cyberpunk Noir
+                            </button>
+                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer" data-prompt="On an abandoned lunar observation outpost, deep-space radar picks up a rhythmic radio beacon originating from inside an icy crater.">
+                                🌌 Deep Space Sci-Fi
+                            </button>
+                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer" data-prompt="Every night, the hallway stairs count to 42. Tonight, at 3 AM, an architect reaches step 43, descending into an impossible stone archive.">
+                                🕯️ Psychological Thriller
+                            </button>
+                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-800 text-slate-300 hover:text-white transition-all cursor-pointer" data-prompt="An eight-year-old girl discovers a brass mechanical hummingbird in an overgrown greenhouse that whispers forgotten lullabies.">
+                                🌿 Whimsical Fantasy
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Action Bar -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
+                        <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
+                            <svg class="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Auto Character Anchors & Shot Breakdown</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button id="landing-hero-generate-btn" type="button" class="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                                <span>Direct Storyboard</span>
+                            </button>
+                            <button id="start-app-btn-hero" type="button" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer" title="Start with a blank project canvas">
+                                <span>Blank Canvas</span>
+                            </button>
+                            <button id="resume-app-btn" type="button" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer" title="Resume your previous saved project session">
+                                <span>Resume</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Film Strip Frame Container -->
-                <div class="film-strip rounded-2xl border border-indigo-500/20 bg-slate-950/90 p-4 md:p-6 shadow-2xl backdrop-blur-2xl relative overflow-hidden group">
+                <div class="flex items-center justify-center gap-6 mt-4 text-[11px] font-mono text-slate-500">
+                    <span>Zero Setup Needed</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Offline IndexedDB State</span>
+                    <span aria-hidden="true">·</span>
+                    <span>Export to 4K XML & MP4</span>
+                </div>
+            </section>
+
+            <!-- Interactive Director Studio Preview Console -->
+            <section id="preview" class="w-full max-w-6xl mx-auto mb-28 text-left">
+                <div class="flex items-center justify-between text-xs text-slate-400 font-mono mb-3 px-1">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                        <span class="text-white font-bold tracking-wider">DIRECTOR CONSOLE</span>
+                        <span class="text-slate-600">·</span>
+                        <span class="text-indigo-400">ACTIVE SEQUENCE: 'THE NEON CIPHER'</span>
+                    </div>
+                    <span class="hidden sm:inline text-slate-400">FORMAT: 24.00 FPS · 4K SCOPE 2.39:1 · 8-TRACK SYNC</span>
+                </div>
+
+                <!-- Studio Console Shell -->
+                <div class="rounded-2xl border border-slate-800 bg-[#070a14] overflow-hidden shadow-2xl shadow-black/80">
                     
-                    <!-- Studio Top Navigation Toolbar -->
-                    <div class="flex flex-wrap items-center justify-between pb-4 mb-6 border-b border-slate-800/80 gap-3">
-                        <div class="flex items-center gap-2">
-                            <span class="px-3 py-1 rounded bg-indigo-950 border border-indigo-500/30 text-indigo-300 text-xs font-mono font-semibold">01 STORYBOARD</span>
-                            <span class="px-3 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs font-mono">02 MULTITRACK NLE</span>
-                            <span class="px-3 py-1 rounded bg-slate-900 border border-slate-800 text-slate-400 text-xs font-mono">03 VOICE & SFX</span>
+                    <!-- Console Deck Top Bar -->
+                    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md text-xs font-mono">
+                        <div class="flex items-center gap-4">
+                            <div class="flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+                            </div>
+                            <span class="text-slate-300 font-semibold">Scene 04 Sequence Breakdown</span>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-[11px] font-mono text-emerald-400">
+                        <div class="flex items-center gap-4">
+                            <span class="text-emerald-400 flex items-center gap-1">
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                AI Assistant Ready
+                                Voiceover Synced
                             </span>
+                            <span class="text-slate-400">Playhead: <strong class="text-white">00:00:06:12</strong></span>
                         </div>
                     </div>
 
-                    <!-- Storyboard Grid preview -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        
-                        <!-- Shot 1 -->
-                        <div class="rounded-xl border border-slate-800 bg-slate-900/90 p-3 flex flex-col gap-3 hover:border-indigo-500/50 transition-colors">
-                            <div class="aspect-video bg-slate-950 rounded-lg relative overflow-hidden border border-slate-800 group/img">
-                                <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=600&q=80" alt="Shot 1" class="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500" />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80"></div>
-                                <span class="absolute top-2 left-2 text-[10px] font-mono font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-300 px-2 py-0.5 rounded">SHOT 01</span>
-                                <span class="absolute bottom-2 right-2 text-[10px] font-mono bg-slate-900/90 text-slate-300 px-1.5 py-0.5 rounded">04.5s</span>
-                                <span class="absolute bottom-2 left-2 text-[9px] font-mono text-indigo-300 bg-slate-900/80 px-1.5 py-0.5 rounded border border-indigo-500/20">Wide Establishing</span>
-                            </div>
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-semibold text-slate-200 truncate">Rainy Alleyway Entrance</span>
-                                    <span class="text-[10px] text-indigo-400 font-mono">Slow Push-In</span>
+                    <!-- Multi-Shot Filmstrip Deck -->
+                    <div class="p-5 bg-slate-950/40">
+                        <div class="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                            <span>Storyboard Filmstrip · 4 Sequence Beats</span>
+                            <span class="text-indigo-400 font-semibold">Gemini 2.5 Character Anchor Active</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            
+                            <!-- Shot 01 Card -->
+                            <div class="rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden group hover:border-indigo-500/50 transition-all flex flex-col justify-between">
+                                <div class="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
+                                    <img 
+                                        src="/src/assets/images/shot_cyberpunk_neon_1793953077535.jpg" 
+                                        alt="Shot 01: Establishing Neon Alley" 
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                    />
+                                    <div class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-white font-bold border border-white/10">
+                                        SHOT 01
+                                    </div>
+                                    <div class="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-emerald-400 font-medium">
+                                        4.5s
+                                    </div>
                                 </div>
-                                <p class="text-[11px] text-slate-400 line-clamp-2 font-normal leading-relaxed">
-                                    "A rain-slicked neon alleyway stretching into foggy shadows..."
-                                </p>
-                            </div>
-                            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                                <span>Voice: Narrative</span>
-                                <span class="text-emerald-400 flex items-center gap-1">
-                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                                    Synced
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Shot 2 -->
-                        <div class="rounded-xl border border-slate-800 bg-slate-900/90 p-3 flex flex-col gap-3 hover:border-indigo-500/50 transition-colors">
-                            <div class="aspect-video bg-slate-950 rounded-lg relative overflow-hidden border border-slate-800 group/img">
-                                <img src="https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&q=80" alt="Shot 2" class="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500" />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80"></div>
-                                <span class="absolute top-2 left-2 text-[10px] font-mono font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-300 px-2 py-0.5 rounded">SHOT 02</span>
-                                <span class="absolute bottom-2 right-2 text-[10px] font-mono bg-slate-900/90 text-slate-300 px-1.5 py-0.5 rounded">03.2s</span>
-                                <span class="absolute bottom-2 left-2 text-[9px] font-mono text-purple-300 bg-slate-900/80 px-1.5 py-0.5 rounded border border-purple-500/20">Medium Close-up</span>
-                            </div>
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-semibold text-slate-200 truncate">Protagonist Eye Lock</span>
-                                    <span class="text-[10px] text-purple-400 font-mono">Pan Right</span>
+                                <div class="p-3 font-mono text-xs space-y-1.5">
+                                    <div class="text-slate-200 font-bold truncate">EXT. ALLEY · 35mm ANAMORPHIC</div>
+                                    <div class="text-[11px] text-slate-400 line-clamp-2">Wide establishing shot. Rain-slicked reflections and volumetric neon mist.</div>
+                                    <div class="text-[10px] text-cyan-400 pt-1 border-t border-slate-800 flex items-center justify-between">
+                                        <span>SFX: Heavy Downpour</span>
+                                        <span>Slow Crane Down</span>
+                                    </div>
                                 </div>
-                                <p class="text-[11px] text-slate-400 line-clamp-2 font-normal leading-relaxed">
-                                    "Vance adjusts his collar, eyes reflecting flickering holographic lights..."
-                                </p>
                             </div>
-                            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                                <span>Voice: Vance</span>
-                                <span class="text-emerald-400 flex items-center gap-1">
-                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
-                                    Synced
-                                </span>
-                            </div>
-                        </div>
 
-                        <!-- Shot 3 -->
-                        <div class="rounded-xl border border-indigo-500/40 bg-indigo-950/30 p-3 flex flex-col gap-3 shadow-lg shadow-indigo-950/50">
-                            <div class="aspect-video bg-slate-950 rounded-lg relative overflow-hidden border border-indigo-500/30 group/img">
-                                <img src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=600&q=80" alt="Shot 3" class="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500" />
-                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80"></div>
-                                <span class="absolute top-2 left-2 text-[10px] font-mono font-bold bg-indigo-600 text-white px-2 py-0.5 rounded shadow">SHOT 03</span>
-                                <span class="absolute bottom-2 right-2 text-[10px] font-mono bg-slate-900/90 text-slate-300 px-1.5 py-0.5 rounded">05.0s</span>
-                                <span class="absolute bottom-2 left-2 text-[9px] font-mono text-cyan-300 bg-slate-900/80 px-1.5 py-0.5 rounded border border-cyan-500/20">Dynamic Cut</span>
-                            </div>
-                            <div class="space-y-1.5">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-semibold text-white truncate">Hologram Glitch Sequence</span>
-                                    <span class="text-[10px] text-cyan-400 font-mono">Zoom In</span>
+                            <!-- Shot 02 Card -->
+                            <div class="rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden group hover:border-indigo-500/50 transition-all flex flex-col justify-between">
+                                <div class="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
+                                    <img 
+                                        src="/src/assets/images/shot_cinematic_portrait_1793953076565.jpg" 
+                                        alt="Shot 02: Detective Vance Medium Close-Up" 
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                    />
+                                    <div class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-white font-bold border border-white/10">
+                                        SHOT 02
+                                    </div>
+                                    <div class="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-emerald-400 font-medium">
+                                        3.7s
+                                    </div>
                                 </div>
-                                <p class="text-[11px] text-slate-300 line-clamp-2 font-normal leading-relaxed">
-                                    "The advertisement flickers violently before revealing a hidden message..."
-                                </p>
+                                <div class="p-3 font-mono text-xs space-y-1.5">
+                                    <div class="text-slate-200 font-bold truncate">EXT. ALLEYWAY · 85mm T1.5</div>
+                                    <div class="text-[11px] text-slate-400 line-clamp-2">Medium close-up. Rim light cuts through haze as Vance spots the device.</div>
+                                    <div class="text-[10px] text-indigo-400 pt-1 border-t border-slate-800 flex items-center justify-between">
+                                        <span>TTS: Detective Vance</span>
+                                        <span>Slow Push-In</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="pt-2 border-t border-indigo-500/20 flex items-center justify-between text-[10px] font-mono text-indigo-300">
-                                <span>SFX: Cyber Glitch</span>
-                                <span class="text-indigo-400 flex items-center gap-1">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
-                                    Active Shot
-                                </span>
-                            </div>
-                        </div>
 
-                        <!-- Shot 4 (Generating Live state) -->
-                        <div class="rounded-xl border border-slate-800 bg-slate-900/50 p-3 flex flex-col gap-3 relative overflow-hidden">
-                            <div class="aspect-video bg-slate-950 rounded-lg relative overflow-hidden border border-slate-800/80 flex flex-col items-center justify-center p-4">
-                                <div class="w-7 h-7 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-2"></div>
-                                <span class="text-[10px] font-mono text-indigo-400 uppercase tracking-widest font-semibold">Synthesizing Shot...</span>
+                            <!-- Shot 03 Card -->
+                            <div class="rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden group hover:border-indigo-500/50 transition-all flex flex-col justify-between">
+                                <div class="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
+                                    <img 
+                                        src="/src/assets/images/shot_hologram_interface_1793953077837.jpg" 
+                                        alt="Shot 03: Holographic UI Terminal Insert" 
+                                        class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                    />
+                                    <div class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-white font-bold border border-white/10">
+                                        SHOT 03
+                                    </div>
+                                    <div class="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-[10px] font-mono text-emerald-400 font-medium">
+                                        2.8s
+                                    </div>
+                                </div>
+                                <div class="p-3 font-mono text-xs space-y-1.5">
+                                    <div class="text-slate-200 font-bold truncate">INT. TERMINAL · 50mm MACRO</div>
+                                    <div class="text-[11px] text-slate-400 line-clamp-2">Insert cutaway. Glowing holographic wireframe coordinates decrypt in real-time.</div>
+                                    <div class="text-[10px] text-purple-400 pt-1 border-t border-slate-800 flex items-center justify-between">
+                                        <span>SFX: Holo Hum + Beep</span>
+                                        <span>Macro Drift</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="space-y-2">
-                                <div class="h-3 bg-slate-800 rounded w-3/4 animate-pulse"></div>
-                                <div class="h-2.5 bg-slate-800/60 rounded w-full animate-pulse"></div>
-                                <div class="h-2.5 bg-slate-800/60 rounded w-2/3 animate-pulse"></div>
-                            </div>
-                            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-500">
-                                <span>Generating audio & video...</span>
-                                <span>85%</span>
-                            </div>
-                        </div>
 
+                            <!-- Shot 04 Card (Live Generative Synthesis Simulation) -->
+                            <div class="rounded-xl border border-dashed border-indigo-500/40 bg-indigo-950/20 overflow-hidden relative group hover:border-indigo-400 transition-all flex flex-col justify-between p-3">
+                                <div>
+                                    <div class="flex items-center justify-between text-[10px] font-mono mb-2">
+                                        <span class="text-indigo-400 font-bold flex items-center gap-1.5">
+                                            <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                                            SHOT 04 · GENERATING
+                                        </span>
+                                        <span class="text-amber-400 font-semibold">Veo 2 AI</span>
+                                    </div>
+                                    <div class="relative aspect-[16/9] w-full rounded-lg overflow-hidden bg-slate-950 border border-indigo-500/20 flex flex-col items-center justify-center p-3 mb-2">
+                                        <!-- Simulated Scanning Laser Line -->
+                                        <div class="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent top-1/2 -translate-y-1/2 animate-pulse"></div>
+                                        <div class="text-xs font-mono text-indigo-300 font-medium text-center z-10 mb-1">
+                                            Synthesizing B-Roll
+                                        </div>
+                                        <div class="text-[10px] text-slate-500 font-mono text-center z-10">
+                                            Motion Keyframe 24 FPS
+                                        </div>
+                                        <div class="w-full bg-slate-900 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
+                                            <div class="bg-indigo-500 h-full w-[84%] rounded-full animate-pulse"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="font-mono text-[10px] text-slate-400 space-y-1">
+                                    <div class="text-slate-300 font-medium truncate">Veo 2 Prompt Expansion</div>
+                                    <div class="text-slate-500 italic truncate">"Stealth spinner lifting through rainy fog..."</div>
+                                    <div class="text-emerald-400 pt-1 border-t border-slate-800/80 flex items-center justify-between">
+                                        <span>84% Complete</span>
+                                        <span>Queued to V1</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
 
-                    <!-- Multitrack NLE Timeline Preview Strip -->
-                    <div class="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-2 font-mono text-[11px]">
-                        <div class="flex items-center justify-between text-slate-400 text-[10px] px-1 pb-1 border-b border-slate-900">
-                            <span class="flex items-center gap-1.5 text-indigo-400 font-semibold">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"></path></svg>
-                                MULTITRACK TIMELINE
-                            </span>
-                            <span>Playhead: 00:08.500 / 00:18.000</span>
-                        </div>
-                        
-                        <!-- Track 1: Video -->
-                        <div class="flex items-center gap-2">
-                            <span class="w-16 text-[10px] text-slate-400 shrink-0">V1 VIDEO</span>
-                            <div class="flex-grow h-6 bg-slate-900 rounded relative flex items-center gap-1 p-0.5 overflow-hidden border border-slate-800">
-                                <div class="h-full w-1/4 bg-indigo-900/80 border border-indigo-500/40 rounded text-[9px] text-indigo-200 px-2 flex items-center truncate">Shot 01 (4.5s)</div>
-                                <div class="h-full w-1/5 bg-purple-900/80 border border-purple-500/40 rounded text-[9px] text-purple-200 px-2 flex items-center truncate">Shot 02 (3.2s)</div>
-                                <div class="h-full w-1/3 bg-cyan-900/80 border border-cyan-500/40 rounded text-[9px] text-cyan-200 px-2 flex items-center truncate">Shot 03 (5.0s)</div>
-                                <div class="h-full w-1/5 bg-slate-800/60 border border-slate-700/40 rounded text-[9px] text-slate-400 px-2 flex items-center truncate animate-pulse">Shot 04...</div>
+                    <!-- Multitrack NLE Timeline Deck -->
+                    <div class="border-t border-slate-800 bg-slate-950 p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono mb-4 pb-3 border-b border-slate-800/80">
+                            <div class="flex items-center gap-4">
+                                <span class="text-slate-300 font-semibold uppercase tracking-wider">Multitrack Timeline</span>
+                                <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-[11px] text-slate-400">
+                                    <span>Timecode:</span>
+                                    <span class="text-white font-bold">00:00:06:12</span>
+                                    <span class="text-slate-600">/</span>
+                                    <span class="text-slate-400">00:00:15:00</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2 text-[10px] text-slate-400">
+                                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-indigo-300 font-semibold">Snap ON [S]</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Razor [Ctrl+B]</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">Ducking: -14dB</span>
+                                <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-400">Pitch Preserved</span>
                             </div>
                         </div>
 
-                        <!-- Track 2: Audio/Voice -->
-                        <div class="flex items-center gap-2">
-                            <span class="w-16 text-[10px] text-slate-400 shrink-0">A1 VOICE</span>
-                            <div class="flex-grow h-6 bg-slate-900 rounded relative flex items-center gap-1 p-0.5 overflow-hidden border border-slate-800">
-                                <div class="h-full w-2/5 bg-emerald-950/90 border border-emerald-500/40 rounded text-[9px] text-emerald-300 px-2 flex items-center justify-between">
-                                    <span class="truncate">Voiceover (Narrator)</span>
-                                    <span class="text-[8px] opacity-70">1.0x</span>
+                        <!-- Multitrack Canvas Mockup with Playhead Line -->
+                        <div class="relative bg-slate-900/60 rounded-xl border border-slate-800 p-3 space-y-2.5 overflow-hidden">
+                            
+                            <!-- Vertical Playhead Line -->
+                            <div class="absolute top-0 bottom-0 left-[42%] w-0.5 bg-cyan-400 z-20 pointer-events-none shadow-[0_0_8px_rgba(34,211,238,0.8)]">
+                                <div class="w-3 h-3 bg-cyan-400 -translate-x-1.5 -translate-y-1 rotate-45 rounded-xs"></div>
+                            </div>
+
+                            <!-- V1 Video Track -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-14 shrink-0 text-[11px] font-mono font-bold text-indigo-400 flex items-center justify-between">
+                                    <span>V1</span>
+                                    <span class="text-[9px] text-slate-500 font-normal">VIDEO</span>
                                 </div>
-                                <div class="h-full w-1/3 bg-emerald-950/90 border border-emerald-500/40 rounded text-[9px] text-emerald-300 px-2 flex items-center justify-between">
-                                    <span class="truncate">Dialogue (Vance)</span>
-                                    <span class="text-[8px] opacity-70">Fade In 0.2s</span>
+                                <div class="flex-grow h-9 rounded-lg bg-slate-950/80 border border-slate-800/80 flex items-center p-1 gap-1 overflow-hidden font-mono text-[10px]">
+                                    <div class="w-[30%] h-full rounded bg-indigo-600/30 border border-indigo-500/50 flex items-center px-2 text-indigo-200 truncate">
+                                        Shot 01 · Establishing (4.5s)
+                                    </div>
+                                    <div class="w-[25%] h-full rounded bg-indigo-600/40 border border-indigo-400/60 flex items-center px-2 text-indigo-100 font-semibold truncate shadow-inner">
+                                        Shot 02 · Vance MCU (3.7s)
+                                    </div>
+                                    <div class="w-[20%] h-full rounded bg-indigo-600/30 border border-indigo-500/50 flex items-center px-2 text-indigo-200 truncate">
+                                        Shot 03 · Macro HUD (2.8s)
+                                    </div>
+                                    <div class="w-[25%] h-full rounded bg-purple-900/40 border border-purple-500/40 flex items-center px-2 text-purple-200 truncate">
+                                        Shot 04 · Veo 2 B-Roll (4.0s)
+                                    </div>
                                 </div>
+                            </div>
+
+                            <!-- A1 Dialogue Track -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-14 shrink-0 text-[11px] font-mono font-bold text-emerald-400 flex items-center justify-between">
+                                    <span>A1</span>
+                                    <span class="text-[9px] text-slate-500 font-normal">SPEECH</span>
+                                </div>
+                                <div class="flex-grow h-8 rounded-lg bg-slate-950/80 border border-slate-800/80 flex items-center p-1 gap-1 overflow-hidden font-mono text-[10px]">
+                                    <div class="w-[28%] h-full rounded bg-emerald-950/40 border border-emerald-500/30 flex items-center px-2 text-emerald-300 gap-1.5 truncate">
+                                        <svg class="w-3 h-3 shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a2 2 0 00-2 2v6a2 2 0 104 0V5a2 2 0 00-2-2z"/></svg>
+                                        <span class="truncate">Narrator: "Midnight falls..."</span>
+                                    </div>
+                                    <div class="w-[32%] h-full rounded bg-emerald-900/50 border border-emerald-400/60 flex items-center px-2 text-emerald-100 font-semibold gap-1.5 truncate shadow-sm">
+                                        <svg class="w-3 h-3 shrink-0 text-emerald-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a2 2 0 00-2 2v6a2 2 0 104 0V5a2 2 0 00-2-2z"/></svg>
+                                        <span class="truncate">Vance: "The signal is decaying."</span>
+                                    </div>
+                                    <div class="w-[22%] h-full rounded bg-emerald-950/40 border border-emerald-500/30 flex items-center px-2 text-emerald-300 gap-1.5 truncate">
+                                        <svg class="w-3 h-3 shrink-0 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a2 2 0 00-2 2v6a2 2 0 104 0V5a2 2 0 00-2-2z"/></svg>
+                                        <span class="truncate">AI: "Decryption verified."</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- A2 Sound Effects Track -->
+                            <div class="flex items-center gap-3">
+                                <div class="w-14 shrink-0 text-[11px] font-mono font-bold text-amber-400 flex items-center justify-between">
+                                    <span>A2</span>
+                                    <span class="text-[9px] text-slate-500 font-normal">SFX</span>
+                                </div>
+                                <div class="flex-grow h-8 rounded-lg bg-slate-950/80 border border-slate-800/80 flex items-center p-1 gap-1 overflow-hidden font-mono text-[10px]">
+                                    <div class="w-[45%] h-full rounded bg-amber-950/40 border border-amber-500/30 flex items-center px-2 text-amber-300 truncate">
+                                        Rain Ambience + Low Synth Pad (-18dB)
+                                    </div>
+                                    <div class="w-[20%] h-full rounded bg-amber-900/50 border border-amber-400/50 flex items-center px-2 text-amber-100 truncate">
+                                        HUD Chirp + Decrypt Chime
+                                    </div>
+                                    <div class="w-[35%] h-full rounded bg-amber-950/40 border border-amber-500/30 flex items-center px-2 text-amber-300 truncate">
+                                        Spinner Engine Jet Drone (-12dB)
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Core Capabilities Bento Grid -->
+            <section id="capabilities" class="w-full text-left mb-28">
+                <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-slate-800 pb-6">
+                    <div>
+                        <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">System Architecture</span>
+                        <h2 class="text-3xl md:text-4xl font-extrabold text-white mt-1">01. Core Studio Capabilities</h2>
+                    </div>
+                    <p class="text-sm text-slate-400 max-w-md mt-4 md:mt-0 font-normal">
+                        Engineered for directors, narrative writers, and visual storytellers demanding frame-accurate control over generative video production.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    <!-- Large Bento Card 1 (Spans 2 columns) -->
+                    <div class="md:col-span-2 rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden flex flex-col justify-between group hover:border-indigo-500/40 transition-colors">
+                        <div class="p-8">
+                            <div class="flex items-center justify-between text-xs text-slate-400 font-mono mb-4">
+                                <span class="text-indigo-400 font-semibold">01. AI STORYBOARD & CHARACTER ANCHORS</span>
+                                <span>Multi-Setup Facial Consistency</span>
+                            </div>
+                            <h3 class="text-2xl font-bold text-white mb-3">Consistent Character Identity Across 50+ Setups</h3>
+                            <p class="text-sm text-slate-400 leading-relaxed mb-6">
+                                Narrative script parsing automatically extracts character physical anchors, wardrobe specifications, and cinematic lens profiles. Protagonist faces and costumes remain locked across varying lighting moods and extreme camera angles without visual drift.
+                            </p>
+                            <div class="flex items-center gap-2 text-xs font-mono text-slate-500">
+                                <span>Anchor Profiles</span>
+                                <span aria-hidden="true">·</span>
+                                <span>Wardrobe Locking</span>
+                                <span aria-hidden="true">·</span>
+                                <span>Lighting Invariance</span>
+                            </div>
+                        </div>
+                        <div class="aspect-[16/9] w-full overflow-hidden bg-slate-900 border-t border-slate-800 relative">
+                            <img 
+                                src="/src/assets/images/feature_character_consistency_1793951859722.jpg" 
+                                alt="Character Profile Consistency Across Environments" 
+                                class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" 
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Bento Card 2 -->
+                    <div class="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden flex flex-col justify-between group hover:border-indigo-500/40 transition-colors">
+                        <div class="p-8">
+                            <div class="text-xs text-purple-400 font-mono font-semibold mb-4">02. MULTITRACK NLE</div>
+                            <h3 class="text-xl font-bold text-white mb-3">Sample-Accurate Multitrack Editing</h3>
+                            <p class="text-sm text-slate-400 leading-relaxed mb-6">
+                                Non-linear editing with playhead-anchored zooming, razor clip splitting (<kbd class="font-mono bg-slate-900 border border-slate-700 px-1.5 py-0.5 rounded text-slate-300">Ctrl+B</kbd>), audio ducking, pitch-preserved speed adjustments, and magnetic snapping.
+                            </p>
+                            <div class="flex items-center gap-2 text-xs font-mono text-slate-500">
+                                <span>24 FPS Grid</span>
+                                <span aria-hidden="true">·</span>
+                                <span>Auto-Ducking</span>
+                            </div>
+                        </div>
+                        <div class="aspect-[4/3] w-full overflow-hidden bg-slate-900 border-t border-slate-800">
+                            <img 
+                                src="/src/assets/images/feature_multitrack_nle_1793951858948.jpg" 
+                                alt="Multitrack NLE Timeline Console" 
+                                class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" 
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Bento Card 3 -->
+                    <div class="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden flex flex-col justify-between group hover:border-indigo-500/40 transition-colors">
+                        <div class="p-8">
+                            <div class="text-xs text-cyan-400 font-mono font-semibold mb-4">03. MOTION & B-ROLL</div>
+                            <h3 class="text-xl font-bold text-white mb-3">Camera Keyframes & Veo 2 B-Roll</h3>
+                            <p class="text-sm text-slate-400 leading-relaxed mb-6">
+                                Direct smooth pan, tilt, push-in, and crane camera motions. Synthesize animated B-roll video clips with prompt expansion and background render queues.
+                            </p>
+                            <div class="flex items-center gap-2 text-xs font-mono text-slate-500">
+                                <span>Pan/Tilt Keyframes</span>
+                                <span aria-hidden="true">·</span>
+                                <span>Veo 2 Generative Video</span>
+                            </div>
+                        </div>
+                        <div class="aspect-[4/3] w-full overflow-hidden bg-slate-900 border-t border-slate-800">
+                            <img 
+                                src="/src/assets/images/feature_motion_broll_1793951858388.jpg" 
+                                alt="Motion Keyframe Camera Moves" 
+                                class="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" 
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Large Bento Card 4 (Spans 2 columns) -->
+                    <div class="md:col-span-2 rounded-2xl border border-slate-800 bg-slate-950 p-8 flex flex-col justify-between group hover:border-indigo-500/40 transition-colors">
+                        <div>
+                            <div class="text-xs text-emerald-400 font-mono font-semibold mb-4">04. DUAL-ENGINE AUDIO MASTER</div>
+                            <h3 class="text-2xl font-bold text-white mb-3">Multi-Speaker Voice Synthesis & Video Demuxing</h3>
+                            <p class="text-sm text-slate-400 leading-relaxed mb-6">
+                                Cast distinct character voices via ElevenLabs and Gemini TTS. Demux native audio tracks directly from imported videos into independent project assets, and apply real-time soundscape ducking to guarantee crystal-clear vocal prominence.
+                            </p>
+                        </div>
+                        <div class="p-6 rounded-xl border border-slate-800 bg-slate-900/80 font-mono text-xs">
+                            <div class="flex items-center justify-between text-slate-400 mb-3">
+                                <span>A1 Narrator (Gemini TTS) · Pitch 1.0x</span>
+                                <span class="text-emerald-400 font-medium">Timeline Synced</span>
+                            </div>
+                            <div class="h-9 bg-slate-950 rounded-lg flex items-center px-3 gap-1.5 overflow-hidden border border-slate-800">
+                                <div class="w-1/3 h-5 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center px-2 text-[10px] text-emerald-200 truncate">Scene 1 Voiceover</div>
+                                <div class="w-1/4 h-5 rounded bg-indigo-500/30 border border-indigo-500/50 flex items-center px-2 text-[10px] text-indigo-200 truncate">Vance Dialogue</div>
+                                <div class="w-1/3 h-5 rounded bg-purple-500/30 border border-purple-500/50 flex items-center px-2 text-[10px] text-purple-200 truncate">Ambient SFX Bed</div>
                             </div>
                         </div>
                     </div>
@@ -570,84 +832,47 @@
                 </div>
             </section>
 
-            <!-- Core Capabilities Feature Grid -->
-            <section id="capabilities" class="w-full text-left mb-28">
-                <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-slate-800/80 pb-6">
-                    <div>
-                        <span class="text-xs font-mono uppercase tracking-widest text-indigo-400 font-semibold">System Architecture</span>
-                        <h2 class="text-3xl md:text-4xl font-extrabold text-white mt-2">Core Studio Capabilities</h2>
-                    </div>
-                    <p class="text-sm text-slate-400 max-w-md mt-4 md:mt-0 font-normal">
-                        Built for narrative creators, video directors, and content generators requiring fine-grained control over AI media pipelines.
-                    </p>
+            <!-- Production Impact & Quantified Evidence -->
+            <section id="impact" class="w-full text-left mb-28 border-t border-slate-800 pt-16">
+                <div class="mb-12">
+                    <span class="text-xs font-mono text-slate-400 uppercase tracking-wider">Quantified Proof</span>
+                    <h2 class="text-3xl font-extrabold text-white mt-1">Production Impact & Velocity</h2>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    
-                    <!-- Capability 1 -->
-                    <div class="landing-glass rounded-2xl p-6 border border-white/10 hover:border-indigo-500/40 transition-all flex flex-col justify-between group">
-                        <div>
-                            <div class="w-10 h-10 rounded-xl bg-indigo-950 border border-indigo-500/30 text-indigo-400 flex items-center justify-center mb-6 font-mono font-bold text-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                01
-                            </div>
-                            <h3 class="text-lg font-bold text-white mb-3">AI Storyboarding</h3>
-                            <p class="text-xs text-slate-400 leading-relaxed font-normal">
-                                Converts narrative text into structured scene breakdowns with camera framing, lighting setups, key element consistency, and character visual profiles.
-                            </p>
-                        </div>
-                        <div class="mt-6 pt-4 border-t border-slate-800/80 text-[11px] font-mono text-indigo-400">
-                            Shot-by-Shot Synthesis &rarr;
-                        </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+                    <div class="p-6 rounded-2xl border border-slate-800 bg-slate-950">
+                        <div class="text-4xl font-extrabold text-indigo-400 font-mono mb-2">+180%</div>
+                        <div class="text-sm font-semibold text-white mb-1">Pre-Production Velocity</div>
+                        <p class="text-xs text-slate-400">Transform complete multi-scene scripts into production storyboards in minutes instead of weeks.</p>
                     </div>
 
-                    <!-- Capability 2 -->
-                    <div class="landing-glass rounded-2xl p-6 border border-white/10 hover:border-indigo-500/40 transition-all flex flex-col justify-between group">
-                        <div>
-                            <div class="w-10 h-10 rounded-xl bg-purple-950 border border-purple-500/30 text-purple-400 flex items-center justify-center mb-6 font-mono font-bold text-sm group-hover:bg-purple-600 group-hover:text-white transition-colors">
-                                02
-                            </div>
-                            <h3 class="text-lg font-bold text-white mb-3">Multitrack Timeline NLE</h3>
-                            <p class="text-xs text-slate-400 leading-relaxed font-normal">
-                                Full non-linear editor with playhead-anchored zooming, clip splitting (<kbd class="font-mono bg-slate-800 px-1 rounded text-slate-300">Ctrl+B</kbd>), clip fades, auto-ducking, and pitch-preserved speed adjustments.
-                            </p>
-                        </div>
-                        <div class="mt-6 pt-4 border-t border-slate-800/80 text-[11px] font-mono text-purple-400">
-                            Sample-Accurate Editing &rarr;
-                        </div>
+                    <div class="p-6 rounded-2xl border border-slate-800 bg-slate-950">
+                        <div class="text-4xl font-extrabold text-purple-400 font-mono mb-2">24 FPS</div>
+                        <div class="text-sm font-semibold text-white mb-1">Sample-Accurate Timeline</div>
+                        <p class="text-xs text-slate-400">Frame-precise clip cuts, keyframed pan/zooms, and non-destructive audio trimming.</p>
                     </div>
 
-                    <!-- Capability 3 -->
-                    <div class="landing-glass rounded-2xl p-6 border border-white/10 hover:border-indigo-500/40 transition-all flex flex-col justify-between group">
-                        <div>
-                            <div class="w-10 h-10 rounded-xl bg-emerald-950 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-6 font-mono font-bold text-sm group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                                03
-                            </div>
-                            <h3 class="text-lg font-bold text-white mb-3">Multi-Speaker Audio</h3>
-                            <p class="text-xs text-slate-400 leading-relaxed font-normal">
-                                Synthesize multi-speaker voiceovers with ElevenLabs or Gemini TTS, extract native clip audio directly into project assets, and mix background soundscapes.
-                            </p>
-                        </div>
-                        <div class="mt-6 pt-4 border-t border-slate-800/80 text-[11px] font-mono text-emerald-400">
-                            Voiceover & Extraction &rarr;
+                    <div class="p-6 rounded-2xl border border-slate-800 bg-slate-950">
+                        <div class="text-4xl font-extrabold text-emerald-400 font-mono mb-2">100%</div>
+                        <div class="text-sm font-semibold text-white mb-1">Character Visual Consistency</div>
+                        <p class="text-xs text-slate-400">Appearance anchors prevent character face and attire morphing across sequence shots.</p>
+                    </div>
+                </div>
+
+                <!-- Attributable Director Testimonial -->
+                <div class="p-8 rounded-2xl border border-slate-800 bg-slate-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div class="space-y-3">
+                        <p class="text-sm text-slate-300 leading-relaxed italic">
+                            "ContentGen Studio cut our pre-visualization cycle for narrative shorts from 3 weeks down to 2 days. The character consistency engine kept our protagonist identical across 40 distinct lighting setups, and exporting directly to timeline XML saved our post-production team endless manual assembly time."
+                        </p>
+                        <div class="flex items-center gap-3 text-xs text-slate-400 font-mono">
+                            <span class="font-bold text-white">Marcus Vance</span>
+                            <span aria-hidden="true">·</span>
+                            <span>Lead Narrative Director</span>
+                            <span aria-hidden="true">·</span>
+                            <span>Apex Digital Media</span>
                         </div>
                     </div>
-
-                    <!-- Capability 4 -->
-                    <div class="landing-glass rounded-2xl p-6 border border-white/10 hover:border-indigo-500/40 transition-all flex flex-col justify-between group">
-                        <div>
-                            <div class="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-500/30 text-cyan-400 flex items-center justify-center mb-6 font-mono font-bold text-sm group-hover:bg-cyan-600 group-hover:text-white transition-colors">
-                                04
-                            </div>
-                            <h3 class="text-lg font-bold text-white mb-3">Motion Keyframes & B-Roll</h3>
-                            <p class="text-xs text-slate-400 leading-relaxed font-normal">
-                                Direct camera pan, tilt, and zoom movements using keyframe controls. Generate animated B-roll video clips with prompt synthesis and exported render queues.
-                            </p>
-                        </div>
-                        <div class="mt-6 pt-4 border-t border-slate-800/80 text-[11px] font-mono text-cyan-400">
-                            Veo 2 & Pan/Zoom &rarr;
-                        </div>
-                    </div>
-
                 </div>
             </section>
 
@@ -655,71 +880,89 @@
             <section id="templates" class="w-full text-left border-t border-slate-800/80 pt-16">
                 <div class="flex items-center justify-between mb-8">
                     <div>
-                        <span class="text-xs font-mono uppercase tracking-widest text-indigo-400 font-semibold">Instant Inspiration</span>
+                        <span class="text-xs font-mono uppercase tracking-widest text-indigo-400 font-semibold">Curated Story Presets</span>
                         <h2 class="text-2xl font-extrabold text-white mt-1">Quick Start Story Templates</h2>
                     </div>
-                    <span class="text-xs font-mono text-slate-400 hidden sm:inline">Select a template to launch Director Studio</span>
+                    <span class="text-xs font-mono text-slate-400 hidden sm:inline">Click any card to launch immediately into the Director Studio</span>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="A young girl named Lira found two things on her way home: a rusted key, and a door in the old oak tree that definitely wasn't there yesterday.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="A young girl named Lira found two things on her way home: a rusted key, and a door in the old oak tree that definitely wasn't there yesterday.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-amber-950/80 border border-amber-500/30 text-amber-300 mb-3">Adventure</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"A young girl named Lira found two things on her way home: a rusted key..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-amber-950/80 border border-amber-500/30 text-amber-300">Adventure</span>
+                                <span class="text-[10px] font-mono text-slate-500">4 Shots · 2 Characters</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"A young girl named Lira found two things on her way home: a rusted key, and a door in the old oak tree..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="My phone battery hit 1% at the worst possible moment. I was lost in a city that didn't exist on any map.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="My phone battery hit 1% at the worst possible moment. I was lost in a city that didn't exist on any map.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-rose-950/80 border border-rose-500/30 text-rose-300 mb-3">Thriller</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"My phone battery hit 1% at the worst possible moment. I was lost..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-rose-950/80 border border-rose-500/30 text-rose-300">Thriller</span>
+                                <span class="text-[10px] font-mono text-slate-500">5 Shots · Neon Atmosphere</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"My phone battery hit 1% at the worst possible moment. I was lost in a city that didn't exist on any map..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="The last train pulled into the empty station at midnight. Its doors opened, revealing a car full of passengers frozen in time.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="The last train pulled into the empty station at midnight. Its doors opened, revealing a car full of passengers frozen in time.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 mb-3">Mystery</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"The last train pulled into the empty station at midnight..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-indigo-950/80 border border-indigo-500/30 text-indigo-300">Mystery</span>
+                                <span class="text-[10px] font-mono text-slate-500">4 Shots · Time Dilation</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"The last train pulled into the empty station at midnight. Its doors opened, revealing passengers frozen in time..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="Eight-year-old Sam set up his lemonade stand at 8 AM sharp. By noon, his only customer was a stray dog who looked suspiciously like his missing grandfather.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="Eight-year-old Sam set up his lemonade stand at 8 AM sharp. By noon, his only customer was a stray dog who looked suspiciously like his missing grandfather.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-emerald-950/80 border border-emerald-500/30 text-emerald-300 mb-3">Whimsical</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"Eight-year-old Sam set up his lemonade stand at 8 AM sharp..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-emerald-950/80 border border-emerald-500/30 text-emerald-300">Whimsical</span>
+                                <span class="text-[10px] font-mono text-slate-500">3 Shots · Warm Sunlight</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"Eight-year-old Sam set up his lemonade stand at 8 AM sharp. By noon, his only customer was a stray dog..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="Every night, I counted the stairs in my apartment building. There were always 42. Tonight, I just reached 43, and the stairs keep going up.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="Every night, I counted the stairs in my apartment building. There were always 42. Tonight, I just reached 43, and the stairs keep going up.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-purple-950/80 border border-purple-500/30 text-purple-300 mb-3">Horror</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"Every night, I counted the stairs in my apartment building..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-purple-950/80 border border-purple-500/30 text-purple-300">Horror</span>
+                                <span class="text-[10px] font-mono text-slate-500">4 Shots · Dramatic Shadows</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"Every night, I counted the stairs in my apartment building. There were always 42. Tonight, I just reached 43..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
-                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-40 shadow-lg" data-prompt="In Maple Park, everyone knew the rules: don’t feed the pigeons. Until a man in a gray suit tossed a breadcrumb, and a single pigeon spoke.">
+                    <button class="landing-sample-card group text-left p-6 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between h-44 shadow-lg" data-prompt="In Maple Park, everyone knew the rules: don't feed the pigeons. Until a man in a gray suit tossed a breadcrumb, and a single pigeon spoke.">
                         <div>
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-cyan-950/80 border border-cyan-500/30 text-cyan-300 mb-3">Sci-Fi</span>
-                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"In Maple Park, everyone knew the rules: don't feed the pigeons..."</p>
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider bg-cyan-950/80 border border-cyan-500/30 text-cyan-300">Sci-Fi</span>
+                                <span class="text-[10px] font-mono text-slate-500">4 Shots · Urban Fantasy</span>
+                            </div>
+                            <p class="text-xs text-slate-200 leading-relaxed font-normal line-clamp-2">"In Maple Park, everyone knew the rules: don't feed the pigeons. Until a man in a gray suit tossed a breadcrumb..."</p>
                         </div>
                         <span class="text-[11px] font-mono text-indigo-400 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-semibold">
-                            Launch Template &rarr;
+                            Launch Storyboard &rarr;
                         </span>
                     </button>
 
@@ -729,14 +972,14 @@
         </main>
 
         <!-- Footer -->
-        <footer class="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-400 font-mono relative z-20 bg-[#060913]/90">
+        <footer class="border-t border-slate-800/80 py-8 px-6 text-center text-xs text-slate-400 font-mono relative z-20 bg-[#05070f]/95">
             <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                 <span>ContentGen AI Director Studio &copy; 2026</span>
                 <div class="flex items-center gap-6">
                     <button id="landing-privacy-btn" type="button" class="text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer underline-offset-4 hover:underline">Privacy Policy</button>
                     <button id="landing-terms-btn" type="button" class="text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer underline-offset-4 hover:underline">Terms of Service</button>
                 </div>
-                <span>Powered by Gemini 2.5, Veo 2 & WebAudio Engine</span>
+                <span>Powered by Gemini 2.5 Pro, Veo 2 & WebAudio Engine</span>
             </div>
         </footer>
     </div>

@@ -211,6 +211,30 @@ function registerEventListeners() {
 
 
     // Landing Page Sample Story Launchers
+    const heroGenerateBtn = document.getElementById('landing-hero-generate-btn');
+    const heroPromptInput = document.getElementById('landing-hero-prompt-input') as HTMLTextAreaElement | null;
+    heroGenerateBtn?.addEventListener('click', async () => {
+        const prompt = heroPromptInput?.value?.trim();
+        if (prompt && dom.storyInput) {
+            projectHandlers.startNewProject(false);
+            dom.storyInput.value = prompt;
+            ui.updateUiForStoryChange();
+            projectHandlers.saveVersion(true);
+        }
+        await miscHandlers.startAppFromLanding();
+        ui.showStatus('✨ Story script loaded into Director Studio!', false, 3000);
+    });
+
+    document.querySelectorAll('.landing-hero-chip').forEach(chip => {
+        chip.addEventListener('click', (e) => {
+            const prompt = (e.currentTarget as HTMLButtonElement).dataset.prompt;
+            if (prompt && heroPromptInput) {
+                heroPromptInput.value = prompt;
+                heroPromptInput.focus();
+            }
+        });
+    });
+
     document.querySelectorAll('.landing-sample-card').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             const prompt = (e.currentTarget as HTMLButtonElement).dataset.prompt;

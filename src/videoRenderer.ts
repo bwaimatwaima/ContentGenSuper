@@ -413,7 +413,23 @@ let transitionOffscreenCanvas: HTMLCanvasElement | null = null;
 const videoFrameBufferCache = new WeakMap<HTMLVideoElement, { canvas: HTMLCanvasElement; lastTime: number }>();
 const pendingPlaySet = new WeakSet<HTMLVideoElement>();
 const lastScrubSeekMs = new WeakMap<HTMLVideoElement, number>();
+const pendingScrubSeekTarget = new WeakMap<HTMLVideoElement, number>();
+const seekListenerAttached = new WeakSet<HTMLVideoElement>();
 let previouslyActiveVideos = new Set<HTMLVideoElement>();
+
+function ensureSeekListenerAttached(video: HTMLVideoElement) {
+  if (seekListenerAttached.has(video)) return;
+  seekListenerAttached.add(video);
+  video.addEventListener('seeked', () => {
+    const nextTarget = pendingScrubSeekTarget.get(video);
+    if (nextTarget !== undefined) {
+      pendingScrubSeekTarget.delete(video);
+      try {
+        video.currentTime = nextTarget;
+      } catch {}
+    }
+  });
+}
 
 function captureVideoFrameBuffer(
   video: HTMLVideoElement,
@@ -512,12 +528,19 @@ export function syncVideoElementForPreview(
     if (!video.paused && !pendingPlaySet.has(video)) {
       try { video.pause(); } catch {}
     }
-    // Throttle paused/scrubbing seeks to ~22 seeks/sec and never interrupt an active seek
-    const nowMs = performance.now();
-    const lastMs = lastScrubSeekMs.get(video) || 0;
-    if (!video.seeking && nowMs - lastMs >= 45 && Math.abs(video.currentTime - safeTarget) > 0.04) {
-      lastScrubSeekMs.set(video, nowMs);
-      video.currentTime = safeTarget;
+    ensureSeekListenerAttached(video);
+    if (video.seeking) {
+      // Coalesced latest-wins: record latest scrub position without piling up decoder requests
+      pendingScrubSeekTarget.set(video, safeTarget);
+    } else {
+      const nowMs = performance.now();
+      const lastMs = lastScrubSeekMs.get(video) || 0;
+      if (nowMs - lastMs >= 35 && Math.abs(video.currentTime - safeTarget) > 0.03) {
+        lastScrubSeekMs.set(video, nowMs);
+        try {
+          video.currentTime = safeTarget;
+        } catch {}
+      }
     }
   }
 }

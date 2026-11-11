@@ -315,7 +315,7 @@
         <div class="aurora-blob"></div>
     </div>
 
-    <div id="landing-page" class="hidden flex flex-col min-h-screen bg-[#05070a] text-slate-100 z-[100] absolute inset-0 overflow-y-auto font-sans selection:bg-indigo-500/30 selection:text-white">
+    <div id="landing-page" class="hidden flex flex-col min-h-screen bg-[#05070a] text-slate-100 z-[100] absolute inset-0 overflow-y-auto scroll-smooth font-sans selection:bg-indigo-500/30 selection:text-white">
         <!-- Premium Ambient Overlays -->
         <div class="noise-overlay opacity-[0.03]"></div>
         <div class="cinematic-vignette opacity-60"></div>
@@ -327,48 +327,51 @@
         <!-- Header: Strict 3-Zone Contract -->
         <header class="flex justify-between items-center gap-8 px-6 md:px-12 py-5 relative z-[110] max-w-7xl mx-auto w-full border-b border-white/5 backdrop-blur-2xl bg-[#05070a]/60 sticky top-0">
             <!-- Zone 1: Single-element Brand Wordmark -->
-            <a href="/" class="flex items-center gap-3 shrink-0 group focus:outline-none" aria-label="ContentGen AI Home">
+            <a href="#hero-top" id="landing-brand-top" class="flex items-center gap-3 shrink-0 group focus:outline-none" aria-label="ContentGen AI Home">
                 <img src="/logo.svg" alt="ContentGen AI" class="h-9 sm:h-10 w-auto object-contain select-none transition-all duration-300 drop-shadow-[0_2px_12px_rgba(99,102,241,0.25)] group-hover:drop-shadow-[0_4px_22px_rgba(168,85,247,0.45)] group-hover:scale-[1.02] active:scale-[0.98]" />
             </a>
             
             <!-- Zone 2: Navigation Links -->
-            <nav class="hidden md:flex items-center gap-9 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
+            <nav class="hidden md:flex items-center gap-8 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
                 <a href="#hero-prompt" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Launchpad</a>
                 <a href="#preview" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Director Console</a>
                 <a href="#capabilities" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Capabilities</a>
                 <a href="#impact" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Impact</a>
+                <a href="#templates" class="hover:text-white transition-colors whitespace-nowrap shrink-0">Templates</a>
                 <button id="landing-academy-btn" type="button" class="hover:text-indigo-400 transition-colors cursor-pointer whitespace-nowrap shrink-0">Academy</button>
             </nav>
 
             <!-- Zone 3: Primary Action -->
             <div class="flex items-center gap-4 shrink-0">
-                <button id="start-app-btn" class="px-6 py-2.5 rounded-full bg-white text-black hover:bg-slate-200 active:scale-95 text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xl shadow-white/5">
+                <button id="start-app-btn" class="px-6 py-2.5 rounded-full bg-white text-black hover:bg-slate-200 active:scale-95 text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-xl shadow-white/5 whitespace-nowrap shrink-0">
                     Enter Studio
                 </button>
             </div>
         </header>
 
-        <main class="flex-grow flex flex-col relative z-10 w-full">
+        <main id="hero-top" class="flex-grow flex flex-col relative z-10 w-full">
             
             <!-- Section 1: Hero & Focal Carrier -->
             <section class="relative pt-20 pb-32 px-6 md:px-12 border-b border-white/5 overflow-hidden">
                 <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
                     
                     <div class="flex flex-col items-start text-left space-y-8 animate-fade-in-up">
-                        <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400 px-3 py-1 rounded-full border border-indigo-500/20 bg-indigo-500/5">
-                            Cinematic Intelligence Engine
+                        <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-400">
+                            <span>Cinematic Intelligence Engine</span>
+                            <span aria-hidden="true">·</span>
+                            <span class="text-slate-400">Gemini 3.1 &amp; Veo 3.1</span>
                         </div>
                         
-                        <h1 class="text-5xl sm:text-7xl md:text-8xl leading-[0.95] font-black tracking-tighter text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">
+                        <h1 class="text-5xl sm:text-7xl md:text-8xl leading-[0.95] font-black tracking-tighter text-white" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">
                             Direct the <span class="text-slate-500">Unseen.</span>
                         </h1>
                         
                         <p class="text-lg md:text-xl text-slate-400 max-w-xl leading-relaxed font-medium">
-                            Transform narrative scripts into frame-accurate cinematic sequences. High-fidelity character anchors, synchronized multi-track audio, and professional-grade NLE controls — all in-browser.
+                            Transform narrative scripts and master voiceovers into frame-accurate cinematic sequences. Persistent character anchors, word-level transcript editing, HyperFrames motion graphics, and multitrack NLE controls — all in-browser.
                         </p>
                         
                         <!-- Hero Prompt Launchpad -->
-                        <div id="hero-prompt" class="w-full max-w-xl mt-4">
+                        <div id="hero-prompt" class="w-full max-w-xl mt-4 scroll-mt-28">
                             <div class="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl p-1 shadow-2xl group focus-within:border-white/20 transition-all">
                                 <div class="relative">
                                     <textarea 
@@ -378,14 +381,15 @@
                                         placeholder="Enter your script beat..."
                                     >A rain-slicked neon alleyway. Detective Vance terminal flickers with an encrypted signal.</textarea>
                                     
-                                    <div class="flex items-center justify-between px-4 pb-4">
-                                        <div class="flex gap-2">
-                                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 text-slate-400 transition-colors cursor-pointer" data-prompt="A rain-slicked alleyway reflecting vibrant neon signs. Detective Vance inspects a cracked terminal as an encrypted holographic transmission flickers to life.">Noir</button>
-                                            <button type="button" class="landing-hero-chip px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 text-slate-400 transition-colors cursor-pointer" data-prompt="On an abandoned lunar observation outpost, deep-space radar picks up a rhythmic radio beacon originating from inside an icy crater.">Sci-Fi</button>
+                                    <div class="flex flex-wrap items-center justify-between gap-2 px-4 pb-4">
+                                        <div class="flex items-center gap-2">
+                                            <button type="button" class="landing-hero-chip px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer whitespace-nowrap shrink-0" data-prompt="A rain-slicked alleyway reflecting vibrant neon signs. Detective Vance inspects a cracked terminal as an encrypted holographic transmission flickers to life.">Noir</button>
+                                            <button type="button" class="landing-hero-chip px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer whitespace-nowrap shrink-0" data-prompt="On an abandoned lunar observation outpost, deep-space radar picks up a rhythmic radio beacon originating from inside an icy crater.">Sci-Fi</button>
+                                            <button type="button" class="landing-hero-chip px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/5 hover:bg-white/10 text-slate-300 transition-colors cursor-pointer whitespace-nowrap shrink-0" data-prompt="Every night, the hallway stairs count to 42. Tonight, at 3 AM, an architect reaches step 43, descending into an impossible stone archive.">Mystery</button>
                                         </div>
-                                        <div class="flex gap-2">
-                                            <button id="resume-app-btn" class="px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer">Resume</button>
-                                            <button id="landing-hero-generate-btn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer">Direct Shot</button>
+                                        <div class="flex items-center gap-2">
+                                            <button id="resume-app-btn" class="px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0">Resume</button>
+                                            <button id="landing-hero-generate-btn" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer whitespace-nowrap shrink-0">Direct Shot</button>
                                         </div>
                                     </div>
                                 </div>
@@ -394,22 +398,23 @@
                     </div>
 
                     <!-- Focal Carrier: Cinematic Studio Visual -->
-                    <div class="relative group">
+                    <div id="preview" class="relative group scroll-mt-28">
                         <div class="absolute -inset-4 rounded-[2rem] bg-indigo-500/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
-                        <div class="relative rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl bg-black aspect-[16/9]">
+                        <div class="relative rounded-[2rem] border border-white/10 overflow-hidden shadow-2xl bg-slate-950 aspect-[16/9]">
                             <img 
                                 src="/src/assets/images/landing_hero_director_1793960782146.jpg" 
                                 alt="Cinematic Studio Console" 
+                                referrerpolicy="no-referrer"
                                 class="w-full h-full object-cover grayscale-[0.2] group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-105"
                             />
-                            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent"></div>
                             <div class="absolute bottom-8 left-8 right-8 flex justify-between items-end">
                                 <div class="space-y-1">
-                                    <div class="text-[10px] font-bold text-white uppercase tracking-widest opacity-60">System Ready</div>
-                                    <div class="text-xs font-mono text-indigo-400">4K REC · 24.00 FPS · SYNC ON</div>
+                                    <div class="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Director Monitor</div>
+                                    <div class="text-xs font-mono tabular-nums text-indigo-400">4K UHD · 24.00 FPS · MULTI-TRACK NLE</div>
                                 </div>
-                                <div class="h-1 w-24 bg-white/10 rounded-full overflow-hidden">
-                                    <div class="h-full w-2/3 bg-indigo-500 animate-pulse"></div>
+                                <div class="text-[10px] font-mono tabular-nums text-slate-400 uppercase tracking-widest">
+                                    HyperFrames · Veo 3.1
                                 </div>
                             </div>
                         </div>
@@ -419,60 +424,62 @@
             </section>
 
             <!-- Section 2: Proposition & Evidence -->
-            <section id="capabilities" class="py-32 px-6 md:px-12 bg-white/[0.01] border-b border-white/5">
+            <section id="capabilities" class="py-32 px-6 md:px-12 bg-white/[0.01] border-b border-white/5 scroll-mt-20">
                 <div class="max-w-7xl mx-auto">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/5 border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
                         
                         <!-- Capability 1: Character Identity -->
                         <div class="col-span-1 md:col-span-2 bg-[#05070a] p-12 flex flex-col justify-between group">
                             <div class="space-y-6">
-                                <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Mechanism 01</div>
-                                <h3 class="text-4xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif;">Absolute character consistency across 50+ setups.</h3>
-                                <p class="text-slate-400 text-sm leading-relaxed max-w-md">Our neural identity engine locks character facial anchors and wardrobe profiles, preventing visual drift regardless of extreme camera angles or lighting shifts.</p>
+                                <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">01. Identity &amp; World Bible</div>
+                                <h3 class="text-4xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Absolute character consistency across 50+ setups.</h3>
+                                <p class="text-slate-400 text-sm leading-relaxed max-w-md">Our neural identity engine locks character facial anchors, locations, and wardrobe profiles, preventing visual drift regardless of extreme camera angles or lighting shifts.</p>
                             </div>
                             <div class="mt-12 rounded-2xl border border-white/5 overflow-hidden aspect-[16/9] bg-slate-900 relative">
-                                <img src="/src/assets/images/landing_feat_character_1793960783510.jpg" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Character consistency" />
-                                <div class="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 to-transparent flex gap-3 text-[9px] font-mono text-slate-300">
-                                    <span>[Golden Hour Verified]</span>
-                                    <span>[Nocturnal Verified]</span>
-                                    <span>[Daylight Verified]</span>
+                                <img src="/src/assets/images/landing_feat_character_1793960783510.jpg" referrerpolicy="no-referrer" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Character consistency across lighting setups" />
+                                <div class="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300">
+                                    <span>Golden Hour Lock</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span>Nocturnal Lock</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span>Wardrobe Continuity</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Capability 2: NLE Timeline -->
+                        <!-- Capability 2: NLE Timeline & Transcript Editor -->
                         <div class="bg-[#05070a] p-12 flex flex-col justify-between group border-l border-white/5">
                             <div class="space-y-6">
-                                <div class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Mechanism 02</div>
-                                <h3 class="text-3xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif;">Frame-accurate NLE Timeline.</h3>
-                                <p class="text-slate-400 text-sm leading-relaxed">Sample-accurate multitrack editing with razor cutting, pitch-preserved ducking, and magnetic snapping anchors.</p>
+                                <div class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">02. NLE &amp; Transcript Studio</div>
+                                <h3 class="text-3xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Frame-accurate NLE &amp; Word-Level Editing.</h3>
+                                <p class="text-slate-400 text-sm leading-relaxed">Sample-accurate multitrack editing with Ripple and Lift modes, non-destructive linked audio splits, word-level transcript cutting, and smart Pexels stock B-roll.</p>
                             </div>
                             <div class="mt-12 rounded-2xl border border-white/5 overflow-hidden aspect-[4/3] bg-slate-900">
-                                <img src="/src/assets/images/landing_feat_nle_1793960783408.jpg" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="NLE Timeline" />
+                                <img src="/src/assets/images/landing_feat_nle_1793960783408.jpg" referrerpolicy="no-referrer" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="Multitrack NLE Timeline and Transcript Studio" />
                             </div>
                         </div>
 
-                        <!-- Capability 3: Camera Motion -->
+                        <!-- Capability 3: Camera Motion & HyperFrames -->
                         <div class="bg-[#05070a] p-12 flex flex-col justify-between group">
                             <div class="space-y-6">
-                                <div class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Mechanism 03</div>
-                                <h3 class="text-3xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif;">Precision Camera Keyframes.</h3>
-                                <p class="text-slate-400 text-sm leading-relaxed">Direct complex pan, tilt, and push-in maneuvers with high-end lens profiles and automated motion interpolation.</p>
+                                <div class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">03. Motion &amp; HyperFrames</div>
+                                <h3 class="text-3xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Camera Keyframes &amp; Kinetic Graphics.</h3>
+                                <p class="text-slate-400 text-sm leading-relaxed">Direct pan, tilt, and push-in maneuvers with custom easing curves, paired with beat-synced HTML5 HyperFrames motion graphics and pattern interrupts.</p>
                             </div>
                             <div class="mt-12 rounded-2xl border border-white/5 overflow-hidden aspect-[4/3] bg-slate-900">
-                                <img src="/src/assets/images/landing_feat_motion_1793960784386.jpg" class="w-full h-full object-cover group-hover:rotate-2 group-hover:scale-110 transition-transform duration-700" alt="Camera motion" />
+                                <img src="/src/assets/images/landing_feat_motion_1793960784386.jpg" referrerpolicy="no-referrer" class="w-full h-full object-cover group-hover:rotate-2 group-hover:scale-110 transition-transform duration-700" alt="Camera Keyframes and HyperFrames Motion Graphics" />
                             </div>
                         </div>
 
                         <!-- Capability 4: Audio Synthesis -->
                         <div class="col-span-1 md:col-span-2 bg-[#05070a] p-12 flex flex-col justify-between group border-l border-white/5">
                             <div class="space-y-6">
-                                <div class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Mechanism 04</div>
-                                <h3 class="text-4xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif;">Multi-speaker vocal synthesis & layering.</h3>
-                                <p class="text-slate-400 text-sm leading-relaxed max-w-md">Cast distinct AI character voices, demux native audio from source video, and master a balanced cinematic soundscape with automated vocal ducking.</p>
+                                <div class="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">04. Vocal Synthesis &amp; Audio Director</div>
+                                <h3 class="text-4xl font-bold text-white tracking-tight" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Multi-speaker vocal synthesis &amp; master audio sync.</h3>
+                                <p class="text-slate-400 text-sm leading-relaxed max-w-md">Cast distinct AI character voices, upload full voiceovers for automatic beat segmentation, demux source video audio, and mix with automated vocal ducking.</p>
                             </div>
                             <div class="mt-12 rounded-2xl border border-white/5 overflow-hidden h-64 bg-slate-950 flex items-center justify-center p-8">
-                                <img src="/src/assets/images/landing_feat_audio_1793960784491.jpg" class="h-full w-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" alt="Audio synthesis" />
+                                <img src="/src/assets/images/landing_feat_audio_1793960784491.jpg" referrerpolicy="no-referrer" class="h-full w-full object-cover opacity-60 group-hover:opacity-85 transition-opacity" alt="Multi-speaker vocal synthesis and waveform layering" />
                             </div>
                         </div>
 
@@ -481,44 +488,43 @@
             </section>
 
             <!-- Section 3: Impact & Velocity -->
-            <section id="impact" class="py-32 px-6 md:px-12">
+            <section id="impact" class="py-32 px-6 md:px-12 scroll-mt-20">
                 <div class="max-w-7xl mx-auto flex flex-col md:flex-row gap-24 items-center">
                     <div class="flex-1 space-y-12">
                         <div class="space-y-6">
                             <div class="text-[10px] font-bold text-white uppercase tracking-[0.3em]">Production Metrics</div>
-                            <h2 class="text-6xl font-black text-white leading-tight" style="font-family: 'Bricolage Grotesque', sans-serif;">Production cycle, <br><span class="text-slate-500 italic">radically compressed.</span></h2>
+                            <h2 class="text-6xl font-black text-white leading-tight" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Production cycle, <br><span class="text-slate-500 italic">radically compressed.</span></h2>
                         </div>
                         
                         <div class="grid grid-cols-2 gap-12">
                             <div class="space-y-2">
-                                <div class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">+180%</div>
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Velocity Increase</div>
+                                <div class="text-5xl font-black text-white tabular-nums" style="font-family: 'Bricolage Grotesque', sans-serif;">+180%</div>
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Storyboard Velocity</div>
                             </div>
                             <div class="space-y-2">
-                                <div class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">100%</div>
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Identity Retention</div>
+                                <div class="text-5xl font-black text-white tabular-nums" style="font-family: 'Bricolage Grotesque', sans-serif;">100%</div>
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Identity Retention</div>
                             </div>
                             <div class="space-y-2">
-                                <div class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">24 FPS</div>
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sync Precision</div>
+                                <div class="text-5xl font-black text-white tabular-nums" style="font-family: 'Bricolage Grotesque', sans-serif;">24 FPS</div>
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Frame-Sync Precision</div>
                             </div>
                             <div class="space-y-2">
-                                <div class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">4K XML</div>
-                                <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Native Export</div>
+                                <div class="text-5xl font-black text-white tabular-nums" style="font-family: 'Bricolage Grotesque', sans-serif;">4K XML</div>
+                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">MP4 &amp; NLE Export</div>
                             </div>
                         </div>
                     </div>
                     
                     <div class="flex-1">
-                        <div class="p-12 rounded-3xl bg-white/[0.03] border border-white/10 relative overflow-hidden group">
-                            <div class="absolute top-0 left-0 w-2 h-full bg-white scale-y-0 group-hover:scale-y-100 transition-transform origin-top duration-700"></div>
+                        <div class="p-12 rounded-3xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-colors relative overflow-hidden group">
                             <div class="relative space-y-8">
-                                <p class="text-2xl text-slate-200 font-medium leading-relaxed italic">"ContentGen reduced our pre-visualization workflow from weeks to days. Character consistency across 40 lighting setups was the key breakthrough."</p>
+                                <p class="text-2xl text-slate-200 font-medium leading-relaxed italic">"ContentGen reduced our pre-visualization and animatic workflow from three weeks to two days. Character consistency across 40 lighting setups was the key breakthrough."</p>
                                 <div class="flex items-center gap-4">
                                     <div class="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">MV</div>
                                     <div class="text-left">
                                         <div class="text-sm font-bold text-white">Marcus Vance</div>
-                                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Lead Director, Apex Digital</div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lead Director, Apex Digital</div>
                                     </div>
                                 </div>
                             </div>
@@ -528,46 +534,49 @@
             </section>
 
             <!-- Section 4: Story Templates -->
-            <section id="templates" class="py-32 px-6 md:px-12 border-t border-white/5">
+            <section id="templates" class="py-32 px-6 md:px-12 border-t border-white/5 scroll-mt-20">
                 <div class="max-w-7xl mx-auto space-y-16">
                     <div class="flex flex-col md:flex-row md:items-end justify-between gap-8">
                         <div class="space-y-4">
                             <div class="text-[10px] font-bold text-white uppercase tracking-[0.3em]">Curated Presets</div>
-                            <h2 class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif;">Production-Ready Templates.</h2>
+                            <h2 class="text-5xl font-black text-white" style="font-family: 'Bricolage Grotesque', sans-serif; text-wrap: balance;">Production-Ready Templates.</h2>
                         </div>
-                        <p class="text-slate-500 text-sm max-w-xs">Select a narrative starting point to launch immediately into the Director Studio.</p>
+                        <p class="text-slate-400 text-sm max-w-xs">Select a narrative starting point to load the script and launch directly into the Director Studio.</p>
                     </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <!-- Noir Template -->
-                        <button class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="A rain-slicked neon alleyway. Detective Vance terminal flickers with an encrypted signal.">
+                        <button type="button" class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/15 hover:bg-white/[0.04] transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="A rain-slicked alleyway reflecting vibrant neon signs. Detective Vance inspects a cracked terminal as an encrypted holographic transmission flickers to life.">
                             <div class="space-y-4">
                                 <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Noir · 4 Shots</div>
                                 <p class="text-xl text-white font-bold leading-tight">Rain-slicked reflections and volumetric neon mist.</p>
+                                <p class="text-xs text-slate-400 leading-relaxed">High-contrast anamorphic lighting, atmospheric rain SFX, and encrypted holographic overlays.</p>
                             </div>
-                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors">
+                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">
                                 Launch Storyboard &rarr;
                             </div>
                         </button>
                         
                         <!-- Sci-Fi Template -->
-                        <button class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="On an abandoned lunar observation outpost, deep-space radar picks up a rhythmic radio beacon originating from inside an icy crater.">
+                        <button type="button" class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/15 hover:bg-white/[0.04] transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="On an abandoned lunar observation outpost, deep-space radar picks up a rhythmic radio beacon originating from inside an icy crater.">
                             <div class="space-y-4">
                                 <div class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Sci-Fi · 5 Shots</div>
                                 <p class="text-xl text-white font-bold leading-tight">Abandoned lunar outpost radio beacon mystery.</p>
+                                <p class="text-xs text-slate-400 leading-relaxed">Wide orbital establishing shots, telemetry HUD graphics, and low-frequency radar ambience.</p>
                             </div>
-                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors">
+                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">
                                 Launch Storyboard &rarr;
                             </div>
                         </button>
                         
                         <!-- Mystery Template -->
-                        <button class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="Every night, the hallway stairs count to 42. Tonight, at 3 AM, an architect reaches step 43, descending into an impossible stone archive.">
+                        <button type="button" class="landing-sample-card group text-left p-10 rounded-3xl bg-white/[0.02] border border-white/5 hover:border-white/15 hover:bg-white/[0.04] transition-all cursor-pointer flex flex-col justify-between aspect-square" data-prompt="Every night, the hallway stairs count to 42. Tonight, at 3 AM, an architect reaches step 43, descending into an impossible stone archive.">
                             <div class="space-y-4">
                                 <div class="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Mystery · 4 Shots</div>
                                 <p class="text-xl text-white font-bold leading-tight">The impossible 43rd step in the stone archive.</p>
+                                <p class="text-xs text-slate-400 leading-relaxed">Slow push-in camera keyframes, architectural shadows, and spatial acoustic echoes.</p>
                             </div>
-                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-white transition-colors">
+                            <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-white transition-colors">
                                 Launch Storyboard &rarr;
                             </div>
                         </button>
@@ -581,38 +590,40 @@
         <footer class="border-t border-white/5 py-20 px-6 md:px-12 bg-[#05070a] relative z-20">
             <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-12 items-start">
                 <div class="space-y-5">
-                    <a href="/" class="inline-block focus:outline-none" aria-label="ContentGen AI Home">
+                    <a href="#hero-top" id="landing-brand-footer" class="inline-block focus:outline-none" aria-label="ContentGen AI Home">
                         <img src="/logo.svg" alt="ContentGen AI" class="h-8 w-auto object-contain select-none opacity-95 transition-opacity hover:opacity-100 drop-shadow-[0_2px_10px_rgba(99,102,241,0.2)]" />
                     </a>
-                    <p class="text-slate-500 text-sm max-w-xs leading-relaxed">The high-fidelity cinematic intelligence engine for professional directors and narrative writers.</p>
+                    <p class="text-slate-400 text-sm max-w-xs leading-relaxed">The high-fidelity cinematic intelligence engine for professional directors, editors, and narrative writers.</p>
                 </div>
                 
                 <div class="flex flex-wrap gap-20">
                     <div class="space-y-6">
                         <div class="text-[10px] font-bold text-white uppercase tracking-widest">Platform</div>
-                        <div class="flex flex-col gap-4 text-sm text-slate-500">
-                            <a href="#" class="hover:text-white transition-colors">Studio</a>
-                            <a href="#" class="hover:text-white transition-colors">API Console</a>
-                            <a href="#" class="hover:text-white transition-colors">Enterprise</a>
+                        <div class="flex flex-col gap-4 text-sm text-slate-400">
+                            <button id="footer-studio-btn" type="button" class="text-left hover:text-white transition-colors cursor-pointer">Director Studio</button>
+                            <button id="footer-api-console-btn" type="button" class="text-left hover:text-white transition-colors cursor-pointer">API &amp; Engine Setup</button>
+                            <a href="#templates" class="hover:text-white transition-colors">Story Templates</a>
+                            <button type="button" data-action="open-academy" class="text-left hover:text-white transition-colors cursor-pointer">Creator Academy</button>
                         </div>
                     </div>
                     <div class="space-y-6">
                         <div class="text-[10px] font-bold text-white uppercase tracking-widest">Resources</div>
-                        <div class="flex flex-col gap-4 text-sm text-slate-500">
-                            <button id="landing-privacy-btn" class="text-left hover:text-white transition-colors">Privacy Policy</button>
-                            <button id="landing-terms-btn" class="text-left hover:text-white transition-colors">Terms of Service</button>
+                        <div class="flex flex-col gap-4 text-sm text-slate-400">
+                            <a href="#capabilities" class="hover:text-white transition-colors">Capabilities</a>
+                            <button id="landing-privacy-btn" type="button" class="text-left hover:text-white transition-colors cursor-pointer">Privacy Policy</button>
+                            <button id="landing-terms-btn" type="button" class="text-left hover:text-white transition-colors cursor-pointer">Terms of Service</button>
                         </div>
                     </div>
                 </div>
                 
                 <div class="pt-12 md:pt-0">
-                    <button id="start-app-btn-hero" class="px-8 py-4 rounded-full bg-white text-black font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all cursor-pointer">Begin Production &rarr;</button>
+                    <button id="start-app-btn-hero" class="px-8 py-4 rounded-full bg-white text-black font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all cursor-pointer whitespace-nowrap shrink-0">Begin Production &rarr;</button>
                 </div>
             </div>
             
-            <div class="max-w-7xl mx-auto mt-20 pt-8 border-t border-white/5 flex justify-between items-center text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+            <div class="max-w-7xl mx-auto mt-20 pt-8 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                 <span>&copy; 2026 ContentGen Intelligence</span>
-                <span class="text-slate-800">Powered by Gemini 2.5 Pro & Veo 2</span>
+                <span class="text-slate-400">Powered by Gemini 3.1 Pro · Veo 3.1 · HyperFrames Engine</span>
             </div>
         </footer>
     </div>
@@ -1159,7 +1170,7 @@
                                     <option value="openai-gateway-image">OpenAI Gateway (DALL-E 3 / Gateway Image)</option>
                                 </select>
                                 <p class="text-xs text-gray-400 mt-2">
-                                    Want to create images or videos externally? Try <a href="https://labs.google/fx/tools/flow/shared/tool/65d19e96-4230-406b-a926-b851c4b42257" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:underline font-medium">Google FX Flow</a> or <a href="https://share.gemini.google/rF0ScQFS5MHF" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline font-medium">Gemini ContentGen</a> and import them.
+                                    Want to create images or videos externally? Try <a href="https://flow.google.com/shared/tool/bd35b7f3-3a3c-46ce-91f2-76c36f14a717" target="_blank" rel="noopener noreferrer" class="text-teal-400 hover:underline font-medium">Google FX Flow</a> or <a href="https://share.gemini.google/9JIcsz79HZpo" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline font-medium">Gemini ContentGen</a> and import them.
                                 </p>
                             </div>
                             <div>
@@ -2233,11 +2244,11 @@
                                                 </button>
                                                 <div class="border-t border-gray-800 my-1"></div>
                                                 <span class="text-[10px] font-bold text-gray-400 px-3 uppercase tracking-wider">External Media Tools:</span>
-                                                <a href="https://labs.google/fx/tools/flow/shared/tool/65d19e96-4230-406b-a926-b851c4b42257" target="_blank" rel="noopener noreferrer" class="px-3 py-2 text-xs font-medium text-teal-300 hover:text-white hover:bg-teal-600/30 rounded-xl transition flex items-center justify-between">
+                                                <a href="https://flow.google.com/shared/tool/bd35b7f3-3a3c-46ce-91f2-76c36f14a717" target="_blank" rel="noopener noreferrer" class="px-3 py-2 text-xs font-medium text-teal-300 hover:text-white hover:bg-teal-600/30 rounded-xl transition flex items-center justify-between">
                                                     <span>Google FX Flow</span>
                                                     <span class="text-[10px] text-teal-400">↗</span>
                                                 </a>
-                                                <a href="https://share.gemini.google/rF0ScQFS5MHF" target="_blank" rel="noopener noreferrer" class="px-3 py-2 text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 rounded-xl transition flex items-center justify-between">
+                                                <a href="https://share.gemini.google/9JIcsz79HZpo" target="_blank" rel="noopener noreferrer" class="px-3 py-2 text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 rounded-xl transition flex items-center justify-between">
                                                     <span>Gemini ContentGen</span>
                                                     <span class="text-[10px] text-indigo-400">↗</span>
                                                 </a>

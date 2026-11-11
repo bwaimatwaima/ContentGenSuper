@@ -794,6 +794,10 @@ export function deactivateVsWorkspace(): void {
   }
   restoreAllMovedNodes();
   restoreGraphicsBrowserScaffold();
+  const timelineContainer = document.getElementById('timeline-editor-container');
+  if (timelineContainer) {
+    timelineContainer.classList.remove('vs-timeline-shell', 'vs-workspace-timeline');
+  }
   if (modal) {
     modal.classList.add('hidden');
   }
@@ -943,6 +947,10 @@ function decorateTimelineLanes(container: HTMLElement): void {
 export function enhanceTimelineDom(): void {
   const container = document.getElementById('timeline-editor-container');
   if (!container) return;
+  if (!isVsWorkspaceEnabled()) {
+    container.classList.remove('vs-timeline-shell', 'vs-workspace-timeline');
+    return;
+  }
   container.classList.add('vs-timeline-shell');
   if (enhancedTimelineContainer === container && timelineDecorationObserver) return;
 

@@ -1302,10 +1302,18 @@ export function renderBrollEditor(
 
   export function renderTimelineEditor() {
     const hasClips = Boolean(videoRenderContext?.clips?.length);
+    const isTranscriptOrBrollOpen = Boolean(
+      (dom.transcriptEditorWorkspace && !dom.transcriptEditorWorkspace.classList.contains("hidden")) ||
+      (dom.bRollEditorWorkspace && !dom.bRollEditorWorkspace.classList.contains("hidden"))
+    );
 
     if (!hasClips) {
-      if (dom.timelineEditorContainer && !timelineState.drawerUserOpen) {
-        dom.timelineEditorContainer.classList.add("hidden");
+      if (dom.timelineEditorContainer) {
+        if (timelineState.drawerUserOpen && !isTranscriptOrBrollOpen) {
+          dom.timelineEditorContainer.classList.remove("hidden");
+        } else {
+          dom.timelineEditorContainer.classList.add("hidden");
+        }
       }
       if (dom.storyboardTimelineDurationBadge)
         dom.storyboardTimelineDurationBadge.classList.add("hidden");
@@ -1317,8 +1325,12 @@ export function renderBrollEditor(
         (state as any)._timelineAutoOpened = true;
         timelineState.setDrawerUserOpen(true);
       }
-      if (dom.timelineEditorContainer && timelineState.drawerUserOpen) {
-        dom.timelineEditorContainer.classList.remove("hidden");
+      if (dom.timelineEditorContainer) {
+        if (timelineState.drawerUserOpen && !isTranscriptOrBrollOpen) {
+          dom.timelineEditorContainer.classList.remove("hidden");
+        } else if (isTranscriptOrBrollOpen) {
+          dom.timelineEditorContainer.classList.add("hidden");
+        }
       }
     }
 
@@ -1445,11 +1457,13 @@ export function renderBrollEditor(
 
         scrollContainer.addEventListener("scroll", () => {
           if (headersEl) headersEl.scrollTop = scrollContainer.scrollTop;
-          if (dom.timelineScrollSlider && document.activeElement !== dom.timelineScrollSlider) {
+          const scrollSlider = (dom.timelineScrollSlider || document.getElementById("timeline-scroll-slider")) as HTMLInputElement | null;
+          if (scrollSlider && document.activeElement !== scrollSlider) {
             const maxScroll = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+            scrollSlider.disabled = maxScroll <= 0;
             if (maxScroll > 0) {
               const scrollPct = (scrollContainer.scrollLeft / maxScroll) * 100;
-              dom.timelineScrollSlider.value = scrollPct.toFixed(1);
+              scrollSlider.value = scrollPct.toFixed(1);
             }
           }
           if (
@@ -1555,10 +1569,16 @@ export function renderBrollEditor(
 
       const activeTracksCount = 1 + (hasOverlays ? overlayTracksCount : 0) + (hasCaptions ? 1 : 0) + (hasAudio ? 1 : 0) + (hasMusic ? 1 : 0) + (hasSfx ? 1 : 0);
 
-      // Adjust timeline container height to fit active tracks dynamically (no empty black space)
+      // Adjust timeline container height to fit active tracks + top toolbar + ruler + bottom Scroll Assistant bar
       if (dom.timelineEditorContainer && !dom.timelineEditorContainer.classList.contains('is-collapsed')) {
-        const activeHeight = 36 + 28 + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 48 : 0) + (hasMusic ? 48 : 0) + (hasSfx ? 48 : 0) + 36;
-        dom.timelineEditorContainer.style.height = `${Math.min(480, Math.max(160, activeHeight))}px`;
+        const toolbarEl = dom.timelineEditorContainer.firstElementChild as HTMLElement | null;
+        const toolbarH = Math.max(42, toolbarEl?.offsetHeight || 42);
+        const bottomBarEl = document.getElementById('timeline-bottom-scrubber-bar');
+        const bottomBarH = bottomBarEl && !bottomBarEl.classList.contains('hidden') ? Math.max(32, bottomBarEl.offsetHeight || 32) : 0;
+        const tracksH = 28 + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 48 : 0) + (hasMusic ? 48 : 0) + (hasSfx ? 48 : 0) + 16;
+        const activeHeight = toolbarH + tracksH + bottomBarH;
+        const maxAllowedH = Math.min(480, Math.floor((window.innerHeight || 800) * 0.54));
+        dom.timelineEditorContainer.style.height = `${Math.min(maxAllowedH, Math.max(180, activeHeight))}px`;
       }
 
       // Update Header HTML (N-Track support with CapCut / HyperFrames Studio Controls)
@@ -1583,6 +1603,7 @@ export function renderBrollEditor(
         if (hasOverlays) {
           for (let i = 0; i < overlayTracksCount; i++) {
             const label = `V${overlayTracksCount - i + 1} Overlays`;
+            const isBaseOverlayRow = i === overlayTracksCount - 1;
             overlaysHeaderHtml += `
                   <div class="flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-amber-300 bg-amber-950/20 shrink-0 hover:bg-amber-950/30 transition-colors" style="height: ${i === 0 ? Math.max(48, overlayContainerHeight - (overlayTracksCount - 1) * 48) : 48}px;">
                       <div class="flex items-center gap-1.5 truncate">
@@ -1596,7 +1617,7 @@ export function renderBrollEditor(
                           <button class="track-lock-btn p-1 rounded hover:bg-white/10 transition-colors cursor-pointer ${isOverlaysLocked ? 'text-amber-400 bg-amber-950/60' : 'text-gray-400 hover:text-white'}" data-track-key="overlays" title="${isOverlaysLocked ? 'Unlock Track' : 'Lock Track'}">
                               ${isOverlaysLocked ? '🔒' : '🔓'}
                           </button>
-                          ${i === 0 ? `<button class="track-add-btn text-[11px] bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-1.5 py-0.5 rounded border border-amber-500/40 transition-colors cursor-pointer font-bold" data-track-key="overlays" title="Add Motion Graphic Overlay at Playhead">+</button>` : ""}
+                          ${isBaseOverlayRow ? `<button class="track-add-btn text-[11px] bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-1.5 py-0.5 rounded border border-amber-500/40 transition-colors cursor-pointer font-bold" data-track-key="overlays" title="Add Motion Graphic Overlay at Playhead">+</button>` : ""}
                       </div>
                   </div>`;
           }
@@ -1671,8 +1692,8 @@ export function renderBrollEditor(
               </div>` : '';
 
         trackHeaders.innerHTML = `
-              <!-- Track Details Corner Box -->
-              <div class="h-7 shrink-0 flex items-center justify-between px-3 border-b border-white/10 text-[10px] font-mono text-gray-400 bg-[#090a10] uppercase tracking-wider">
+              <!-- Track Details Corner Box (Sticky to match #timeline-ruler) -->
+              <div class="sticky top-0 z-30 h-7 shrink-0 flex items-center justify-between px-3 border-b border-white/10 text-[10px] font-mono text-gray-400 bg-[#090a10] uppercase tracking-wider">
                   <span>Track Details</span>
                   <span class="text-[9px] text-gray-500">${activeTracksCount} Active Track${activeTracksCount === 1 ? '' : 's'}</span>
               </div>
@@ -1784,12 +1805,27 @@ export function renderBrollEditor(
       );
 
       if (dom.timelineEditorContainer) {
-        if (timelineState.drawerUserOpen) {
+        if (timelineState.drawerUserOpen && !isTranscriptOrBrollOpen) {
           dom.timelineEditorContainer.classList.remove("hidden");
         } else {
           dom.timelineEditorContainer.classList.add("hidden");
         }
       }
+      // Keep bottom zoom and scroll sliders synchronized after layout / zoom changes
+      const zoomSliderEl = (dom.timelineZoomSlider || document.getElementById('timeline-zoom-slider')) as HTMLInputElement | null;
+      if (zoomSliderEl && document.activeElement !== zoomSliderEl) {
+        zoomSliderEl.value = (timelineState.zoomLevel || 1.0).toFixed(2);
+      }
+      const scrollSliderEl = (dom.timelineScrollSlider || document.getElementById('timeline-scroll-slider')) as HTMLInputElement | null;
+      if (scrollSliderEl && scrollContainer && document.activeElement !== scrollSliderEl) {
+        const maxScroll = scrollContainer.scrollWidth - scrollContainer.clientWidth;
+        scrollSliderEl.disabled = maxScroll <= 0;
+        scrollSliderEl.value = maxScroll > 0
+          ? ((scrollContainer.scrollLeft / maxScroll) * 100).toFixed(1)
+          : "0";
+      }
+      const navTotalEl = document.getElementById('timeline-nav-total-time');
+      if (navTotalEl) navTotalEl.textContent = `${totalDuration.toFixed(1)}s`;
       enhanceTimelineDom();
     }
   }
@@ -1969,14 +2005,30 @@ export function renderBrollEditor(
 
     // Render Track: Overlays & B-Roll (N-Tracks) — batched via DocumentFragment
     const overlaysFrag = document.createDocumentFragment();
+    const totalOverlayRows = Math.max(1, (timelineState as any).overlayTracksCount || 1);
+    const totalOverlayHeight = Math.max(56, totalOverlayRows * 48);
+    if (totalOverlayRows > 1 && visualEvents.length > 0) {
+      const firstRowHeight = Math.max(48, totalOverlayHeight - (totalOverlayRows - 1) * 48);
+      for (let r = 1; r < totalOverlayRows; r++) {
+        const dividerY = firstRowHeight + (r - 1) * 48;
+        const divider = document.createElement("div");
+        divider.className = "absolute left-0 right-0 border-b border-white/10 pointer-events-none z-0";
+        divider.style.top = `${dividerY}px`;
+        overlaysFrag.appendChild(divider);
+      }
+    }
     visualEvents.forEach((ev) => {
       if ((ev.end ?? 0) < visibleStartTime || (ev.start ?? 0) > visibleEndTime)
         return;
 
       const evWidth = Math.max(32, ((ev.end ?? 0) - (ev.start ?? 0)) * pps);
       const evLeft = (ev.start ?? 0) * pps;
-      const trackIndex = (ev as any)._trackIndex || 0;
-      const topOffset = trackIndex * 48 + 4;
+      const trackIndex = Math.max(0, Math.min(totalOverlayRows - 1, (ev as any)._trackIndex || 0));
+      const visualRow = Math.max(0, totalOverlayRows - 1 - trackIndex);
+      const firstRowHeight = Math.max(48, totalOverlayHeight - (totalOverlayRows - 1) * 48);
+      const rowTop = visualRow === 0 ? 0 : firstRowHeight + (visualRow - 1) * 48;
+      const rowHeight = visualRow === 0 ? firstRowHeight : 48;
+      const topOffset = rowTop + Math.floor((rowHeight - 40) / 2);
 
       const isBroll =
         (ev as any).customImageUrl || (ev as any).icon === "custom";

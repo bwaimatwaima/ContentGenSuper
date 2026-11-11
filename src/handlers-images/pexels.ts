@@ -27,6 +27,19 @@ export const STOP_WORDS = new Set([
     'clip', 'clips', 'broll', 'b-roll', 'pexels', 'media', 'free', 'fetch', 'get', 'download', 'hd', '4k'
 ]);
 
+export function resolvePexelsApiKey(): string {
+    const key = (
+        state.pexelsApiKey ||
+        localStorage.getItem('pexelsApiKey') ||
+        (state as any).systemPexelsApiKey ||
+        ''
+    ).trim();
+    if (key && !state.pexelsApiKey) {
+        state.pexelsApiKey = key;
+    }
+    return key;
+}
+
 export function sanitizePexelsQuery(query: string): string {
     if (!query) return '';
     return query
@@ -49,6 +62,11 @@ export async function getAIVisualKeywords(shot: any, scene?: any): Promise<strin
     const narration = (shot.line_text || shot.text_reference || '').replace(/<[^>]+>/g, ' ').trim();
     const imagePrompt = (shot.image_prompt || '').replace(/<[^>]+>/g, ' ').trim();
     if (!narration && !imagePrompt) return '';
+
+    const cacheFingerprint = `${narration}||${imagePrompt}`;
+    if (shot._cachedPexelsAiQuery && shot._cachedPexelsFingerprint === cacheFingerprint) {
+        return shot._cachedPexelsAiQuery;
+    }
 
     try {
         let storySummary = '';
@@ -96,7 +114,12 @@ Visual Search Terms:`;
 
         const text = (response.text || '').trim().replace(/[^a-zA-Z0-9\s]/g, ' ').toLowerCase();
         const words = text.split(/\s+/).filter(w => w.length >= 2 && !STOP_WORDS.has(w));
-        return sanitizePexelsQuery(words.slice(0, 4).join(' '));
+        const cleaned = sanitizePexelsQuery(words.slice(0, 4).join(' '));
+        if (cleaned) {
+            shot._cachedPexelsAiQuery = cleaned;
+            shot._cachedPexelsFingerprint = cacheFingerprint;
+        }
+        return cleaned;
     } catch (err) {
         console.warn('AI visual keyword extraction failed, using fallback strategy:', err);
         return '';
@@ -104,7 +127,7 @@ Visual Search Terms:`;
 }
 
 export function getSceneOrProjectTopic(shot: any, scene: any): string {
-    let candidates: string[] = [];
+    const candidates: string[] = [];
 
     if (scene) {
         if (scene.header) candidates.push(scene.header);
@@ -151,25 +174,148 @@ export function getPexelsOrientation(aspectRatio?: string): 'landscape' | 'portr
 export function selectBestVideoFile(videoFiles: any[], orientation: 'landscape' | 'portrait' | 'square'): any {
     if (!videoFiles || videoFiles.length === 0) return null;
 
-    let filtered = videoFiles;
+    // Prefer MP4 files over HLS/m3u8 or unknown containers
+    const mp4Files = videoFiles.filter((f: any) =>
+        f.link && (!f.file_type || f.file_type === 'video/mp4' || String(f.link).includes('.mp4'))
+    );
+    let pool = mp4Files.length > 0 ? mp4Files : videoFiles.filter((f: any) => Boolean(f?.link));
+    if (pool.length === 0) return null;
+
+    // Filter by orientation match when available
     if (orientation === 'portrait') {
-        const matches = videoFiles.filter((f: any) => f.height > f.width);
-        if (matches.length > 0) filtered = matches;
+        const matches = pool.filter((f: any) => (f.height || 0) > (f.width || 0));
+        if (matches.length > 0) pool = matches;
     } else if (orientation === 'landscape') {
-        const matches = videoFiles.filter((f: any) => f.width > f.height);
-        if (matches.length > 0) filtered = matches;
+        const matches = pool.filter((f: any) => (f.width || 0) > (f.height || 0));
+        if (matches.length > 0) pool = matches;
     } else if (orientation === 'square') {
-        const matches = videoFiles.filter((f: any) => Math.abs(f.width - f.height) < 150);
-        if (matches.length > 0) filtered = matches;
+        const matches = pool.filter((f: any) => Math.abs((f.width || 0) - (f.height || 0)) < 150);
+        if (matches.length > 0) pool = matches;
     }
 
-    const hdMatch = filtered.find((f: any) => f.quality === 'hd' && (f.width >= 1280 || f.height >= 1280));
-    if (hdMatch) return hdMatch;
+    // Sweet-spot resolution: 720p to 1080p (maxDim between 1280 and 1920).
+    // Avoids downloading 60-120MB 4K UHD files while keeping crisp HD quality.
+    const sweetSpot = pool.filter((f: any) => {
+        const maxDim = Math.max(f.width || 0, f.height || 0);
+        return maxDim >= 1280 && maxDim <= 1920;
+    });
+    if (sweetSpot.length > 0) {
+        sweetSpot.sort((a: any, b: any) => Math.max(b.width || 0, b.height || 0) - Math.max(a.width || 0, a.height || 0));
+        return sweetSpot[0];
+    }
 
-    const anyHd = filtered.find((f: any) => f.quality === 'hd');
-    if (anyHd) return anyHd;
+    // Next best: closest resolution to 1600px (prefers 1080p/720p over 360p or 4K)
+    const sortedByCloseness = [...pool].sort((a: any, b: any) => {
+        const dimA = Math.max(a.width || 0, a.height || 0) || 1280;
+        const dimB = Math.max(b.width || 0, b.height || 0) || 1280;
+        // Penalize > 2560px (4K) so we only pick 4K if no HD/SD exists
+        const penaltyA = dimA > 2560 ? (dimA - 1920) * 2 : Math.abs(1600 - dimA);
+        const penaltyB = dimB > 2560 ? (dimB - 1920) * 2 : Math.abs(1600 - dimB);
+        return penaltyA - penaltyB;
+    });
 
-    return filtered[0] || videoFiles[0];
+    return sortedByCloseness[0] || pool[0];
+}
+
+function getProjectUsedPexelsIds(excludeShotId?: string): Set<string> {
+    const used = new Set<string>();
+    const allShots = (state.currentScenes || []).flatMap((s: any) => s?.lines || [s]);
+    for (const s of allShots) {
+        if (!s || (excludeShotId && s.id === excludeShotId)) continue;
+        if (s._pexelsMediaId) {
+            used.add(String(s._pexelsMediaId));
+        }
+    }
+    return used;
+}
+
+export function pickBestPexelsCandidate(
+    items: any[],
+    mediaType: 'photos' | 'videos',
+    shot: any,
+    extraUsedIds?: Set<string>
+): any {
+    if (!items || items.length === 0) return null;
+
+    const projectUsedIds = getProjectUsedPexelsIds(shot?.id);
+    if (extraUsedIds) {
+        extraUsedIds.forEach(id => projectUsedIds.add(String(id)));
+    }
+
+    const triedOnThisShot: string[] = Array.isArray(shot?._pexelsTriedIds) ? shot._pexelsTriedIds : [];
+    const triedSet = new Set<string>(triedOnThisShot.map(String));
+    const currentId = shot?._pexelsMediaId ? String(shot._pexelsMediaId) : null;
+
+    // 1. Prefer items not used anywhere in project AND not yet tried on this shot
+    let candidates = items.filter((item: any) => {
+        const id = String(item?.id || '');
+        return id && !projectUsedIds.has(id) && !triedSet.has(id);
+    });
+
+    // 2. Fallback: allow items tried earlier on this shot (except the currently active one), still avoiding duplicates in other shots
+    if (candidates.length === 0) {
+        candidates = items.filter((item: any) => {
+            const id = String(item?.id || '');
+            return id && !projectUsedIds.has(id) && id !== currentId;
+        });
+        if (candidates.length > 0 && shot) {
+            shot._pexelsTriedIds = currentId ? [currentId] : [];
+        }
+    }
+
+    // 3. Final fallback: any item except currentId, or all items
+    if (candidates.length === 0) {
+        candidates = items.filter((item: any) => String(item?.id || '') !== currentId);
+        if (candidates.length === 0) candidates = items;
+    }
+
+    const targetDuration = Math.max(2, Number(shot?.duration_seconds) || 4);
+
+    // Score candidates by Pexels relevance order + duration fit (for videos)
+    const scored = candidates.map((item: any, idx: number) => {
+        const originalRank = items.indexOf(item);
+        // Relevance score: top rank = 100, decreasing by 4 per rank position
+        let score = Math.max(20, 100 - (originalRank >= 0 ? originalRank : idx) * 4);
+
+        if (mediaType === 'videos') {
+            const vidDur = Number(item?.duration) || 0;
+            if (vidDur >= targetDuration && vidDur <= Math.max(25, targetDuration * 4)) {
+                // Covers the full shot without being a massive raw clip
+                score += 22;
+            } else if (vidDur >= targetDuration * 0.75) {
+                score += 10;
+            } else if (vidDur > 0 && vidDur < 2.5) {
+                // Very short micro-clip penalty
+                score -= 20;
+            }
+        } else {
+            // Photos: slight bonus for high-res source availability
+            if (item?.src?.large2x || item?.src?.original) {
+                score += 5;
+            }
+        }
+
+        return { item, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    // Pick from top 3 highest-scoring unused candidates with slight variety on top ties
+    const topWindow = scored.slice(0, Math.min(3, scored.length));
+    const chosen = topWindow[0]?.item || candidates[0];
+
+    if (chosen && shot) {
+        const chosenId = String(chosen.id || '');
+        if (chosenId) {
+            if (!Array.isArray(shot._pexelsTriedIds)) shot._pexelsTriedIds = [];
+            if (!shot._pexelsTriedIds.includes(chosenId)) {
+                shot._pexelsTriedIds.push(chosenId);
+            }
+            shot._pexelsMediaId = chosenId;
+        }
+    }
+
+    return chosen;
 }
 
 export async function fetchPexelsStockMedia(
@@ -187,7 +333,7 @@ export async function fetchPexelsStockMedia(
 
     const searchApi = async (query: string, withOrientation: boolean = true) => {
         if (!query.trim()) return [];
-        let url = `${endpoint}?query=${encodeURIComponent(query)}&per_page=15`;
+        let url = `${endpoint}?query=${encodeURIComponent(query)}&per_page=20`;
         if (withOrientation && orientation) {
             url += `&orientation=${orientation}`;
         }
@@ -195,7 +341,13 @@ export async function fetchPexelsStockMedia(
             headers: { 'Authorization': apiKey }
         });
         if (!response.ok) {
-            throw new Error(`Pexels API error: ${response.statusText}`);
+            if (response.status === 401 || response.status === 403) {
+                throw new Error('Invalid Pexels API Key. Please check your key in Settings.');
+            }
+            if (response.status === 429) {
+                throw new Error('Pexels API rate limit reached. Please wait a moment and try again.');
+            }
+            throw new Error(`Pexels API error (${response.status}): ${response.statusText}`);
         }
         const data = await response.json();
         return (mediaType === 'photos' ? data.photos : data.videos) || [];
@@ -215,7 +367,22 @@ export async function fetchPexelsStockMedia(
         return results || [];
     };
 
-    // Tier 1: Try AI visual keywords (if Gemini is available)
+    // Tier 0: Explicit User B-Roll Search Query (from Shot Inspector or shot.b_roll_prompt)
+    const customBrollQuery = sanitizePexelsQuery((shot.b_roll_prompt || '').trim());
+    if (customBrollQuery) {
+        onStatusUpdate?.(`Searching Pexels [${orientation}] (Custom B-Roll query: "${customBrollQuery}")...`);
+        try {
+            const results = await tryQueryWithFallback(customBrollQuery);
+            if (results && results.length > 0) {
+                return { items: results, tierUsed: 0, queryUsed: customBrollQuery, orientationUsed: orientation };
+            }
+        } catch (e: any) {
+            if (e?.message?.includes('Invalid Pexels API Key') || e?.message?.includes('rate limit')) throw e;
+            console.warn('[Pexels Cascade] Tier 0 custom query error:', e);
+        }
+    }
+
+    // Tier 1: AI visual keywords (cached per shot text so re-rolling is fast)
     onStatusUpdate?.(`Searching Pexels [${orientation}] (Tier 1: AI visual keywords)...`);
     try {
         const tier1Query = await getAIVisualKeywords(shot, scene);
@@ -225,11 +392,12 @@ export async function fetchPexelsStockMedia(
                 return { items: results, tierUsed: 1, queryUsed: tier1Query, orientationUsed: orientation };
             }
         }
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.message?.includes('Invalid Pexels API Key') || e?.message?.includes('rate limit')) throw e;
         console.warn('[Pexels Cascade] Tier 1 error:', e);
     }
 
-    // Tier 2: Fall back to filtered nouns/adjectives
+    // Tier 2: Fall back to filtered nouns/adjectives from narration or visual prompt
     onStatusUpdate?.(`Searching Pexels [${orientation}] (Tier 2: Filtered sentence keywords)...`);
     try {
         const sentenceText = shot.line_text || shot.text_reference || shot.image_prompt || '';
@@ -240,7 +408,8 @@ export async function fetchPexelsStockMedia(
                 return { items: results, tierUsed: 2, queryUsed: tier2Query, orientationUsed: orientation };
             }
         }
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.message?.includes('Invalid Pexels API Key') || e?.message?.includes('rate limit')) throw e;
         console.warn('[Pexels Cascade] Tier 2 error:', e);
     }
 
@@ -252,11 +421,127 @@ export async function fetchPexelsStockMedia(
         if (results && results.length > 0) {
             return { items: results, tierUsed: 3, queryUsed: tier3Query, orientationUsed: orientation };
         }
-    } catch (e) {
+    } catch (e: any) {
+        if (e?.message?.includes('Invalid Pexels API Key') || e?.message?.includes('rate limit')) throw e;
         console.warn('[Pexels Cascade] Tier 3 error:', e);
     }
 
     return { items: [], tierUsed: 0, queryUsed: '', orientationUsed: orientation };
+}
+
+export async function applyPexelsStockToShot(
+    mediaType: 'photos' | 'videos',
+    shot: any,
+    scene: any,
+    shotEl?: HTMLElement | null,
+    extraUsedIds?: Set<string>,
+    onStatusUpdate?: (status: string) => void
+): Promise<{ success: boolean; queryUsed: string; tierUsed: number; orientationUsed: string }> {
+    const apiKey = resolvePexelsApiKey();
+    if (!apiKey) {
+        throw new Error('Pexels API key is required to fetch stock media.');
+    }
+
+    const { items, tierUsed, queryUsed, orientationUsed } = await fetchPexelsStockMedia(
+        mediaType,
+        shot,
+        scene,
+        apiKey,
+        onStatusUpdate
+    );
+
+    if (!items || items.length === 0) {
+        return { success: false, queryUsed, tierUsed, orientationUsed };
+    }
+
+    const chosen = pickBestPexelsCandidate(items, mediaType, shot, extraUsedIds);
+    if (!chosen) {
+        return { success: false, queryUsed, tierUsed, orientationUsed };
+    }
+
+    if (extraUsedIds && chosen.id) {
+        extraUsedIds.add(String(chosen.id));
+    }
+
+    const tierLabel = tierUsed === 0 ? 'Custom Query' : `Tier ${tierUsed}`;
+
+    if (mediaType === 'videos') {
+        const videoFile = selectBestVideoFile(chosen.video_files, orientationUsed);
+        if (!videoFile || !videoFile.link) {
+            return { success: false, queryUsed, tierUsed, orientationUsed };
+        }
+
+        onStatusUpdate?.(`Downloading HD video [${orientationUsed}] (${tierLabel}: "${queryUsed}")...`);
+        const vidRes = await fetch(videoFile.link);
+        if (!vidRes.ok) throw new Error(`Failed to download video file (${vidRes.status})`);
+        const vidBlob = await vidRes.blob();
+
+        const assetId = await assetStorage.storeAsset(vidBlob, 'video', 'current_project');
+        safelyReplaceShotMedia(shot, vidBlob, 'video');
+        shot.video_id = assetId;
+        // Clear stale primary image fields when replacing shot with a stock video
+        if (shot._imageObjectURL) {
+            try { URL.revokeObjectURL(shot._imageObjectURL); } catch {}
+            delete shot._imageObjectURL;
+        }
+        delete shot.image_id;
+        delete shot.image;
+
+        const targetShotEl = shotEl || (dom.resultsContainer?.querySelector(`.prompt-item[data-id="${shot.id}"]`) as HTMLElement | null);
+        if (targetShotEl) {
+            const imgContainer = targetShotEl.querySelector('.img-container');
+            if (imgContainer) {
+                imgContainer.innerHTML = `<video src="${shot._videoObjectURL}" class="w-full h-full object-cover rounded-lg generated-video" autoplay loop muted playsinline data-id="${shot.id}"></video>`;
+            }
+        }
+    } else {
+        const imageUrl = chosen.src?.large2x || chosen.src?.original || chosen.src?.large;
+        if (!imageUrl) {
+            return { success: false, queryUsed, tierUsed, orientationUsed };
+        }
+
+        onStatusUpdate?.(`Downloading HD photo [${orientationUsed}] (${tierLabel}: "${queryUsed}")...`);
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) throw new Error(`Failed to download image file (${imgRes.status})`);
+        const imgBlob = await imgRes.blob();
+
+        const assetId = await assetStorage.storeAsset(imgBlob, 'image', 'current_project');
+        safelyReplaceShotMedia(shot, imgBlob, 'image');
+        shot.image_id = assetId;
+        shot.imageMimeType = imgBlob.type;
+        // Clear stale video fields when replacing shot with a stock photo
+        if (shot._videoObjectURL) {
+            try { URL.revokeObjectURL(shot._videoObjectURL); } catch {}
+            delete shot._videoObjectURL;
+        }
+        delete shot.video_id;
+        delete shot.videoElement;
+
+        const targetShotEl = shotEl || (dom.resultsContainer?.querySelector(`.prompt-item[data-id="${shot.id}"]`) as HTMLElement | null);
+        if (targetShotEl) {
+            const imgContainer = targetShotEl.querySelector('.img-container');
+            if (imgContainer) {
+                imgContainer.innerHTML = `<img src="${shot._imageObjectURL}" class="w-full h-full object-cover rounded-lg generated-img" data-id="${shot.id}">`;
+            }
+        }
+    }
+
+    await syncShotMediaToTimeline(shot);
+    if (dom.videoDirectorBtn && dom.videoDirectorBtn.disabled) {
+        dom.videoDirectorBtn.disabled = false;
+        dom.videoDirectorBtn.classList.remove('opacity-50');
+        ui.updateWorkflowStepStatus(3, 'completed');
+        ui.updateWorkflowStepStatus(4, 'active');
+    }
+
+    return { success: true, queryUsed, tierUsed, orientationUsed };
+}
+
+function promptForMissingPexelsKey() {
+    ui.showStatus('Pexels API key is required to fetch stock media. Redirecting to Settings...', true, 4000);
+    const settingsTab = document.querySelector('[data-tab="panel-settings"]') as HTMLElement;
+    if (settingsTab) settingsTab.click();
+    if (dom.pexelsApiKeyInput) dom.pexelsApiKeyInput.focus();
 }
 
 export async function handlePexelsImageBtnClick(event: Event) {
@@ -264,11 +549,8 @@ export async function handlePexelsImageBtnClick(event: Event) {
     const pexelsBtn = target.closest('.pexels-image-btn') as HTMLButtonElement;
     if (!pexelsBtn) return;
     
-    if (!state.pexelsApiKey) {
-        ui.showStatus('Pexels API key is required to fetch stock media. Redirecting to Settings...', true, 4000);
-        const settingsTab = document.querySelector('[data-tab="panel-settings"]') as HTMLElement;
-        if (settingsTab) settingsTab.click();
-        if (dom.pexelsApiKeyInput) dom.pexelsApiKeyInput.focus();
+    if (!resolvePexelsApiKey()) {
+        promptForMissingPexelsKey();
         return;
     }
     
@@ -288,49 +570,21 @@ export async function handlePexelsImageBtnClick(event: Event) {
     pexelsBtn.disabled = true;
     
     try {
-        const { items, tierUsed, queryUsed, orientationUsed } = await fetchPexelsStockMedia(
+        const { success, tierUsed, queryUsed, orientationUsed } = await applyPexelsStockToShot(
             'photos',
             shot,
             scene,
-            state.pexelsApiKey,
+            shotEl,
+            undefined,
             (statusMsg) => ui.showStatus(statusMsg, false, 1500)
         );
 
-        if (items && items.length > 0) {
-            const randomIndex = Math.floor(Math.random() * items.length);
-            const photo = items[randomIndex];
-            const imageUrl = photo.src.large2x || photo.src.original || photo.src.large;
-            
-            if (imageUrl) {
-                ui.showStatus(`Fetching image [${orientationUsed}] (Tier ${tierUsed}: "${queryUsed}")...`, false, 2000);
-                
-                const imgRes = await fetch(imageUrl);
-                const imgBlob = await imgRes.blob();
-                
-                const assetId = await assetStorage.storeAsset(imgBlob, 'image', 'current_project');
-                safelyReplaceShotMedia(shot, imgBlob, 'image');
-                shot.image_id = assetId;
-                shot.imageMimeType = imgBlob.type;
-                
-                const imgContainer = shotEl.querySelector('.img-container');
-                if (imgContainer) {
-                    imgContainer.innerHTML = `<img src="${shot._imageObjectURL}" class="w-full h-full object-cover rounded-lg generated-img" data-id="${shot.id}">`;
-                }
-                
-                saveVersion(false);
-                await syncShotMediaToTimeline(shot);
-                if (dom.videoDirectorBtn && dom.videoDirectorBtn.disabled) {
-                    dom.videoDirectorBtn.disabled = false;
-                    dom.videoDirectorBtn.classList.remove('opacity-50');
-                    ui.updateWorkflowStepStatus(3, 'completed');
-                    ui.updateWorkflowStepStatus(4, 'active');
-                }
-                ui.showStatus(`Pexels image applied [${orientationUsed}] (Tier ${tierUsed}: "${queryUsed}")`, false, 3000);
-            } else {
-                ui.showStatus('No suitable image file found on Pexels.', true);
-            }
+        if (success) {
+            saveVersion(false);
+            const tierLabel = tierUsed === 0 ? 'Custom' : `Tier ${tierUsed}`;
+            ui.showStatus(`Pexels image applied [${orientationUsed}] (${tierLabel}: "${queryUsed}")`, false, 3000);
         } else {
-            ui.showStatus('No stock images found on Pexels after 3-tier cascade search.', true);
+            ui.showStatus('No stock images found on Pexels after cascade search.', true);
         }
     } catch (error: any) {
         console.error('Pexels error:', error);
@@ -346,11 +600,8 @@ export async function handlePexelsVideoBtnClick(event: Event) {
     const pexelsBtn = target.closest('.pexels-video-btn') as HTMLButtonElement;
     if (!pexelsBtn) return;
     
-    if (!state.pexelsApiKey) {
-        ui.showStatus('Pexels API key is required to fetch stock media. Redirecting to Settings...', true, 4000);
-        const settingsTab = document.querySelector('[data-tab="panel-settings"]') as HTMLElement;
-        if (settingsTab) settingsTab.click();
-        if (dom.pexelsApiKeyInput) dom.pexelsApiKeyInput.focus();
+    if (!resolvePexelsApiKey()) {
+        promptForMissingPexelsKey();
         return;
     }
     
@@ -370,48 +621,21 @@ export async function handlePexelsVideoBtnClick(event: Event) {
     pexelsBtn.disabled = true;
     
     try {
-        const { items, tierUsed, queryUsed, orientationUsed } = await fetchPexelsStockMedia(
+        const { success, tierUsed, queryUsed, orientationUsed } = await applyPexelsStockToShot(
             'videos',
             shot,
             scene,
-            state.pexelsApiKey,
+            shotEl,
+            undefined,
             (statusMsg) => ui.showStatus(statusMsg, false, 1500)
         );
 
-        if (items && items.length > 0) {
-            const randomIndex = Math.floor(Math.random() * items.length);
-            const video = items[randomIndex];
-            const videoFile = selectBestVideoFile(video.video_files, orientationUsed);
-            
-            if (videoFile && videoFile.link) {
-                ui.showStatus(`Fetching video [${orientationUsed}] (Tier ${tierUsed}: "${queryUsed}")...`, false, 2000);
-                
-                const vidRes = await fetch(videoFile.link);
-                const vidBlob = await vidRes.blob();
-                
-                const assetId = await assetStorage.storeAsset(vidBlob, 'video', 'current_project');
-                safelyReplaceShotMedia(shot, vidBlob, 'video');
-                shot.video_id = assetId;
-                
-                const imgContainer = shotEl.querySelector('.img-container');
-                if (imgContainer) {
-                    imgContainer.innerHTML = `<video src="${shot._videoObjectURL}" class="w-full h-full object-cover rounded-lg generated-video" autoplay loop muted playsinline data-id="${shot.id}"></video>`;
-                }
-                
-                saveVersion(false);
-                await syncShotMediaToTimeline(shot);
-                if (dom.videoDirectorBtn && dom.videoDirectorBtn.disabled) {
-                    dom.videoDirectorBtn.disabled = false;
-                    dom.videoDirectorBtn.classList.remove('opacity-50');
-                    ui.updateWorkflowStepStatus(3, 'completed');
-                    ui.updateWorkflowStepStatus(4, 'active');
-                }
-                ui.showStatus(`Pexels video applied [${orientationUsed}] (Tier ${tierUsed}: "${queryUsed}")`, false, 3000);
-            } else {
-                ui.showStatus('No suitable video file found from Pexels.', true);
-            }
+        if (success) {
+            saveVersion(false);
+            const tierLabel = tierUsed === 0 ? 'Custom' : `Tier ${tierUsed}`;
+            ui.showStatus(`Pexels video applied [${orientationUsed}] (${tierLabel}: "${queryUsed}")`, false, 3000);
         } else {
-            ui.showStatus('No stock videos found on Pexels after 3-tier cascade search.', true);
+            ui.showStatus('No stock videos found on Pexels after cascade search.', true);
         }
     } catch (error: any) {
         console.error('Pexels API Error:', error);
@@ -423,11 +647,8 @@ export async function handlePexelsVideoBtnClick(event: Event) {
 }
 
 export async function handleBulkStockFetch() {
-    if (!state.pexelsApiKey) {
-        ui.showStatus('Pexels API key is required to fetch stock media. Redirecting to Settings...', true, 4000);
-        const settingsTab = document.querySelector('[data-tab="panel-settings"]') as HTMLElement;
-        if (settingsTab) settingsTab.click();
-        if (dom.pexelsApiKeyInput) dom.pexelsApiKeyInput.focus();
+    if (!resolvePexelsApiKey()) {
+        promptForMissingPexelsKey();
         return;
     }
 
@@ -466,8 +687,6 @@ export async function handleBulkStockFetch() {
         if (!isMissingOnly) return true;
         if (isVideo) {
             return !shot._videoObjectURL && !shot.video_id;
-        } else if (isMixed) {
-            return !shot._imageObjectURL && !shot._videoObjectURL && !shot.image_id && !shot.video_id;
         } else {
             return !shot._imageObjectURL && !shot._videoObjectURL && !shot.image_id && !shot.video_id;
         }
@@ -487,6 +706,7 @@ export async function handleBulkStockFetch() {
     const total = eligibleShots.length;
     let successCount = 0;
     let failCount = 0;
+    const sessionUsedIds = getProjectUsedPexelsIds();
 
     ui.showStatus(`Starting bulk stock ${displayMediaType} fetch for ${total} shots...`);
 
@@ -499,7 +719,6 @@ export async function handleBulkStockFetch() {
         const { shot, scene, shotEl } = eligibleShots[i];
         const shotNumber = shot.shot_number || (i + 1);
         
-        // Determine media type for this specific shot
         let currentMediaType: 'photos' | 'videos';
         if (isMixed) {
             currentMediaType = (i % 2 === 0) ? 'videos' : 'photos';
@@ -511,66 +730,26 @@ export async function handleBulkStockFetch() {
         ui.showStatus(`Fetching stock ${currentMediaType} for Shot ${shotNumber} (${i + 1}/${total})...`, false);
 
         try {
-            const { items, tierUsed, queryUsed, orientationUsed } = await fetchPexelsStockMedia(
+            const { success } = await applyPexelsStockToShot(
                 currentMediaType,
                 shot,
                 scene,
-                state.pexelsApiKey,
+                shotEl,
+                sessionUsedIds,
                 (statusMsg) => ui.showStatus(`Shot ${shotNumber}: ${statusMsg}`, false, 1500)
             );
-
-            if (items && items.length > 0) {
-                const randomIndex = Math.floor(Math.random() * items.length);
-                const mediaItem = items[randomIndex];
-
-                if (currentMediaType === 'videos') {
-                    const videoFile = selectBestVideoFile(mediaItem.video_files, orientationUsed);
-                    if (videoFile && videoFile.link) {
-                        const res = await fetch(videoFile.link);
-                        const blob = await res.blob();
-                        const assetId = await assetStorage.storeAsset(blob, 'video', 'current_project');
-                        shot.video_id = assetId;
-                        shot._videoObjectURL = URL.createObjectURL(blob);
-
-                        if (shotEl) {
-                            const imgContainer = shotEl.querySelector('.img-container');
-                            if (imgContainer) {
-                                imgContainer.innerHTML = `<video src="${shot._videoObjectURL}" class="w-full h-full object-cover rounded-lg generated-video" autoplay loop muted playsinline data-id="${shot.id}"></video>`;
-                            }
-                        }
-                        successCount++;
-                    } else {
-                        failCount++;
-                    }
-                } else {
-                    const imageUrl = mediaItem.src?.large2x || mediaItem.src?.original || mediaItem.src?.large;
-                    if (imageUrl) {
-                        const res = await fetch(imageUrl);
-                        const blob = await res.blob();
-                        const assetId = await assetStorage.storeAsset(blob, 'image', 'current_project');
-                        shot.image_id = assetId;
-                        shot.imageMimeType = blob.type;
-                        shot._imageObjectURL = URL.createObjectURL(blob);
-
-                        if (shotEl) {
-                            const imgContainer = shotEl.querySelector('.img-container');
-                            if (imgContainer) {
-                                imgContainer.innerHTML = `<img src="${shot._imageObjectURL}" class="w-full h-full object-cover rounded-lg generated-img" data-id="${shot.id}">`;
-                            }
-                        }
-                        successCount++;
-                    } else {
-                        failCount++;
-                    }
-                }
-
-                await syncShotMediaToTimeline(shot);
+            if (success) {
+                successCount++;
             } else {
                 failCount++;
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error(`[Bulk Stock] Error on shot ${shotNumber}:`, err);
             failCount++;
+            if (err?.message?.includes('Invalid Pexels API Key') || err?.message?.includes('rate limit')) {
+                ui.showStatus(err.message, true, 5000);
+                break;
+            }
         }
     }
 
@@ -595,6 +774,6 @@ export async function handleBulkStockFetch() {
         ui.renderResults(state.currentScenes);
         ui.renderTimelineEditor();
     } catch (e) {
-        console.error('Failed to re-render results or timeline editor after batch image generation:', e);
+        console.error('Failed to re-render results or timeline editor after batch stock fetch:', e);
     }
 }

@@ -260,7 +260,14 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
   try {
     const minDuration = 0.05;
     const isLocked = timelineState.mode === 'audio_locked';
-    const audioDur = timelineState.masterAudioBuffer?.duration;
+    const isManualResync = options.reason === 'user-action';
+    const shouldCloseGaps = isManualResync || timelineState.editMode === 'ripple';
+    const audioSegs = timelineState.audioSegments || [];
+    const audioDur = (timelineState.audioSegmentsInitialized && audioSegs.length > 0)
+      ? audioSegs.reduce((m, s) => Math.max(m, s.endTime ?? 0), 0)
+      : (timelineState.audioSegmentsInitialized && audioSegs.length === 0)
+        ? 0
+        : timelineState.masterAudioBuffer?.duration;
     const hasAudio = typeof audioDur === 'number' && Number.isFinite(audioDur) && audioDur > 0;
     const targetAudioDur = hasAudio ? audioDur : undefined;
 
@@ -314,9 +321,9 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       };
     }
 
-    // 1. Ensure clip 0 starts at 0 ONLY in Ripple or Audio Locked mode
+    // 1. Ensure clip 0 starts at 0 ONLY when closing gaps (Ripple or explicit user Resync)
     if (Math.abs((sorted[0].startTime ?? 0) - 0) > 0.0001) {
-      if (isLocked || timelineState.editMode === 'ripple') {
+      if (shouldCloseGaps && (isLocked || timelineState.editMode === 'ripple')) {
         sorted[0].startTime = 0;
         fixedGaps++;
         adjustedClips++;
@@ -326,15 +333,15 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
     sorted[0].endTime = sorted[0].startTime + sorted[0].duration;
 
     // 2. Reconcile sequential continuity WITHOUT crushing overlapped shots into 0.05s flashes
-    // In Ripple / Audio Locked mode: close gaps and align shots back-to-back
-    // In Lift Mode: preserve intentional gaps between shots
+    // In Ripple mode (or explicit Resync): close gaps and align shots back-to-back
+    // In Lift Mode: preserve intentional gaps between shots even in audio_locked projects
     let i = 1;
     while (i < sorted.length) {
       const prev = sorted[i - 1];
       const cur = sorted[i];
       const expectedStart = prev.endTime;
 
-      if (isLocked && cur.startTime < expectedStart - 0.001) {
+      if (isLocked && shouldCloseGaps && cur.startTime < expectedStart - 0.001) {
         // OVERLAP DETECTED in audio_locked mode
         let k = i;
         while (k < sorted.length && (sorted[k].endTime ?? 0) <= expectedStart + minDuration * (k - i + 1)) {
@@ -370,7 +377,7 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       if (Math.abs((cur.startTime ?? 0) - expectedStart) > 0.0001) {
         if (cur.startTime < expectedStart - 0.001) {
           // OVERLAP DETECTED
-          if (isLocked || timelineState.editMode === 'ripple') {
+          if (shouldCloseGaps && (isLocked || timelineState.editMode === 'ripple')) {
             cur.startTime = expectedStart;
             cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
             cur.endTime = cur.startTime + cur.duration;
@@ -382,19 +389,24 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
               prev.endTime = cur.startTime;
               prev.duration = Math.max(minDuration, prev.endTime - prev.startTime);
               adjustedClips++;
+            } else {
+              cur.startTime = expectedStart;
+              cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
+              cur.endTime = cur.startTime + cur.duration;
+              adjustedClips++;
             }
           }
         } else if (cur.startTime > expectedStart + 0.001) {
           // GAP DETECTED
-          if (isLocked || timelineState.editMode === 'ripple') {
-            // Ripple or Audio Locked mode: close gap
+          if (shouldCloseGaps && (isLocked || timelineState.editMode === 'ripple')) {
+            // Ripple mode or manual Resync: close gap
             cur.startTime = expectedStart;
             cur.duration = Math.max(minDuration, Number.isFinite(cur.duration) ? cur.duration : minDuration);
             cur.endTime = cur.startTime + cur.duration;
             fixedGaps++;
             adjustedClips++;
           } else {
-            // Free Pacing + Lift Mode: PRESERVE INTENTIONAL GAPS!
+            // Lift Mode (or Free Pacing): PRESERVE INTENTIONAL GAPS!
             cur.duration = Math.max(minDuration, (cur.endTime ?? (cur.startTime + minDuration)) - cur.startTime);
             cur.endTime = cur.startTime + cur.duration;
           }
@@ -406,8 +418,8 @@ export function resyncTimeline(options: { notify?: boolean; reason?: string; ski
       i++;
     }
 
-    // 3. Reconcile with Master Audio Buffer (if present)
-    if (targetAudioDur !== undefined && sorted.length > 0) {
+    // 3. Reconcile with Master Audio Buffer ONLY when closing gaps in audio_locked / manual resync
+    if (targetAudioDur !== undefined && sorted.length > 0 && shouldCloseGaps && (isLocked || isManualResync)) {
       const lastEnd = sorted[sorted.length - 1].endTime;
       if (lastEnd > targetAudioDur + 0.05) {
         // Compress tail proportionally if clips overshot master audio instead of deleting shots
@@ -725,8 +737,8 @@ export function handleTimelineMouseDown(e: MouseEvent) {
       if (selClip) multiDragOriginalStarts.set(selId, selClip.startTime ?? 0);
     }
 
-    // Only initiate timing dragging if unlocked, OR if in slip mode (which slips offset without shifting timing)
-    if (!isLocked || timelineState.editMode === 'slip') {
+    // Allow timing dragging in Free mode, Lift mode, or Slip mode (and PiP overlays)
+    if (!isLocked || timelineState.editMode === 'lift' || timelineState.editMode === 'slip' || clip.displayMode === 'pip_overlay') {
       // Save pre-drag state BEFORE any mousemove mutation occurs
       timelineState.saveSnapshot();
 
@@ -1149,7 +1161,29 @@ function handleTimelineMouseMove(e: MouseEvent) {
     const cur = findClipById(sorted[idx].id);
     if (!cur) return;
 
-    if (isLocked) {
+    if (editMode === 'slip') {
+      // Slip mode: keep timeline position and duration fixed, shift sourceIn (videoStartOffset)
+      const maxMediaDur = cur.videoElement?.duration;
+      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
+      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
+        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
+      }
+      cur.videoStartOffset = newOffset;
+      cur.sourceIn = newOffset;
+      cur.sourceOut = newOffset + cur.duration;
+    } else if (editMode === 'lift') {
+      // Lift trim right: change endTime without shifting downstream clips (leaves intentional gap)
+      let targetEndTime = originalEndTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
+      }
+      const nextStart = sorted[idx + 1] ? originalStartTimes[idx + 1] : Infinity;
+      const clampedEnd = Math.max(originalStartTimes[idx] + minDuration, Math.min(targetEndTime, nextStart));
+      cur.endTime = clampedEnd;
+      cur.duration = cur.endTime - cur.startTime;
+      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else if (isLocked) {
       const next = sorted[idx + 1] ? findClipById(sorted[idx + 1].id) : null;
       if (!next) return;
 
@@ -1173,28 +1207,6 @@ function handleTimelineMouseMove(e: MouseEvent) {
 
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
       updateClipDOM(next.id, next.startTime, next.endTime);
-    } else if (editMode === 'slip') {
-      // Slip mode: keep timeline position and duration fixed, shift sourceIn (videoStartOffset)
-      const maxMediaDur = cur.videoElement?.duration;
-      let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
-      if (isNum(maxMediaDur) && maxMediaDur > cur.duration) {
-        newOffset = Math.min(newOffset, maxMediaDur - cur.duration);
-      }
-      cur.videoStartOffset = newOffset;
-      cur.sourceIn = newOffset;
-      cur.sourceOut = newOffset + cur.duration;
-    } else if (editMode === 'lift') {
-      // Lift trim right: change endTime without shifting downstream clips
-      let targetEndTime = originalEndTimes[idx] + deltaDuration;
-      if (timelineState.snappingEnabled) {
-        targetEndTime = getSnappedTime(targetEndTime, cachedDragSnapPoints);
-      }
-      const nextStart = sorted[idx + 1] ? originalStartTimes[idx + 1] : Infinity;
-      const clampedEnd = Math.max(originalStartTimes[idx] + minDuration, Math.min(targetEndTime, nextStart));
-      cur.endTime = clampedEnd;
-      cur.duration = cur.endTime - cur.startTime;
-      cur.sourceOut = (cur.videoStartOffset || 0) + cur.duration;
-      updateClipDOM(cur.id, cur.startTime, cur.endTime);
     } else {
       // Ripple trim right: shift downstream clips by exact delta (preserving relative gaps)
       let targetEndTime = originalEndTimes[idx] + deltaDuration;
@@ -1220,30 +1232,7 @@ function handleTimelineMouseMove(e: MouseEvent) {
     const cur = findClipById(sorted[idx].id);
     if (!cur) return;
 
-    if (isLocked) {
-      const prev = sorted[idx - 1] ? findClipById(sorted[idx - 1].id) : null;
-      if (!prev) return;
-
-      const minNewStartTime = originalStartTimes[idx - 1] + minDuration;
-      const maxNewStartTime = originalEndTimes[idx] - minDuration;
-      let rawNewStartTime = originalStartTimes[idx] + deltaDuration;
-      if (timelineState.snappingEnabled) {
-        rawNewStartTime = getSnappedTime(rawNewStartTime, cachedDragSnapPoints);
-      }
-      const newStartTime = Math.max(minNewStartTime, Math.min(rawNewStartTime, maxNewStartTime));
-      const shift = newStartTime - originalStartTimes[idx];
-
-      prev.startTime = originalStartTimes[idx - 1];
-      prev.endTime = newStartTime;
-      prev.duration = prev.endTime - prev.startTime;
-      cur.startTime = newStartTime;
-      cur.endTime = originalEndTimes[idx];
-      cur.duration = cur.endTime - cur.startTime;
-      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
-
-      updateClipDOM(prev.id, prev.startTime, prev.endTime);
-      updateClipDOM(cur.id, cur.startTime, cur.endTime);
-    } else if (editMode === 'slip') {
+    if (editMode === 'slip') {
       // Slip mode: shift sourceIn (videoStartOffset) without moving clip boundaries
       const maxMediaDur = cur.videoElement?.duration;
       let newOffset = Math.max(0, originalVideoStartOffsets[idx] - deltaDuration);
@@ -1269,6 +1258,29 @@ function handleTimelineMouseMove(e: MouseEvent) {
       cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
       cur.sourceIn = cur.videoStartOffset;
       cur.sourceOut = cur.videoStartOffset + cur.duration;
+      updateClipDOM(cur.id, cur.startTime, cur.endTime);
+    } else if (isLocked) {
+      const prev = sorted[idx - 1] ? findClipById(sorted[idx - 1].id) : null;
+      if (!prev) return;
+
+      const minNewStartTime = originalStartTimes[idx - 1] + minDuration;
+      const maxNewStartTime = originalEndTimes[idx] - minDuration;
+      let rawNewStartTime = originalStartTimes[idx] + deltaDuration;
+      if (timelineState.snappingEnabled) {
+        rawNewStartTime = getSnappedTime(rawNewStartTime, cachedDragSnapPoints);
+      }
+      const newStartTime = Math.max(minNewStartTime, Math.min(rawNewStartTime, maxNewStartTime));
+      const shift = newStartTime - originalStartTimes[idx];
+
+      prev.startTime = originalStartTimes[idx - 1];
+      prev.endTime = newStartTime;
+      prev.duration = prev.endTime - prev.startTime;
+      cur.startTime = newStartTime;
+      cur.endTime = originalEndTimes[idx];
+      cur.duration = cur.endTime - cur.startTime;
+      cur.videoStartOffset = Math.max(0, originalVideoStartOffsets[idx] + shift);
+
+      updateClipDOM(prev.id, prev.startTime, prev.endTime);
       updateClipDOM(cur.id, cur.startTime, cur.endTime);
     } else {
       // Ripple trim left: keep startTime anchored, trim sourceIn, and ripple downstream clips
@@ -1420,12 +1432,12 @@ function handleTimelineMouseUp() {
   scheduleFullQualityRedraw();
 
   if (originalStartTimes.length > 0) {
-    if (timelineState.mode === 'audio_locked') {
+    if (timelineState.mode === 'audio_locked' && timelineState.editMode === 'ripple' && !timelineState.linkedAudioEdit) {
       resyncTimeline({ notify: false, reason: 'mouse-up' });
     } else {
-      // If user ripple-trimmed a clip via mouse handle with Linked Audio ON, splice the removed audio range
+      // If user trimmed a clip via mouse handle with Linked Audio ON, cut the corresponding audio span on A1
       if (
-        timelineState.editMode === 'ripple' &&
+        (timelineState.editMode === 'ripple' || timelineState.editMode === 'lift') &&
         timelineState.linkedAudioEdit &&
         timelineState.masterAudioBuffer &&
         finishedResizeClipId
@@ -1433,7 +1445,7 @@ function handleTimelineMouseUp() {
         const sortedBefore = getSortedTimeline();
         const rIdx = sortedBefore.findIndex(c => c.id === finishedResizeClipId);
         const curClip = findClipById(finishedResizeClipId);
-        if (rIdx !== -1 && curClip) {
+        if (rIdx !== -1 && curClip && curClip.displayMode !== 'pip_overlay') {
           const oldStart = originalStartTimes[rIdx];
           const oldEnd = originalEndTimes[rIdx];
           const oldDur = oldEnd - oldStart;
@@ -1442,7 +1454,7 @@ function handleTimelineMouseUp() {
           if (trimmedSec >= 0.05) {
             const cutStart = finishedResizeEdge === 'left' ? oldStart : oldEnd - trimmedSec;
             const cutEnd = finishedResizeEdge === 'left' ? oldStart + trimmedSec : oldEnd;
-            rippleCutMasterAudio(cutStart, cutEnd);
+            cutMasterAudioSpan(cutStart, cutEnd, timelineState.editMode === 'ripple');
           }
         }
       }
@@ -1497,9 +1509,9 @@ export function updateVideoContext(skipUIRender = false) {
 
   state.videoPauseTime = Math.max(0, Math.min(state.videoPauseTime, totalDuration));
 
-  // Only auto-normalize when in audio_locked mode; in free mode, preserve exact user clip positions & gaps
+  // Only auto-normalize when in audio_locked + ripple mode; in lift/slip/free modes, preserve exact user clip positions & gaps
   const isLocked = timelineState.mode === 'audio_locked';
-  if (isLocked) {
+  if (isLocked && timelineState.editMode === 'ripple') {
     normalizeTimeline(totalDuration, true);
   }
 
@@ -2062,9 +2074,16 @@ export async function handleOpenVideoDirector() {
       timelineState.setVideoGenerated(true);
       if (dom.videoPreGenerationOverlay) dom.videoPreGenerationOverlay.classList.add('hidden');
   }
+  const shotIdSet = new Set(allShots.map((s: any) => s.id).filter(Boolean));
+  const hasMatchingStoryboardClips = (timelineState.clips || []).some((c: any) => {
+      if (!c?.id || c.id === 'aroll-full') return false;
+      if (shotIdSet.has(c.id)) return true;
+      const baseId = String(c.id).split('_split_')[0];
+      return shotIdSet.has(baseId);
+  });
   const isSeedOnly = (timelineState.clips?.length <= 1
       && (timelineState.clips?.[0]?.id === 'aroll-full' || timelineState.clips?.length === 0))
-      || (hasShots && timelineState.clips?.length !== allShots.length);
+      || (hasShots && !hasMatchingStoryboardClips);
   
   if (isSeedOnly && hasShots && timelineState.masterAudioBuffer && timelineState.globalWordTimestamps?.length) {
       const { buildTimelineFromShotsWithAudio } = await import('./audio-upload-director');
@@ -3771,138 +3790,76 @@ export function handleDeleteClip(options: { deleteAudio?: boolean; clipId?: stri
     }
     
     targetClip = timelineState.clips[targetIndex];
+    const isPipTarget = targetClip.displayMode === 'pip_overlay';
     const removeStart = targetClip.startTime ?? 0;
     const removeEnd = targetClip.endTime ?? (removeStart + targetClip.duration);
     const durationRemoved = Math.max(0.01, removeEnd - removeStart);
 
-    const isRipple = timelineState.editMode === 'ripple' || Boolean(options.deleteAudio);
-    const shouldDeleteAudio = Boolean(options.deleteAudio ?? (isRipple && timelineState.linkedAudioEdit));
-    
+    const isRipple = timelineState.editMode === 'ripple';
+    const shouldDeleteAudio = !isPipTarget && Boolean(options.deleteAudio ?? timelineState.linkedAudioEdit);
+
     forcePausePlayback();
     timelineState.saveSnapshot();
-    
-    // Splice master audio ONLY if shouldDeleteAudio is true
-    if (shouldDeleteAudio && timelineState.masterAudioBuffer && durationRemoved > 0.01) {
-        const oldAudio = timelineState.masterAudioBuffer;
-        const newAudio = spliceAudioBuffer(oldAudio, removeStart, removeEnd);
-        timelineState.setMasterAudioBuffer(newAudio);
-        state.uploadedAudioBuffer = newAudio;
 
-        if (timelineState.audioSegmentsInitialized) {
-            const segments = [...timelineState.ensureAudioSegments()];
-            const updatedSegments: AudioSegment[] = [];
-            for (const seg of segments) {
-                if (seg.endTime <= removeStart + 0.01) {
-                    updatedSegments.push(seg);
-                } else if (seg.startTime >= removeEnd - 0.01) {
-                    if (isRipple) {
-                        updatedSegments.push({
-                            ...seg,
-                            startTime: Math.max(0, seg.startTime - durationRemoved),
-                            endTime: Math.max(0.05, seg.endTime - durationRemoved),
-                        });
-                    } else {
-                        updatedSegments.push(seg);
-                    }
-                } else {
-                    // Segment intersects deleted range
-                    if (seg.startTime < removeStart - 0.02 && seg.endTime > removeEnd + 0.02) {
-                        updatedSegments.push({
-                            ...seg,
-                            endTime: removeStart,
-                            duration: removeStart - seg.startTime,
-                            sourceOut: seg.sourceIn + (removeStart - seg.startTime),
-                        });
-                        const rightSegStart = isRipple ? removeStart : removeEnd;
-                        updatedSegments.push({
-                            ...seg,
-                            id: `${seg.id}_cut`,
-                            startTime: rightSegStart,
-                            endTime: rightSegStart + (seg.endTime - removeEnd),
-                            duration: seg.endTime - removeEnd,
-                            sourceIn: seg.sourceIn + (removeEnd - seg.startTime),
-                            sourceOut: seg.sourceOut,
-                        });
-                    } else if (seg.startTime < removeStart - 0.02) {
-                        updatedSegments.push({
-                            ...seg,
-                            endTime: removeStart,
-                            duration: removeStart - seg.startTime,
-                            sourceOut: seg.sourceIn + (removeStart - seg.startTime),
-                        });
-                    } else if (seg.endTime > removeEnd + 0.02) {
-                        const rightSegStart = isRipple ? removeStart : removeEnd;
-                        updatedSegments.push({
-                            ...seg,
-                            startTime: rightSegStart,
-                            endTime: rightSegStart + (seg.endTime - removeEnd),
-                            duration: seg.endTime - removeEnd,
-                            sourceIn: seg.sourceIn + (removeEnd - seg.startTime),
-                            sourceOut: seg.sourceOut,
-                        });
-                    }
-                }
-            }
-            timelineState.setAudioSegments(updatedSegments, false);
-        }
-        
-        if (timelineState.globalWordTimestamps && timelineState.globalWordTimestamps.length > 0) {
-            const updatedWords = timelineState.globalWordTimestamps
-                .filter((w: any) => w.end <= removeStart || w.start >= removeEnd)
-                .map((w: any) => {
-                    if (w.start >= removeEnd) {
-                        return {
-                            ...w,
-                            start: Math.max(0, w.start - durationRemoved),
-                            end: Math.max(0, w.end - durationRemoved)
-                        };
-                    }
-                    return w;
-                });
-            timelineState.setGlobalWordTimestamps(updatedWords);
-        }
-        timelineState.setGlobalSilences(null);
+    // Non-destructively cut the corresponding span on Track A1 if Linked Audio is active (or Shift+Delete)
+    if (shouldDeleteAudio && timelineState.masterAudioBuffer && durationRemoved > 0.01) {
+        cutMasterAudioSpan(removeStart, removeEnd, isRipple);
     }
-    
+
     // Remove clip
     const newClips = [...timelineState.clips];
     newClips.splice(targetIndex, 1);
     if (targetClip._videoObjectURL) {
         try { URL.revokeObjectURL(targetClip._videoObjectURL); } catch {}
     }
-    
-    // Shift subsequent visual clips ONLY in Ripple mode; Lift mode leaves the gap intact
-    if (isRipple) {
-        for (let i = targetIndex; i < newClips.length; i++) {
-            if (newClips[i].displayMode === 'pip_overlay') continue;
-            newClips[i].startTime = Math.max(0, newClips[i].startTime - durationRemoved);
-            newClips[i].endTime = Math.max(0.05, newClips[i].endTime - durationRemoved);
-            newClips[i].duration = Math.max(0.05, newClips[i].endTime - newClips[i].startTime);
+
+    // Shift subsequent main-track clips ONLY in Ripple mode when deleting a main-track clip;
+    // Lift mode (or PiP overlay deletion) leaves downstream clip timestamps intact.
+    if (isRipple && !isPipTarget) {
+        for (let i = 0; i < newClips.length; i++) {
+            const c = newClips[i];
+            if (c.displayMode === 'pip_overlay') continue;
+            if ((c.startTime ?? 0) >= removeEnd - 0.01) {
+                c.startTime = Math.max(0, c.startTime - durationRemoved);
+                c.endTime = Math.max(c.startTime + 0.05, c.endTime - durationRemoved);
+                c.duration = Math.max(0.05, c.endTime - c.startTime);
+            }
         }
     }
-    
+
     timelineState.setSelectedClipId(null);
     timelineState.setClips(newClips, false);
-    
-    if (isRipple && state.videoPauseTime >= removeStart) {
+
+    if (isRipple && !isPipTarget && state.videoPauseTime >= removeStart) {
         state.videoPauseTime = Math.max(0, Math.min(removeStart, state.videoPauseTime - durationRemoved));
     }
-    
+
     try { SubtitleEngine.clearBitmapCache(); } catch {}
     try { invalidateSpectrumCache(); } catch {}
     refreshPerClipWordTimestamps();
     updateVideoContext();
+    ui.renderTimelineEditor();
     if (!state.isVideoPlaying && videoRenderContext) {
         drawVideoFrame(state.videoPauseTime);
         ui.updateVideoTime(state.videoPauseTime, videoRenderContext.totalDuration);
     }
-    
-    if (shouldDeleteAudio) {
-        ui.showStatus(`Ripple deleted ${durationRemoved.toFixed(1)}s (Shot + Master Audio).`, false, 2500);
-    } else if (isRipple) {
-        ui.showStatus(`Ripple deleted shot (${newClips.length} remaining, audio preserved).`, false, 2000);
+
+    if (isRipple) {
+        ui.showStatus(
+            shouldDeleteAudio
+                ? `🗑️ Ripple deleted ${durationRemoved.toFixed(1)}s (Shot + Linked Audio).`
+                : `🗑️ Ripple deleted shot (${newClips.length} remaining, audio preserved).`,
+            false,
+            2200
+        );
     } else {
-        ui.showStatus(`Lift deleted shot (gap preserved).`, false, 2000);
+        ui.showStatus(
+            shouldDeleteAudio
+                ? `🗑️ Lift deleted ${durationRemoved.toFixed(1)}s (Shot + Linked Audio gap preserved).`
+                : `🗑️ Lift deleted shot (${durationRemoved.toFixed(1)}s gap preserved).`,
+            false,
+            2200
+        );
     }
 }
 
@@ -4030,55 +3987,109 @@ export function handleTrimDeadAir() {
  * video but leaves this buffer - and therefore the exported voice track - at
  * full length, which is the "audio isnt cut" symptom.
  */
-export function rippleCutMasterAudio(removeStartSec: number, removeEndSec: number): number | null {
+/**
+ * Non-destructively cuts a timeline range `[removeStartSec, removeEndSec]` out of Track A1's
+ * AudioSegments:
+ * - When `isRipple === true`: closes the gap by shifting downstream segments left by `removed`.
+ * - When `isRipple === false` (Lift mode): leaves an open silent gap on Track A1 while preserving
+ *   downstream segment start times and sourceIn alignment.
+ *
+ * Because preview (`syncPreviewMasterAudioAtTime`), export (`extractTimelineAudioMixdown` and
+ * `segmented-exporter`), and subtitle projection (`getTimelineWordTimestamps`) all project
+ * through `timelineState.audioSegments`, keeping `masterAudioBuffer` and `globalWordTimestamps`
+ * immutable prevents double-offset desync and makes Undo/Redo instantaneous and 100% lossless.
+ */
+export function cutMasterAudioSpan(
+    removeStartSec: number,
+    removeEndSec: number,
+    isRipple: boolean = true
+): number | null {
     removeStartSec = Math.max(0, removeStartSec);
     removeEndSec = Math.max(removeStartSec, removeEndSec);
     const removed = removeEndSec - removeStartSec;
-    if (removed < 0.05) return null;
+    if (removed < 0.03) return null;
 
     const buffer = timelineState.masterAudioBuffer;
     if (!buffer) return null;
 
     forcePausePlayback();
 
-    const newBuffer = spliceAudioBuffer(buffer, removeStartSec, removeEndSec);
-    timelineState.setMasterAudioBuffer(newBuffer);
-    state.uploadedAudioBuffer = newBuffer;      // keep preview/on-canvas state in sync (same pattern as handleTrimDeadAir)
-    if (typeof timelineState.setGlobalSilences === 'function') {
-        timelineState.setGlobalSilences(null);  // stale silences no longer map to the spliced track
-    } else {
-        (timelineState as any).globalSilences = null;
+    const segments = [...timelineState.ensureAudioSegments()];
+    const updatedSegments: AudioSegment[] = [];
+
+    for (const seg of segments) {
+        if (seg.endTime <= removeStartSec + 0.01) {
+            updatedSegments.push({ ...seg });
+        } else if (seg.startTime >= removeEndSec - 0.01) {
+            if (isRipple) {
+                updatedSegments.push({
+                    ...seg,
+                    startTime: Math.max(0, seg.startTime - removed),
+                    endTime: Math.max(0.05, seg.endTime - removed),
+                });
+            } else {
+                updatedSegments.push({ ...seg });
+            }
+        } else {
+            // Segment intersects [removeStartSec, removeEndSec]
+            if (seg.startTime < removeStartSec - 0.02 && seg.endTime > removeEndSec + 0.02) {
+                const leftDur = removeStartSec - seg.startTime;
+                updatedSegments.push({
+                    ...seg,
+                    endTime: removeStartSec,
+                    duration: leftDur,
+                    sourceOut: seg.sourceIn + leftDur,
+                });
+                const rightDur = seg.endTime - removeEndSec;
+                const rightSegStart = isRipple ? removeStartSec : removeEndSec;
+                const cutOffsetFromSegStart = removeEndSec - seg.startTime;
+                updatedSegments.push({
+                    ...seg,
+                    id: `${seg.id}_cut_${Math.round(removeEndSec * 1000)}`,
+                    startTime: rightSegStart,
+                    endTime: rightSegStart + rightDur,
+                    duration: rightDur,
+                    sourceIn: seg.sourceIn + cutOffsetFromSegStart,
+                    sourceOut: seg.sourceOut,
+                });
+            } else if (seg.startTime < removeStartSec - 0.02) {
+                const leftDur = removeStartSec - seg.startTime;
+                updatedSegments.push({
+                    ...seg,
+                    endTime: removeStartSec,
+                    duration: leftDur,
+                    sourceOut: seg.sourceIn + leftDur,
+                });
+            } else if (seg.endTime > removeEndSec + 0.02) {
+                const rightDur = seg.endTime - removeEndSec;
+                const rightSegStart = isRipple ? removeStartSec : removeEndSec;
+                const cutOffsetFromSegStart = removeEndSec - seg.startTime;
+                updatedSegments.push({
+                    ...seg,
+                    startTime: rightSegStart,
+                    endTime: rightSegStart + rightDur,
+                    duration: rightDur,
+                    sourceIn: seg.sourceIn + cutOffsetFromSegStart,
+                    sourceOut: seg.sourceOut,
+                });
+            }
+        }
     }
 
-    if (timelineState.globalWordTimestamps?.length) {
-        const updated = timelineState.globalWordTimestamps
-            .map((w: any) => {
-                if (!w) return null;
-                if (w.end <= removeStartSec) return w;                                        // fully before the cut: unchanged
-                if (w.start >= removeEndSec) {
-                    return { ...w, start: Math.max(0, w.start - removed), end: Math.max(0, w.end - removed) }; // after the cut: close the gap
-                }
-                return null;                                                                   // speech inside the cut span: dropped
-            })
-            .filter(Boolean);
-        timelineState.setGlobalWordTimestamps(updated);
-    }
-
-    if (timelineState.mode === 'audio_locked') {
-        resyncTimeline({ notify: false, reason: 'rippleCutMasterAudio' });
-    } else {
-        refreshPerClipWordTimestamps();
-    }
+    timelineState.setAudioSegments(updatedSegments, false);
+    refreshPerClipWordTimestamps();
+    try { SubtitleEngine.clearBitmapCache(); } catch {}
+    try { invalidateSpectrumCache(); } catch {}
     return removed;
+}
+
+export function rippleCutMasterAudio(removeStartSec: number, removeEndSec: number): number | null {
+    return cutMasterAudioSpan(removeStartSec, removeEndSec, true);
 }
 
 export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolean; linkedAudio?: boolean } = {}) {
     if (!timelineState.videoGenerated || !videoRenderContext) {
         ui.showStatus("Production not run.", true, 3000);
-        return;
-    }
-    if (timelineState.mode === 'audio_locked') {
-        ui.showStatus('Trimming not available in Audio-Locked mode.', true, 2000);
         return;
     }
 
@@ -4096,6 +4107,7 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
     const newClips = [...timelineState.clips];
     const clip = { ...newClips[clipIndex] };
     newClips[clipIndex] = clip;
+    const isPipClip = clip.displayMode === 'pip_overlay';
     const oldStartTime = clip.startTime ?? 0;
     const oldEndTime = clip.endTime ?? (clip.startTime ?? 0) + clip.duration;
 
@@ -4110,6 +4122,8 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
         clip.startTime = time;
         clip.duration = Math.max(0, clip.duration - amountToTrim);
         clip.videoStartOffset = (clip.videoStartOffset || 0) + amountToTrim;
+        clip.sourceIn = clip.videoStartOffset;
+        clip.sourceOut = clip.videoStartOffset + clip.duration;
         clip.endTime = oldEndTime;
         audioRemoveStart = oldStartTime;
         audioRemoveEnd = time;
@@ -4119,6 +4133,7 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
 
         clip.duration = Math.max(0, clip.duration - amountToTrim);
         clip.endTime = time;
+        clip.sourceOut = (clip.videoStartOffset || 0) + clip.duration;
         audioRemoveStart = time;
         audioRemoveEnd = oldEndTime;
     }
@@ -4131,14 +4146,17 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
         audioRemoveEnd = oldEndTime;
     }
 
-    // Ripple downstream visual clips only if ripple mode is enabled
-    if (useRipple && amountToTrim > 0) {
-        const shiftStartIdx = clipRemoved ? clipIndex : clipIndex + 1;
-        for (let i = shiftStartIdx; i < newClips.length; i++) {
-            const c = { ...newClips[i] };
-            c.startTime = Math.max(0, (c.startTime ?? 0) - amountToTrim);
-            c.endTime = Math.max((c.startTime ?? 0) + 0.05, (c.endTime ?? (c.startTime ?? 0)) - amountToTrim);
-            newClips[i] = c;
+    // Ripple downstream visual clips only if ripple mode is enabled and clip is on main track
+    if (useRipple && !isPipClip && amountToTrim > 0) {
+        for (let i = 0; i < newClips.length; i++) {
+            const c = newClips[i];
+            if (c.id === clip.id || c.displayMode === 'pip_overlay') continue;
+            if ((c.startTime ?? 0) >= oldEndTime - 0.01) {
+                const updated = { ...c };
+                updated.startTime = Math.max(0, (updated.startTime ?? 0) - amountToTrim);
+                updated.endTime = Math.max((updated.startTime ?? 0) + 0.05, (updated.endTime ?? (updated.startTime ?? 0)) - amountToTrim);
+                newClips[i] = updated;
+            }
         }
         if (edge === 'start' && !clipRemoved) {
             clip.startTime = oldStartTime;
@@ -4147,9 +4165,9 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
         }
     }
 
-    // Only cut master audio if linkedAudio is explicitly enabled and ripple mode is active
-    if (useRipple && useLinkedAudio && timelineState.masterAudioBuffer) {
-        rippleCutMasterAudio(audioRemoveStart, audioRemoveEnd);
+    // Cut master audio on Track A1 if linkedAudio is enabled (supports both Ripple and Lift trim)
+    if (!isPipClip && useLinkedAudio && timelineState.masterAudioBuffer) {
+        cutMasterAudioSpan(audioRemoveStart, audioRemoveEnd, useRipple);
     }
 
     timelineState.setClips(newClips, false);
@@ -4166,7 +4184,7 @@ export function handleTrimClip(edge: 'start' | 'end', options: { ripple?: boolea
     } else {
         const modeLabel = useRipple
             ? (useLinkedAudio ? 'Ripple trim (audio linked)' : 'Ripple trim (visual only)')
-            : 'Lift trim (gap preserved)';
+            : (useLinkedAudio ? 'Lift trim (video + audio gap preserved)' : 'Lift trim (gap preserved)');
         ui.showStatus(`Trimmed ${amountToTrim.toFixed(2)}s [${modeLabel}].`, false, 2000);
     }
 }

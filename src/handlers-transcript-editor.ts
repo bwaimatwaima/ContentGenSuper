@@ -99,6 +99,11 @@ export function handleOpenTranscriptEditor() {
         dom.videoDirectorModal.classList.remove('hidden');
     }
     dom.videoDirectorMainView.classList.add('hidden');
+    const vsShell = document.getElementById('vs-director-shell');
+    if (vsShell) vsShell.classList.add('hidden');
+    if (dom.timelineEditorContainer) {
+        dom.timelineEditorContainer.classList.add('hidden');
+    }
     dom.transcriptEditorWorkspace.classList.remove('hidden');
 
     // Bind scroll buttons
@@ -169,8 +174,16 @@ export function handleOpenTranscriptEditor() {
 }
 
 export function handleCloseTranscriptEditor() {
-    dom.videoDirectorMainView.classList.remove('hidden');
     dom.transcriptEditorWorkspace.classList.add('hidden');
+    const vsShell = document.getElementById('vs-director-shell');
+    if (vsShell) {
+        vsShell.classList.remove('hidden');
+    } else {
+        dom.videoDirectorMainView.classList.remove('hidden');
+    }
+    if (dom.timelineEditorContainer && timelineState.drawerUserOpen) {
+        dom.timelineEditorContainer.classList.remove('hidden');
+    }
     ui.closeTranscriptEditor();
     
     if (keydownHandler) {

@@ -735,9 +735,9 @@ export const MODAL_TEMPLATES = `
         </div>
 
         <!-- Main Workspace -->
-        <div class="flex flex-grow overflow-hidden relative">
+        <div class="flex flex-grow min-h-0 overflow-hidden relative">
             <!-- Left: Video Preview & Dedicated Timeline Column -->
-            <div class="flex-grow flex flex-col min-w-0 h-full overflow-hidden relative">
+            <div class="flex-grow flex flex-col min-w-0 min-h-0 h-full overflow-hidden relative">
                 <!-- Video Preview Viewport Container -->
                 <div id="video-preview-container-area" class="flex-grow flex items-center justify-center min-w-0 min-h-0 w-full h-full p-2 sm:p-4 relative overflow-hidden bg-zinc-950 select-none">
                     <div id="video-preview-wrapper" class="relative bg-black cursor-pointer group overflow-hidden shadow-2xl rounded-xl flex items-center justify-center border border-white/10 transition-all duration-150">
@@ -860,8 +860,8 @@ export const MODAL_TEMPLATES = `
                 </div>
 
                 <!-- Dedicated Timeline Drawer (Flex Sibling below Preview) -->
-                <div id="timeline-editor-container" class="w-full shrink-0 z-30 bg-[#0d0d12]/95 backdrop-blur-2xl border-t border-indigo-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] transition-all duration-300 hidden flex-col max-h-[480px]">
-                    <div class="flex items-center justify-between bg-[#111218] border-b border-white/10 px-2 sm:px-3 py-1.5 shrink-0 gap-2.5 select-none relative z-40 overflow-x-auto custom-scrollbar no-scrollbar w-full">
+                <div id="timeline-editor-container" class="w-full shrink-0 z-30 bg-[#0d0d12]/95 backdrop-blur-2xl border-t border-indigo-500/30 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] transition-all duration-300 hidden flex flex-col max-h-[480px] overflow-visible">
+                    <div class="flex items-center justify-between flex-wrap bg-[#111218] border-b border-white/10 px-2 sm:px-3 py-1.5 shrink-0 gap-x-2 gap-y-1.5 select-none relative z-40 overflow-visible w-full">
                         <!-- ZONE 1: Left - Sequence Info, Prominent ⚡ AI Director Hub & Media Insertion -->
                         <div class="flex items-center gap-1.5 shrink-0">
                             <button id="collapse-timeline-btn" class="px-1.5 py-1 hover:bg-white/10 text-zinc-300 hover:text-amber-400 rounded-md transition-colors text-xs flex items-center gap-1 font-bold cursor-pointer shrink-0" title="Expand/Collapse Timeline Track">
@@ -1098,7 +1098,7 @@ export const MODAL_TEMPLATES = `
                                 </button>
                                 <div class="flex items-center bg-zinc-950/80 border border-white/10 rounded-md p-0.5 shrink-0 shadow-inner">
                                     <button id="timeline-mode-ripple" title="Ripple Edit Mode (R)" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-zinc-800 text-white rounded transition-colors cursor-pointer shrink-0">R</button>
-                                    <button id="timeline-mode-lift" title="Lift Edit Mode" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">L</button>
+                                    <button id="timeline-mode-lift" title="Lift / Overwrite Edit Mode (Y)" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">L</button>
                                     <button id="timeline-mode-slip" title="Slip Edit Mode (T)" class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-white rounded hover:bg-white/5 transition-colors cursor-pointer shrink-0">S</button>
                                 </div>
                                 <button id="timeline-link-audio-toggle" title="Toggle Linked Audio Editing (Synchronize video trims/deletes with master narration)" class="p-1 px-1.5 text-[11px] font-bold bg-zinc-800 hover:bg-zinc-700 text-gray-400 hover:text-white border border-white/10 rounded-md transition-all flex items-center justify-center cursor-pointer shrink-0 shadow-xs">
@@ -1132,7 +1132,26 @@ export const MODAL_TEMPLATES = `
                             </div>
                         </div>
                     </div>
-                    <div id="timeline-clips-container" class="flex-grow flex w-full min-h-0 overflow-hidden p-0 bg-black/60 relative"></div>
+                    <div id="timeline-clips-container" class="flex-1 flex w-full min-h-0 overflow-hidden p-0 bg-black/60 relative"></div>
+                    <div id="timeline-bottom-scrubber-bar" class="flex items-center justify-between gap-4 px-3 py-1.5 min-h-[32px] bg-[#11131d] border-t border-indigo-500/25 text-[10px] text-zinc-300 shrink-0 select-none z-30">
+                        <div class="flex items-center gap-2.5 flex-grow max-w-xl">
+                            <span class="font-mono uppercase tracking-wider text-[10px] text-indigo-300 font-semibold shrink-0 flex items-center gap-1">
+                                <span>⇄</span> <span>Scroll Assistant</span>
+                            </span>
+                            <input id="timeline-scroll-slider" type="range" min="0" max="100" step="0.1" value="0" class="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed" title="Pan horizontally across timeline sequence" />
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <span class="font-mono text-[10px] text-zinc-400 tabular-nums hidden sm:inline">
+                                <span id="timeline-nav-current-time" class="text-cyan-300 font-semibold">0.0s</span>
+                                <span class="text-zinc-600 mx-0.5">/</span>
+                                <span id="timeline-nav-total-time">0.0s</span>
+                            </span>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="font-mono uppercase tracking-wider text-[10px] text-cyan-300 font-semibold">🔍 Zoom</span>
+                                <input id="timeline-zoom-slider" type="range" min="0.2" max="5" step="0.05" value="1" class="w-24 sm:w-32 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-400" title="Adjust timeline zoom scale" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1992,36 +2011,36 @@ export const MODAL_TEMPLATES = `
             </button>
     </div>
 
-    <div id="transcript-editor-workspace" class="hidden absolute inset-0 bg-gray-900 z-20 flex flex-col">
+    <div id="transcript-editor-workspace" class="hidden absolute inset-0 bg-gray-900 z-[90] flex flex-col">
         <!-- Header -->
-        <div class="px-6 py-3 border-b border-white/10 flex-shrink-0 bg-gray-900/80 backdrop-blur-xl z-20">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-6">
-                    <button id="close-transcript-editor-btn" class="text-gray-500 hover:text-white flex items-center gap-2 transition-colors p-1 group">
-                        <svg class="w-5 h-5 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        <span class="text-xs font-black uppercase tracking-widest">Back</span>
+        <div class="px-4 sm:px-6 py-3 border-b border-white/10 flex-shrink-0 bg-gray-950/95 backdrop-blur-xl z-30">
+            <div class="flex flex-wrap justify-between items-center gap-3">
+                <div class="flex items-center gap-3 sm:gap-5">
+                    <button id="close-transcript-editor-btn" type="button" class="text-gray-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-lg px-3 py-1.5 flex items-center gap-2 transition-colors cursor-pointer group">
+                        <svg class="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        <span class="text-xs font-black uppercase tracking-widest">Back to Director</span>
                     </button>
-                    <div class="h-6 w-px bg-white/10"></div>
+                    <div class="h-6 w-px bg-white/10 hidden sm:block"></div>
                     <div class="flex flex-col">
-                        <h3 class="text-lg font-black tracking-tighter text-fuchsia-500 uppercase italic leading-none">Transcript Editor</h3>
-                        <span class="text-[9px] text-gray-500 font-mono uppercase tracking-widest mt-1">B-Roll Sync Studio</span>
+                        <h3 class="text-base sm:text-lg font-black tracking-tighter text-fuchsia-400 uppercase italic leading-none">Transcript Editor</h3>
+                        <span class="text-[9px] text-gray-400 font-mono uppercase tracking-widest mt-1">B-Roll Sync Studio</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-2.5">
-                    <span class="text-[11px] text-zinc-400 hidden lg:inline mr-2">Select words, then click an image to assign</span>
+                <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                    <span class="text-[11px] text-zinc-400 hidden xl:inline mr-2">Select words, then click an image to assign</span>
                     
-                    <div class="flex items-center bg-zinc-950/80 p-0.5 rounded-lg border border-white/10 shadow-inner">
-                        <button id="undo-transcript-assignment-btn" class="px-2.5 py-1.5 text-xs font-semibold text-zinc-300 hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer">Undo</button>
-                        <button id="clear-transcript-assignments-btn" class="px-2.5 py-1.5 text-xs font-semibold text-rose-400/80 hover:text-rose-300 hover:bg-rose-950/40 rounded-md transition-colors cursor-pointer">Clear All</button>
+                    <div class="flex items-center bg-zinc-950/90 p-0.5 rounded-lg border border-white/15 shadow-inner">
+                        <button id="undo-transcript-assignment-btn" type="button" class="px-2.5 py-1.5 text-xs font-semibold text-zinc-200 hover:text-white hover:bg-white/10 rounded-md transition-colors cursor-pointer" title="Undo Last Word Assignment">↩ Undo</button>
+                        <button id="clear-transcript-assignments-btn" type="button" class="px-2.5 py-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-md transition-colors cursor-pointer" title="Clear All Word Assignments">🗑️ Clear All</button>
                     </div>
 
-                    <button id="auto-assign-transcript-btn" class="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-md shadow-fuchsia-950/40 flex items-center gap-1.5 cursor-pointer">
+                    <button id="auto-assign-transcript-btn" type="button" class="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-md shadow-fuchsia-950/40 flex items-center gap-1.5 cursor-pointer border border-fuchsia-400/30">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5.268l4.268-4.268a1 1 0 111.414 1.414L13.414 8.682l4.268 4.268a1 1 0 11-1.414 1.414L12 10.098V15.5a1 1 0 11-2 0v-5.402L5.732 14.364a1 1 0 11-1.414-1.414l4.268-4.268-4.268-4.268a1 1 0 011.414-1.414L10 6.682V2a1 1 0 011.3-.954zM9 18a1 1 0 112 0v1a1 1 0 11-2 0v-1zm-4.293-2.293a1 1 0 111.414-1.414l1 1a1 1 0 11-1.414 1.414l-1-1zm10.586 0a1 1 0 11-1.414-1.414l-1 1a1 1 0 111.414 1.414l1-1z" clip-rule="evenodd" /></svg>
                         <span>Magic Assign</span>
                     </button>
                     
-                    <button id="rebuild-timeline-from-transcript-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer">
-                        <span>Rebuild Timeline</span>
+                    <button id="rebuild-timeline-from-transcript-btn" type="button" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer border border-emerald-400/30">
+                        <span>✅ Rebuild Timeline</span>
                     </button>
                 </div>
             </div>
@@ -3240,8 +3259,12 @@ export const MODAL_TEMPLATES = `
 
       <div class="insp-row" style="margin-bottom: 0;">
         <label class="field-label" for="inspector-broll-prompt-input">B-Roll Search</label>
-        <div class="insp-row-control">
+        <div class="insp-row-control" style="display: flex; flex-direction: column; gap: 6px;">
           <input type="text" id="inspector-broll-prompt-input" class="input" placeholder="Pexels keyword or motion prompt..." />
+          <div style="display: flex; gap: 6px;">
+            <button type="button" id="inspector-fetch-pexels-photo-btn" class="btn" style="flex: 1; font-size: 11px; padding: 4px 8px; display: flex; align-items: center; justify-content: center; gap: 4px;" title="Fetch Pexels Stock Photo using B-Roll Search query (or AI keywords)">🖼️ Fetch Photo</button>
+            <button type="button" id="inspector-fetch-pexels-video-btn" class="btn" style="flex: 1; font-size: 11px; padding: 4px 8px; display: flex; align-items: center; justify-content: center; gap: 4px;" title="Fetch Pexels Stock Video using B-Roll Search query (or AI keywords)">📹 Fetch Video</button>
+          </div>
         </div>
       </div>
     </section>

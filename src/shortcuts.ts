@@ -256,6 +256,11 @@ export function initKeyboardShortcuts() {
                 handleSetEditMode('ripple');
                 return;
             }
+            if (key === 'y' || (e.shiftKey && key === 'l')) {
+                e.preventDefault();
+                handleSetEditMode('lift');
+                return;
+            }
             if (key === 't') {
                 e.preventDefault();
                 handleSetEditMode('slip');

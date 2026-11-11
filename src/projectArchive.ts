@@ -97,9 +97,12 @@ export async function exportProjectArchive(onProgress?: (percent: number, messag
             smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
             customFonts: state.customFonts,
             timelineMode: timelineState.mode,
+            timelineEditMode: timelineState.editMode,
+            snappingEnabled: timelineState.snappingEnabled,
             graphics: timelineState.graphics,
             audioSplits: timelineState.audioSplits,
             audioSegments: timelineState.audioSegments,
+            audioSegmentsInitialized: timelineState.audioSegmentsInitialized,
             audioMetadata: timelineState.masterAudioBuffer ? {
                 duration: timelineState.masterAudioBuffer.duration,
                 sampleRate: timelineState.masterAudioBuffer.sampleRate,
@@ -701,9 +704,22 @@ export async function importProjectArchive(file: File) {
         state.videoSubtitleColors = importedState.videoSubtitleColors || {};
         state.smartCaptionPlacementEnabled = Boolean(importedState.smartCaptionPlacementEnabled);
         timelineState.setMode(importedState.timelineMode || 'free');
+        if (importedState.timelineEditMode) {
+            timelineState.setEditMode(importedState.timelineEditMode);
+            import('./videoController').then(m => m.handleSetEditMode(importedState.timelineEditMode, false));
+        } else {
+            timelineState.setEditMode('ripple');
+            import('./videoController').then(m => m.handleSetEditMode('ripple', false));
+        }
+        if (typeof importedState.snappingEnabled === 'boolean') {
+            timelineState.setSnappingEnabled(importedState.snappingEnabled);
+            import('./videoController').then(m => m.handleToggleSnapping(importedState.snappingEnabled, false));
+        }
         timelineState.setGraphics(importedState.graphics || []);
         timelineState.setAudioSplits(importedState.audioSplits || []);
-        if (Array.isArray(importedState.audioSegments) && importedState.audioSegments.length > 0) {
+        if (importedState.audioSegmentsInitialized) {
+            timelineState.setAudioSegments(importedState.audioSegments || [], false);
+        } else if (Array.isArray(importedState.audioSegments) && importedState.audioSegments.length > 0) {
             timelineState.setAudioSegments(importedState.audioSegments, false);
         }
 
@@ -712,6 +728,13 @@ export async function importProjectArchive(file: File) {
             importedState.videoTimelineMetadata || importedState.savedVideoTimelineMetadata;
 
         await restoreVideoTimeline(videoTimelineMetadata, { silent: true });
+
+        // Re-apply edited audio segments after restoreVideoTimeline (since setMasterAudioBuffer resets segments to default)
+        if (importedState.audioSegmentsInitialized) {
+            timelineState.setAudioSegments(importedState.audioSegments || [], false);
+        } else if (Array.isArray(importedState.audioSegments) && importedState.audioSegments.length > 0) {
+            timelineState.setAudioSegments(importedState.audioSegments, false);
+        }
 
         // Ensure all timeline clips are properly synchronized with state.uploadedVideoElement and shot talkingHead settings
         if (state.uploadedVideoElement && timelineState.clips) {

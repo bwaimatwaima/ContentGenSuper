@@ -15,8 +15,12 @@ import { sliceAudioBuffer } from '../audioBufferUtils';
 
 
 export function getTimelineAudioDrift(): { seconds: number; audioDuration: number } | null {
-    const audioDur = timelineState.masterAudioBuffer?.duration;
-    if (!audioDur || !timelineState.clips?.length) return null;
+    const rawAudioDur = timelineState.masterAudioBuffer?.duration;
+    if (!rawAudioDur || !timelineState.clips?.length) return null;
+    const audioDur = timelineState.audioSegmentsInitialized
+        ? timelineState.audioSegments.reduce((max, s) => Math.max(max, s.endTime ?? (s.startTime + s.duration)), 0)
+        : rawAudioDur;
+    if (audioDur <= 0 && !timelineState.audioSegmentsInitialized) return null;
     const sorted = [...timelineState.clips].sort((a, b) => a.startTime - b.startTime);
     const lastEnd = sorted[sorted.length - 1].endTime ?? 0;
     return { seconds: lastEnd - audioDur, audioDuration: audioDur };

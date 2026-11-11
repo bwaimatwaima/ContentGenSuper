@@ -508,11 +508,23 @@ class TimelineState {
     // --- History Operations ---
     private cloneClipsForHistory(clips: TimelineClip[]): TimelineClip[] {
         return clips.map(clip => {
+            const rawKf = clip.cameraKeyframes as any;
+            const clonedKf = !rawKf
+                ? undefined
+                : Array.isArray(rawKf)
+                    ? rawKf.map((k: any) => ({ ...k }))
+                    : typeof rawKf === 'object'
+                        ? {
+                            ...rawKf,
+                            start: rawKf.start ? { ...rawKf.start } : undefined,
+                            end: rawKf.end ? { ...rawKf.end } : undefined,
+                        }
+                        : rawKf;
             return {
                 ...clip,
                 image: clip.image, // Preserve native HTMLImageElement DOM reference without breaking prototype methods
-                cameraKeyframes: clip.cameraKeyframes ? clip.cameraKeyframes.map((k: any) => ({ ...k })) : undefined,
-                wordTimestamps: clip.wordTimestamps ? [...clip.wordTimestamps] : undefined,
+                cameraKeyframes: clonedKf,
+                wordTimestamps: clip.wordTimestamps ? clip.wordTimestamps.map((w: any) => ({ ...w })) : undefined,
                 elements: clip.elements ? clip.elements.map((e: any) => ({ ...e })) : undefined
             };
         });

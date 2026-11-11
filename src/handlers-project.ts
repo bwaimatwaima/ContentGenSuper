@@ -865,9 +865,14 @@ export async function loadProject() {
             state.smartCaptionPlacementEnabled = Boolean(projectData.smartCaptionPlacementEnabled);
             timelineState.setMode(projectData.timelineMode || 'free');
             if (projectData.timelineEditMode) {
+                timelineState.setEditMode(projectData.timelineEditMode);
                 import('./videoController').then(m => m.handleSetEditMode(projectData.timelineEditMode, false));
+            } else {
+                timelineState.setEditMode('ripple');
+                import('./videoController').then(m => m.handleSetEditMode('ripple', false));
             }
             if (typeof projectData.snappingEnabled === 'boolean') {
+                timelineState.setSnappingEnabled(projectData.snappingEnabled);
                 import('./videoController').then(m => m.handleToggleSnapping(projectData.snappingEnabled, false));
             }
             timelineState.setGraphics(projectData.graphics || []);
@@ -920,6 +925,13 @@ export async function loadProject() {
 
             // Timeline restoration
             await restoreVideoTimeline(projectData.videoTimelineMetadata, { silent: true });
+
+            // Re-apply edited audio segments after restoreVideoTimeline (since setMasterAudioBuffer resets segments to default)
+            if (projectData.audioSegmentsInitialized) {
+                timelineState.setAudioSegments(projectData.audioSegments || [], false);
+            } else if (Array.isArray(projectData.audioSegments) && projectData.audioSegments.length > 0) {
+                timelineState.setAudioSegments(projectData.audioSegments, false);
+            }
 
             // Ensure all timeline clips are properly synchronized with state.uploadedVideoElement and shot talkingHead settings
             if (state.uploadedVideoElement && timelineState.clips) {
@@ -1068,7 +1080,9 @@ export function startNewProject(shouldConfirm: boolean | Event = true) {
 
     if (typeof shouldConfirm === 'boolean' ? shouldConfirm : true) {
         ui.showConfirmation('Start New Project', 'Are you sure?', resetLogic);
-    } else { resetLogic(); }
+    } else {
+        return resetLogic();
+    }
 }
 
 export async function triggerProjectImport() {

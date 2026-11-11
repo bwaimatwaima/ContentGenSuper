@@ -2298,4 +2298,56 @@ export function initInspectorHandlers() {
             focusTransitionForClip(activeShotId, Math.max(0, idx));
         });
     }
+
+    // Inspector Direct Pexels Stock Fetch (Photo / Video) using B-Roll Search input
+    const bindInspectorPexelsBtn = (btnId: string, mediaType: 'photos' | 'videos') => {
+        const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            if (!activeShotId) return;
+            const allShots = getAllStoryboardShots();
+            const targetItem = allShots.find(item => item.shot.id === activeShotId);
+            if (!targetItem) return;
+
+            if (dom.inspectorBRollPromptInput) {
+                targetItem.shot.b_roll_prompt = dom.inspectorBRollPromptInput.value.trim();
+            }
+
+            const origHtml = btn.innerHTML;
+            btn.innerHTML = '⏳ Fetching...';
+            btn.disabled = true;
+            try {
+                const { applyPexelsStockToShot } = await import('./handlers-images/pexels');
+                const parentScene = state.currentScenes?.[targetItem.sceneIndex] || state.currentScenes?.[0];
+                const { success, queryUsed, tierUsed, orientationUsed } = await applyPexelsStockToShot(
+                    mediaType,
+                    targetItem.shot,
+                    parentScene,
+                    null,
+                    undefined,
+                    (msg) => showStatus(msg, false, 1500)
+                );
+                if (success) {
+                    saveVersion(false);
+                    if (dom.resultsContainer) renderResults(state.currentScenes);
+                    renderTimelineEditor();
+                    if (timelineState.videoGenerated) {
+                        updateVideoContext();
+                        drawVideoFrame(state.videoPauseTime || state.lastRenderedTime || 0);
+                    }
+                    const tierLabel = tierUsed === 0 ? 'Custom Query' : `Tier ${tierUsed}`;
+                    showStatus(`Pexels ${mediaType === 'videos' ? 'video' : 'photo'} applied [${orientationUsed}] (${tierLabel}: "${queryUsed}")`, false, 3000);
+                } else {
+                    showStatus(`No Pexels ${mediaType} found for this shot.`, true, 3000);
+                }
+            } catch (err: any) {
+                showStatus(err?.message || 'Failed to fetch from Pexels', true, 4000);
+            } finally {
+                btn.innerHTML = origHtml;
+                btn.disabled = false;
+            }
+        });
+    };
+    bindInspectorPexelsBtn('inspector-fetch-pexels-photo-btn', 'photos');
+    bindInspectorPexelsBtn('inspector-fetch-pexels-video-btn', 'videos');
 }

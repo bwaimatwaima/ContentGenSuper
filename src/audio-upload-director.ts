@@ -676,11 +676,8 @@ export async function handleStartForceAlign() {
         if (dom.openTranscriptEditorBtn) dom.openTranscriptEditorBtn.disabled = false;
         
         handleCloseForceAlignModal();
-        // Open the Video Director modal first so the transcript editor workspace is visible
-        dom.videoDirectorModal.classList.remove('hidden');
-        dom.videoDirectorMainView.classList.add('hidden');
-        dom.transcriptEditorWorkspace.classList.remove('hidden');
-        ui.openTranscriptEditor();
+        const { handleOpenTranscriptEditor } = await import('./handlers-transcript-editor');
+        handleOpenTranscriptEditor();
 
     } catch (e: any) {
         ui.showStatus(`Alignment failed: ${e.message}`, true, 6000);
@@ -886,6 +883,12 @@ export async function buildTimelineFromShotsWithAudio() {
         // Video sources are fitted/looped/clipped to this duration, never overriding the audio timeline authority.
         const dur = Math.max(0.05, nextStartTime - startTime);
         const endTime = nextStartTime;
+
+        const parentScene = state.currentScenes?.[shot.__sceneIndex];
+        const origShot = parentScene?.lines ? parentScene.lines[shot.__lineIndex] : parentScene;
+        if (origShot && typeof origShot === 'object') {
+            origShot.duration_seconds = Math.max(0.5, Math.round(dur * 10) / 10);
+        }
 
         newClips.push({
             id: shot.id || `s${shot.__sceneIndex}_l${shot.__lineIndex}`,

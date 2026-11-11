@@ -9,7 +9,7 @@ import { normalizeTimeline } from '../videoController';
 import { drawVideoFrame } from '../videoRenderer';
 import * as ui from '../ui';
 import type { GraphicEvent } from '../graphics-engine';
-import { HYPERFRAME_PRESETS } from '../hyperframes-engine';
+import { HYPERFRAME_PRESETS, buildHyperFrameHtml } from '../hyperframes-engine';
 import lexiconData from './lexicon.json';
 import type {
   AnalysisSummary,
@@ -781,18 +781,14 @@ export function applyPatternInterrupts(candidatesToApply: MonotonyCandidate[]): 
 
         const fallback = HYPERFRAME_PRESETS[0];
         const chosen = preset || fallback;
-        const phrase = c.context.verbatimPhrase ? `"${c.context.verbatimPhrase.slice(0, 40)}"` : '';
+        const phrase = c.context.verbatimPhrase ? `"${c.context.verbatimPhrase.slice(0, 48)}"` : '';
+        const badgeText = cat === 'danger' ? 'CRITICAL WARNING' : (cat === 'revelation' || cat === 'question') ? 'KEY REVELATION' : 'KEY POINT';
 
-        const customHtml = `
-<div class="flex flex-col items-center gap-1.5 text-center drop-shadow-[0_12px_28px_rgba(0,0,0,0.85)] select-none">
-  <span class="px-3 py-0.5 rounded-full bg-black/90 border border-amber-400/50 text-amber-300 text-[10px] font-mono font-bold tracking-widest uppercase">
-    ⚡ ATTENTION
-  </span>
-  <div class="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-black font-black text-xl sm:text-2xl tracking-tight uppercase shadow-2xl transform -rotate-1 border border-white/20">
-    ${titleText}
-  </div>
-  ${phrase ? `<p class="text-[10px] text-zinc-300 font-sans max-w-xs drop-shadow truncate mt-0.5">${phrase}</p>` : ''}
-</div>`;
+        const dynamicHtml = buildHyperFrameHtml(templateId, {
+          title: titleText,
+          subtitle: phrase,
+          badge: badgeText,
+        });
 
         const newGraphic: GraphicEvent = {
           id: `graphic_pi_hf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -800,8 +796,10 @@ export function applyPatternInterrupts(candidatesToApply: MonotonyCandidate[]): 
           start: c.timestamp,
           end: c.timestamp + dur,
           title: titleText,
+          subtitle: phrase || undefined,
+          badge: badgeText,
           templateId,
-          html: (chosen.id === 'pattern-wait' || chosen.id === 'pattern-mistake') ? chosen.html.trim() : customHtml.trim(),
+          html: dynamicHtml,
           animationIn: 'spring-bounce',
           animationOut: 'scale-down',
           position: 'center',

@@ -322,6 +322,25 @@ Rules:
 
 let lastAnalyzedHash = '';
 
+function cleanupPreviousStoryboardMedia() {
+    const masterVideoUrl = state.uploadedVideoObjectURL || state.uploadedVideoElement?.src || '';
+    const oldShots = (state.currentScenes || []).flatMap((s: any) => s.lines || [s]);
+    for (const shot of oldShots) {
+        if (shot?._imageObjectURL && typeof shot._imageObjectURL === 'string' && shot._imageObjectURL.startsWith('blob:')) {
+            try { URL.revokeObjectURL(shot._imageObjectURL); } catch {}
+        }
+        if (shot?._videoObjectURL && typeof shot._videoObjectURL === 'string' && shot._videoObjectURL.startsWith('blob:') && shot._videoObjectURL !== masterVideoUrl) {
+            try { URL.revokeObjectURL(shot._videoObjectURL); } catch {}
+        }
+        if (shot?._sfxObjectURL && typeof shot._sfxObjectURL === 'string' && shot._sfxObjectURL.startsWith('blob:')) {
+            try { URL.revokeObjectURL(shot._sfxObjectURL); } catch {}
+        }
+    }
+    timelineState.setClips([]);
+    timelineState.setGraphics([]);
+    timelineState.setVideoGenerated(false);
+}
+
 /**
  * Analyzes the story and generates the storyboard scenes.
  * Handles both short and very long scripts via batch processing with a unified prompt.
@@ -330,8 +349,19 @@ export async function analyzeStory() {
     if (checkGuestRestriction("Creating Storyboard")) return;
     syncAssetsFromDOM();
     
-    // Script hygiene pass before analysis
+    // Script hygiene pass before analysis (auto-recover from Master Audio transcript if textarea is empty)
     let storyText = dom.storyInput ? dom.storyInput.value : '';
+    if (!storyText || !storyText.trim()) {
+        const transcriptWords = timelineState.globalWordTimestamps?.length
+            ? timelineState.globalWordTimestamps
+            : state.masterAudioTranscript;
+        if (transcriptWords && transcriptWords.length > 0) {
+            storyText = transcriptWords.map((w: any) => w.word).join(' ').trim();
+            if (dom.storyInput && storyText) {
+                dom.storyInput.value = storyText;
+            }
+        }
+    }
     if (!storyText || !storyText.trim()) {
         ui.showStatus("Please enter your story or script in Step 1 first, or use Manual Storyboard below.", true, 3500);
         return;
@@ -401,7 +431,16 @@ export async function createBlankStoryboard() {
     }
 
     if (isScript) {
-        const scriptText = (dom.storyInput?.value || '').trim();
+        let scriptText = (dom.storyInput?.value || '').trim();
+        if (!scriptText) {
+            const transcriptWords = timelineState.globalWordTimestamps?.length
+                ? timelineState.globalWordTimestamps
+                : state.masterAudioTranscript;
+            if (transcriptWords && transcriptWords.length > 0) {
+                scriptText = transcriptWords.map((w: any) => w.word).join(' ').trim();
+                if (dom.storyInput && scriptText) dom.storyInput.value = scriptText;
+            }
+        }
         if (!scriptText) {
             ui.showStatus("Please enter or paste your script in Step 1 first.", true, 3500);
             return;
@@ -516,6 +555,7 @@ export async function createBlankStoryboard() {
         }
     }
 
+    cleanupPreviousStoryboardMedia();
     state.currentScenes = newShots;
     ui.renderResults(state.currentScenes);
     saveVersion(false);
@@ -601,6 +641,24 @@ export function addSingleBlankShot() {
         } else {
             state.currentScenes.push(newShot);
         }
+    }
+    if (timelineState.clips && timelineState.clips.length > 0 && timelineState.clips[0]?.id !== 'aroll-full') {
+        const lastEnd = timelineState.clips.reduce((max, c) => Math.max(max, c.endTime || 0), 0);
+        timelineState.setClips([
+            ...timelineState.clips,
+            {
+                id: newShot.id,
+                startTime: lastEnd,
+                endTime: lastEnd + 4,
+                duration: 4,
+                cameraMovement: 'static',
+                transitionToNext: 'cut',
+                text: '',
+                wordTimestamps: [],
+                locked: false,
+                talkingHeadMode: 'none'
+            }
+        ]);
     }
     ui.renderResults(state.currentScenes);
     saveVersion(false);
@@ -725,7 +783,9 @@ export function isGenericFallback(promptText: string): boolean {
            p.includes('cinematic visual scene capturing the narrative beat') ||
            p.includes('central narrative subjects') ||
            p.includes('framed against heavy storm clouds') ||
-           p.includes('showing subtle micro-expressions');
+           p.includes('showing subtle micro-expressions') ||
+           p.includes('positioned in the frame establishing initial physical state') ||
+           p.includes('progressing into active physical movement with dynamic visual momentum');
 }
 
 /**
@@ -1037,6 +1097,7 @@ export function generateSplitVisualConcept(parentShot: any, partText: string, su
 
     return {
         ...parentShot,
+        _isFallback: true,
         text_reference: text,
         visual_type: parentShot.visual_type || (isFirstPart ? 'SETTING_ESTABLISHMENT' : 'CHARACTER_ACTION'),
         narrative_function: isFirstPart ? 'SETTING_ESTABLISHMENT' : 'ESCALATION',
@@ -1072,18 +1133,23 @@ async function _executeAnalyzeStory(storyText: string, detailLevel: string, paci
         const narrationMinutes = Math.max(0.2, wordCount / 150);
 
         const selectedRange = (pacingMap as any)[pacingFactor] || pacingMap.normal;
-        const elasticTargetMin = Math.max(1, Math.round(narrationMinutes * selectedRange.min));
-        const elasticTargetMax = Math.max(elasticTargetMin, Math.round(narrationMinutes * selectedRange.max));
-
-        const consistencyContext = getVisualConsistencyContext();
-        const pacingGuideline = getPacingDensityGuideline(pacingFactor);
-
+        let customShotTarget: number | null = null;
         let customBudgetDirective = '';
         if (detailLevel === 'custom') {
             const count = parseInt(dom.customShotCountInput?.value, 10);
-            const valid = isNaN(count) || count < 1 ? 10 : Math.min(90, count);
-            customBudgetDirective = `\n- USER EXACT BUDGET: The user has budgeted EXACTLY ${valid} shots for the whole project.`;
+            customShotTarget = isNaN(count) || count < 1 ? 10 : Math.min(90, count);
+            customBudgetDirective = `\n- USER EXACT BUDGET: The user has budgeted EXACTLY ${customShotTarget} shots for the whole project. Produce exactly ${customShotTarget} shots.`;
         }
+
+        const elasticTargetMin = customShotTarget !== null
+            ? customShotTarget
+            : Math.max(1, Math.round(narrationMinutes * selectedRange.min));
+        const elasticTargetMax = customShotTarget !== null
+            ? customShotTarget
+            : Math.max(elasticTargetMin, Math.round(narrationMinutes * selectedRange.max));
+
+        const consistencyContext = getVisualConsistencyContext();
+        const pacingGuideline = getPacingDensityGuideline(pacingFactor);
 
         const { Type } = await import('@google/genai');
         const schema = {
@@ -1204,8 +1270,15 @@ CRITICAL VISUAL DIRECTING PRINCIPLES:
                 const chunkText = scriptChunks[chunkIdx];
                 const chunkWords = chunkText.split(/\s+/).filter(Boolean).length;
                 const chunkMins = Math.max(0.2, chunkWords / 150);
-                const chunkTargetMin = Math.max(1, Math.round(chunkMins * selectedRange.min));
-                const chunkTargetMax = Math.max(chunkTargetMin, Math.round(chunkMins * selectedRange.max));
+                const proportionalCustom = customShotTarget !== null
+                    ? Math.max(1, Math.round((chunkWords / Math.max(1, wordCount)) * customShotTarget))
+                    : null;
+                const chunkTargetMin = proportionalCustom !== null
+                    ? proportionalCustom
+                    : Math.max(1, Math.round(chunkMins * selectedRange.min));
+                const chunkTargetMax = proportionalCustom !== null
+                    ? proportionalCustom
+                    : Math.max(chunkTargetMin, Math.round(chunkMins * selectedRange.max));
 
                 ui.updateProcessingProgress(
                     Math.round((chunkIdx / scriptChunks.length) * 100),
@@ -1364,41 +1437,9 @@ ${storyText}
             ui.showStatus('Storyboard generated from script structure.', false, 4000);
         }
 
-        // === SECOND AI REPAIR PASS FOR MISSING, WEAK, OR FALLBACK VISUAL METADATA ===
-        const flawedShotItems: Array<{ shot: any; index: number; narrativeText: string }> = [];
-        for (let i = 0; i < shotsList.length; i++) {
-            const shot = shotsList[i];
-            const nar = (shot.text_reference || shot.narration || shot.text || '').trim();
-            const prompt = (shot.image_prompt || shot.prompt || '').trim();
-            const isMissingReasoning = !shot.visual_concept || !shot.action || !shot.environment || !shot.composition;
-            const isFallback = Boolean(shot._isFallback) || isGenericFallback(prompt) || isGenericFallback(shot.visual_concept || '') || isGenericFallback(shot.action || '');
-            if (isFallback || !prompt || isLazyParaphrase(prompt, nar) || isMissingReasoning) {
-                flawedShotItems.push({ shot, index: i, narrativeText: nar });
-            }
-        }
-
-        if (flawedShotItems.length > 0) {
-            console.log(`[Visual Director] Running Second AI Repair Pass on ${flawedShotItems.length} shots with missing or weak metadata...`);
-            ui.updateProcessingProgress(90, `Refining visual direction with Second AI pass...`);
-            const repairedMap = await repairShotsWithAIRepairPass(flawedShotItems, storyText, signal);
-            for (const item of flawedShotItems) {
-                const repaired = repairedMap.get(item.index);
-                if (repaired && repaired.image_prompt && !isLazyParaphrase(repaired.image_prompt, item.narrativeText) && !isGenericFallback(repaired.image_prompt)) {
-                    shotsList[item.index] = {
-                        ...shotsList[item.index],
-                        ...repaired,
-                        _isFallback: false,
-                        text_reference: item.narrativeText
-                    };
-                }
-            }
-        }
-
-        // Shot Volume & Pacing Enforcement:
-        // 1. If user requested an EXACT custom shot count, adjust shot count to match
-        if (detailLevel === 'custom') {
-            const count = parseInt(dom.customShotCountInput?.value, 10);
-            const customTarget = isNaN(count) || count < 1 ? 10 : Math.min(90, count);
+        // Shot Volume & Pacing Enforcement (run BEFORE Second AI Repair Pass so any split/merged shots get full AI visual direction):
+        if (detailLevel === 'custom' && customShotTarget !== null) {
+            const customTarget = customShotTarget;
 
             while (shotsList.length > customTarget && shotsList.length > 1) {
                 // Merge shortest adjacent shots with visual synthesis
@@ -1444,6 +1485,36 @@ ${storyText}
                     );
                 } else {
                     break;
+                }
+            }
+        }
+
+        // === SECOND AI REPAIR PASS FOR MISSING, WEAK, SPLIT, OR FALLBACK VISUAL METADATA ===
+        const flawedShotItems: Array<{ shot: any; index: number; narrativeText: string }> = [];
+        for (let i = 0; i < shotsList.length; i++) {
+            const shot = shotsList[i];
+            const nar = (shot.text_reference || shot.narration || shot.text || '').trim();
+            const prompt = (shot.image_prompt || shot.prompt || '').trim();
+            const isMissingReasoning = !shot.visual_concept || !shot.action || !shot.environment || !shot.composition;
+            const isFallback = Boolean(shot._isFallback) || isGenericFallback(prompt) || isGenericFallback(shot.visual_concept || '') || isGenericFallback(shot.action || '');
+            if (isFallback || !prompt || isLazyParaphrase(prompt, nar) || isMissingReasoning) {
+                flawedShotItems.push({ shot, index: i, narrativeText: nar });
+            }
+        }
+
+        if (flawedShotItems.length > 0) {
+            console.log(`[Visual Director] Running Second AI Repair Pass on ${flawedShotItems.length} shots with missing or weak metadata...`);
+            ui.updateProcessingProgress(90, `Refining visual direction with Second AI pass...`);
+            const repairedMap = await repairShotsWithAIRepairPass(flawedShotItems, storyText, signal);
+            for (const item of flawedShotItems) {
+                const repaired = repairedMap.get(item.index);
+                if (repaired && repaired.image_prompt && !isLazyParaphrase(repaired.image_prompt, item.narrativeText) && !isGenericFallback(repaired.image_prompt)) {
+                    shotsList[item.index] = {
+                        ...shotsList[item.index],
+                        ...repaired,
+                        _isFallback: false,
+                        text_reference: item.narrativeText
+                    };
                 }
             }
         }
@@ -1513,8 +1584,17 @@ ${storyText}
             );
         }
 
+        cleanupPreviousStoryboardMedia();
         state.currentScenes = newScenes;
-        timelineState.setGraphics([]);
+
+        if (state.currentScenes.length > 0 && timelineState.masterAudioBuffer) {
+            const { buildTimelineFromShotsWithAudio } = await import('./audio-upload-director');
+            await buildTimelineFromShotsWithAudio();
+        } else if (state.currentScenes.length > 0 && state.uploadedVideoElement) {
+            const { buildTimelineFromShotsWithMediaDurations } = await import('./audio-upload-director');
+            await buildTimelineFromShotsWithMediaDurations();
+        }
+
         ui.renderResults(state.currentScenes);
         saveVersion(false);
         ui.switchTab('storyboard');

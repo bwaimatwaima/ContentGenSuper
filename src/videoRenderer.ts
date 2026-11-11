@@ -2250,6 +2250,18 @@ function drawVideoFrameImpl(
     ctx.clearRect(0, 0, cvW, cvH);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, cvW, cvH);
+    if (!options?.backgroundOnly && state.motionGraphicsEnabled && !timelineState.isTrackHidden('overlays')) {
+      drawGraphics(ctx, time, cvW, cvH, timelineState.graphics);
+    }
+    if (!targetCanvas && !state.isExporting && previouslyActiveVideos.size > 0) {
+      for (const v of previouslyActiveVideos) {
+        v.muted = true;
+        if (!v.paused && !pendingPlaySet.has(v)) {
+          try { v.pause(); } catch {}
+        }
+      }
+      previouslyActiveVideos = new Set();
+    }
     return;
   }
 

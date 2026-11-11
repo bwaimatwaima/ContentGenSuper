@@ -98,7 +98,7 @@ export async function handleSrtFileChange(e: Event) {
 
 declare const Shepherd: any; // Shepherd is loaded from a CDN
 
-export async function initializeAppState(forceStart = false) {
+export async function initializeAppState(forceStart = false, skipProjectLoad = false) {
     const hasStarted = localStorage.getItem('hasStartedApp') === 'true';
     const isShared = window.location.hostname.includes('-pre-') || window.location.search.includes('shared=true');
 
@@ -126,12 +126,14 @@ export async function initializeAppState(forceStart = false) {
     }
     ui.updateCreditsDisplay();
     
-    await loadProject();
+    if (!skipProjectLoad) {
+        await loadProject();
+    }
 }
 
-export async function startAppFromLanding() {
+export async function startAppFromLanding(skipProjectLoad = false) {
     localStorage.setItem('hasStartedApp', 'true');
-    await initializeAppState(true);
+    await initializeAppState(true, skipProjectLoad);
 }
 
 export function exitAppToLanding() {

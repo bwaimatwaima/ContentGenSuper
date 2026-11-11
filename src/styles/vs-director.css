@@ -765,19 +765,19 @@
 
 /* Timeline Container Shell */
 .vs-director #timeline-editor-container,
-.vs-timeline-shell {
+.vs-director .vs-timeline-shell {
   background: var(--bg-timeline, #222224) !important;
   border-top: 1px solid var(--border, #323236);
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   user-select: none;
 }
 
 /* Timeline Toolbar */
 .vs-director .tl-toolbar,
-.vs-timeline-toolbar {
+.vs-director .vs-timeline-toolbar {
   height: var(--toolbar-h, 40px);
   flex: none;
   display: flex;
@@ -791,7 +791,7 @@
 
 /* Track Lanes & Proportional Heights */
 .vs-director .tl-lane,
-.vs-track-row {
+.vs-director .vs-track-row {
   position: relative;
   display: grid;
   grid-template-columns: var(--track-header-w, 92px) 1fr;
@@ -801,24 +801,24 @@
 }
 
 .vs-director .tl-lane.main,
-.vs-track-row.is-main {
+.vs-director .vs-track-row.is-main {
   height: var(--track-h-main, 64px);
   background: var(--bg-track-main, #2a2a2e);
 }
 
 .vs-director .tl-lane.audio,
-.vs-track-row.is-audio {
+.vs-director .vs-track-row.is-audio {
   height: var(--track-h-audio, 44px);
 }
 
 .vs-director .tl-lane.overlay,
-.vs-track-row.is-overlay {
+.vs-director .vs-track-row.is-overlay {
   height: var(--track-h-text, 28px);
 }
 
 /* Sticky Track Headers */
 .vs-director .tl-headers,
-.vs-track-header {
+.vs-director .vs-track-header {
   position: sticky;
   left: 0;
   z-index: 4;
@@ -834,7 +834,7 @@
 
 /* Color-Coded Clips by Type */
 .vs-director .tl-clip,
-.vs-clip {
+.vs-director .vs-clip {
   position: absolute;
   top: 3px;
   bottom: 3px;
@@ -3494,7 +3494,7 @@
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* Tighten the header container */
-#video-director-modal > div > div:first-child {
+#video-director-modal #video-director-main-view > div:first-child {
   flex-wrap: nowrap !important;
   gap: 4px !important;
   min-height: 42px;
@@ -4450,7 +4450,12 @@
   box-sizing: border-box !important;
 }
 
-#video-director-main-view {
+#video-director-main-view.hidden,
+#transcript-editor-workspace.hidden {
+  display: none !important;
+}
+
+#video-director-main-view:not(.hidden) {
   width: 100% !important;
   height: 100% !important;
   max-width: 100vw !important;
@@ -4459,6 +4464,12 @@
   flex-direction: column !important;
   overflow: hidden !important;
   background-color: #111827 !important;
+}
+
+#transcript-editor-workspace:not(.hidden) {
+  display: flex !important;
+  flex-direction: column !important;
+  z-index: 90 !important;
 }
 
 /* 2. Keep the top bar & Close button always visible and inside bounds */
@@ -4484,23 +4495,31 @@
 }
 
 /* 4. Fix A1 Waveform bottom clipping & scrollbar overlap */
-#video-director-modal:not(.vs-director) #timeline-editor-container,
-.video-director-modal:not(.vs-director) #timeline-editor-container,
-.classic-ui-shell #timeline-editor-container {
-  max-height: 480px !important;
+#video-director-modal:not(.vs-director) #timeline-editor-container:not(.hidden),
+.video-director-modal:not(.vs-director) #timeline-editor-container:not(.hidden),
+.classic-ui-shell #timeline-editor-container:not(.hidden) {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: min(480px, 54dvh) !important;
+  overflow: visible !important;
+}
+
+#video-director-modal:not(.vs-director) #timeline-clips-container,
+.video-director-modal:not(.vs-director) #timeline-clips-container,
+.classic-ui-shell #timeline-clips-container {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 #video-director-modal:not(.vs-director) #timeline-multi-track-container,
 #video-director-modal:not(.vs-director) #timeline-track-headers,
-#video-director-modal:not(.vs-director) #timeline-multi-track-scroll,
 .video-director-modal:not(.vs-director) #timeline-multi-track-container,
 .video-director-modal:not(.vs-director) #timeline-track-headers,
 .video-director-modal:not(.vs-director) .timeline-multi-track-container,
 .video-director-modal:not(.vs-director) .track-headers,
-.video-director-modal:not(.vs-director) .timeline-tracks-scroll,
-.classic-ui-shell .timeline-tracks-scroll,
 .classic-ui-shell .timeline-multi-track-container {
-  padding-bottom: 24px !important; /* Clears horizontal scrollbar over A1 and audio tracks */
+  padding-bottom: 12px !important; /* Clears horizontal scrollbar over A1 and audio tracks */
   box-sizing: border-box !important;
 }
 
@@ -4514,7 +4533,6 @@
 .video-director-modal:not(.vs-director) [data-track="A1"] {
   height: 48px !important;
   min-height: 48px !important;
-  display: flex !important;
   align-items: center !important;
   overflow: hidden !important;
   box-sizing: border-box !important;

@@ -62,6 +62,8 @@ export interface HyperFrameEvent {
   end: number;
   title: string;
   subtitle?: string;
+  badge?: string;
+  statValue?: string;
   presetId?: string;
   templateId?: string;
   html: string;
@@ -584,6 +586,240 @@ export const HYPERFRAME_PRESETS: HyperFramePreset[] = [
   }
 ];
 
+function escapeHfHtml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export interface HyperFrameContentParams {
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  statValue?: string;
+}
+
+/**
+ * Dynamically builds context-aware HTML for a HyperFrame template using story-specific text.
+ */
+export function buildHyperFrameHtml(templateId?: string, params: HyperFrameContentParams = {}): string {
+  const id = templateId || 'apple-feature';
+  const preset = HYPERFRAME_PRESETS.find(p => p.id === id) || HYPERFRAME_PRESETS[0];
+
+  // Clean out preset names if passed accidentally as the title
+  const rawTitle = (params.title || '').trim();
+  const isDefaultPresetName = HYPERFRAME_PRESETS.some(p => p.name === rawTitle);
+  const cleanTitle = escapeHfHtml(isDefaultPresetName ? '' : rawTitle);
+  const cleanSubtitle = escapeHfHtml((params.subtitle || '').trim());
+  const cleanBadge = escapeHfHtml((params.badge || '').trim());
+  const cleanStat = escapeHfHtml((params.statValue || '').trim());
+
+  switch (id) {
+    case 'reels-hook': {
+      const badge = cleanBadge || (cleanSubtitle ? cleanSubtitle : 'KEY HIGHLIGHT');
+      const headline = cleanTitle || 'CRITICAL TURNING POINT';
+      return `
+<div class="flex flex-col items-center gap-1.5 text-center drop-shadow-[0_10px_25px_rgba(0,0,0,0.85)] select-none">
+  <span class="px-3.5 py-1 rounded-full bg-black/90 border border-yellow-400/40 text-yellow-300 text-xs font-mono font-bold tracking-widest uppercase">
+    ${badge}
+  </span>
+  <div class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-yellow-400 to-amber-500 text-black font-black text-2xl sm:text-3xl tracking-tight shadow-xl uppercase transform -rotate-1">
+    ${headline}
+  </div>
+</div>`.trim();
+    }
+
+    case 'pattern-wait': {
+      const badge = cleanBadge || 'KEY REVELATION';
+      const headline = cleanTitle || 'THE TURNING POINT';
+      return `
+<div class="flex flex-col items-center gap-2 text-center drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] select-none">
+  <span class="px-3.5 py-1 rounded-full bg-violet-950/90 border border-violet-400/50 text-violet-300 text-xs font-mono font-bold tracking-widest uppercase">
+    ✦ ${badge}
+  </span>
+  <div class="px-6 py-3 rounded-2xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 text-white font-black text-2xl sm:text-3xl tracking-tight shadow-2xl uppercase transform -rotate-1 border border-white/20">
+    ${headline}
+  </div>
+  ${cleanSubtitle ? `<span class="px-3.5 py-1 rounded-full bg-black/80 text-violet-100 text-xs font-medium tracking-wide border border-white/10">${cleanSubtitle}</span>` : ''}
+</div>`.trim();
+    }
+
+    case 'pattern-mistake': {
+      const headline = cleanTitle || 'CRITICAL TAKEAWAY';
+      const sub = cleanSubtitle || cleanBadge || 'Crucial detail from the story';
+      return `
+<div class="flex flex-col items-center gap-2 text-center drop-shadow-[0_16px_36px_rgba(0,0,0,0.9)] select-none">
+  <div class="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white font-black text-xl sm:text-2xl tracking-tight uppercase shadow-2xl flex items-center gap-2 transform -rotate-1 border border-white/25">
+    <span class="text-lg">⚠️</span>
+    <span>${headline}</span>
+  </div>
+  <span class="px-4 py-1 rounded-full bg-black/90 backdrop-blur-md border border-red-500/40 text-red-200 text-xs font-semibold tracking-wide shadow-xl">
+    ${sub}
+  </span>
+</div>`.trim();
+    }
+
+    case 'apple-feature': {
+      const badge = cleanBadge || 'KEY INSIGHT';
+      const headline = cleanTitle || 'Core Narrative Point';
+      const sub = cleanSubtitle || 'Highlighted insight from the narration';
+      return `
+<div class="px-5 py-3.5 rounded-xl bg-black/90 backdrop-blur-md border border-white/20 shadow-2xl flex items-center gap-3.5 max-w-sm text-left">
+  <div class="w-10 h-10 rounded-lg bg-zinc-800 border border-white/10 flex items-center justify-center text-white text-lg shrink-0">
+    ✦
+  </div>
+  <div class="flex flex-col">
+    <span class="text-[10px] font-semibold tracking-wider uppercase text-sky-400 font-mono">${badge}</span>
+    <h3 class="text-base font-bold text-white tracking-tight">${headline}</h3>
+    ${sub ? `<span class="text-[11px] text-zinc-300 leading-snug">${sub}</span>` : ''}
+  </div>
+</div>`.trim();
+    }
+
+    case 'launch-hero': {
+      const badge = cleanBadge || 'SPOTLIGHT';
+      const headline = cleanTitle || 'Key Story Milestone';
+      const sub = cleanSubtitle || '';
+      return `
+<div class="px-5 py-4 rounded-2xl bg-slate-950/85 backdrop-blur-xl border border-sky-500/30 shadow-[0_0_35px_rgba(56,189,248,0.25)] flex flex-col gap-2 max-w-md text-left">
+  <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="relative flex h-2.5 w-2.5">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+      </span>
+      <span class="text-[11px] font-bold tracking-widest uppercase text-sky-400 font-mono">${badge}</span>
+    </div>
+  </div>
+  <h2 class="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
+    ${headline}
+  </h2>
+  ${sub ? `<p class="text-xs text-slate-300 leading-relaxed font-sans">${sub}</p>` : ''}
+</div>`.trim();
+    }
+
+    case 'cinematic-act': {
+      const badge = cleanBadge || 'CHAPTER FOCUS';
+      const headline = cleanTitle || 'The Turning Point';
+      const sub = cleanSubtitle || '';
+      return `
+<div class="flex flex-col items-center justify-center text-center max-w-lg px-6 py-3 rounded-2xl bg-black/55 backdrop-blur-md border border-yellow-500/20 shadow-2xl">
+  <span class="text-[11px] font-mono tracking-[0.3em] uppercase text-yellow-500/90 mb-1">${badge}</span>
+  <h1 class="text-2xl sm:text-4xl font-serif font-normal tracking-wider text-white uppercase mb-2">
+    ${headline}
+  </h1>
+  <div class="w-32 h-[1px] bg-gradient-to-r from-transparent via-yellow-500 to-transparent mb-1.5"></div>
+  ${sub ? `<p class="text-xs font-serif italic text-zinc-200 tracking-wide max-w-md">"${sub.replace(/^["']|["']$/g, '')}"</p>` : ''}
+</div>`.trim();
+    }
+
+    case 'stat-metric': {
+      const stat = cleanStat || cleanBadge || 'KEY METRIC';
+      const headline = cleanTitle || 'Notable Figure';
+      const sub = cleanSubtitle || '';
+      return `
+<div class="px-4 py-3 rounded-2xl bg-zinc-950/90 backdrop-blur-xl border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.2)] flex items-center gap-3.5 min-w-[220px]">
+  <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-lg shrink-0">
+    ▲
+  </div>
+  <div class="flex flex-col text-left">
+    <div class="flex items-center gap-1.5">
+      <span class="text-xl sm:text-2xl font-black text-white tracking-tight">${stat}</span>
+      ${sub ? `<span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">${sub}</span>` : ''}
+    </div>
+    <span class="text-[11px] text-zinc-300 font-medium">${headline}</span>
+  </div>
+</div>`.trim();
+    }
+
+    case 'podcast-speaker': {
+      const headline = cleanTitle || 'Key Perspective';
+      const badge = cleanBadge || cleanSubtitle || 'NARRATION FOCUS';
+      return `
+<div class="px-3.5 py-2 rounded-full bg-slate-950/90 backdrop-blur-md border border-sky-400/40 shadow-xl flex items-center gap-2.5">
+  <div class="relative w-8 h-8 rounded-full bg-sky-500/20 border border-sky-400/60 flex items-center justify-center text-white text-sm font-bold">
+    🎙️
+    <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-zinc-950 animate-pulse"></span>
+  </div>
+  <div class="flex flex-col text-left pr-2">
+    <span class="text-xs font-bold text-white leading-tight">${headline}</span>
+    <span class="text-[9px] font-mono text-sky-400 font-semibold uppercase">${badge}</span>
+  </div>
+</div>`.trim();
+    }
+
+    case 'music-eq-card': {
+      const badge = cleanBadge || 'AUDIO HIGHLIGHT';
+      const headline = cleanTitle || 'Soundtrack & Narration';
+      const sub = cleanSubtitle || 'Live audio-reactive visual';
+      return `
+<div class="px-5 py-3.5 rounded-2xl bg-zinc-950/90 backdrop-blur-2xl border border-violet-500/40 shadow-[0_0_35px_rgba(168,85,247,0.3)] flex items-center gap-4 max-w-md text-left">
+  <div class="relative w-12 h-12 rounded-full bg-gradient-to-tr from-violet-600 to-fuchsia-500 flex items-center justify-center text-white text-xl shadow-lg shrink-0 hf-disc-spin">
+    💿
+    <div class="absolute w-3.5 h-3.5 rounded-full bg-zinc-950 border border-white/40"></div>
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center justify-between gap-2">
+      <span class="text-[10px] font-mono tracking-widest uppercase text-violet-400 font-bold">${badge}</span>
+      <div class="flex items-end gap-1 h-4">
+        <span class="w-1 bg-violet-400 rounded-full hf-eq-bar-1 transition-all" style="height: 10px;"></span>
+        <span class="w-1 bg-fuchsia-400 rounded-full hf-eq-bar-2 transition-all" style="height: 14px;"></span>
+        <span class="w-1 bg-pink-400 rounded-full hf-eq-bar-3 transition-all" style="height: 16px;"></span>
+        <span class="w-1 bg-violet-300 rounded-full hf-eq-bar-4 transition-all" style="height: 12px;"></span>
+        <span class="w-1 bg-indigo-400 rounded-full hf-eq-bar-5 transition-all" style="height: 8px;"></span>
+      </div>
+    </div>
+    <h3 class="text-sm font-black text-white truncate tracking-tight mt-0.5">${headline}</h3>
+    ${sub ? `<p class="text-[11px] text-zinc-400 truncate">${sub}</p>` : ''}
+  </div>
+</div>`.trim();
+    }
+
+    case 'soundwave-ribbon': {
+      const headline = cleanTitle || cleanBadge || 'LIVE NARRATION SYNC';
+      return `
+<div class="px-5 py-2.5 rounded-full bg-black/85 backdrop-blur-md border border-cyan-400/50 shadow-[0_0_25px_rgba(6,182,212,0.35)] flex items-center gap-3">
+  <span class="text-cyan-400 text-sm">🎙️</span>
+  <div class="flex items-end gap-1 h-4">
+    <span class="w-1 bg-cyan-400 rounded-full hf-eq-bar-1 transition-all" style="height: 8px;"></span>
+    <span class="w-1 bg-cyan-300 rounded-full hf-eq-bar-2 transition-all" style="height: 14px;"></span>
+    <span class="w-1 bg-sky-400 rounded-full hf-eq-bar-3 transition-all" style="height: 18px;"></span>
+    <span class="w-1 bg-teal-400 rounded-full hf-eq-bar-4 transition-all" style="height: 12px;"></span>
+    <span class="w-1 bg-cyan-200 rounded-full hf-eq-bar-5 transition-all" style="height: 8px;"></span>
+  </div>
+  <span class="text-xs font-mono text-cyan-200 font-bold uppercase tracking-wider">${headline}</span>
+</div>`.trim();
+    }
+
+    default: {
+      if (!cleanTitle && !cleanSubtitle && !cleanBadge) {
+        return preset.html.trim();
+      }
+      const badge = cleanBadge || 'KEY FOCUS';
+      const headline = cleanTitle || preset.name;
+      return `
+<div class="px-5 py-4 rounded-2xl bg-slate-950/90 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1.5 max-w-md text-left">
+  <span class="text-[10px] font-mono font-bold tracking-widest uppercase text-sky-400">${badge}</span>
+  <h3 class="text-lg font-black text-white tracking-tight leading-snug">${headline}</h3>
+  ${cleanSubtitle ? `<p class="text-xs text-slate-300 leading-relaxed">${cleanSubtitle}</p>` : ''}
+</div>`.trim();
+    }
+  }
+}
+
+const LEGACY_DEMO_SNIPPETS = [
+  'THIS CHANGES EVERYTHING',
+  "DON'T SCROLL PAST THIS",
+  'Deterministic Video',
+  'HyperFrames Runtime',
+  'WAIT FOR THE END',
+  '99% of creators get this completely wrong',
+  'Every sequence begins with an instinct',
+  'HyperFrames Soundscape',
+];
+
 // --- Deterministic Easing Calculations ---
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -794,15 +1030,22 @@ export class HyperFramesEngine {
         }
       }
 
+      // Resolve context-aware HTML (auto-upgrading any legacy demo boilerplate if a story title is present)
+      const resolvedHtml = this.resolveEventHtml(ev);
+
       // Get or create node in overlay container
       let node = this.activeNodes.get(ev.id);
       if (!node || !container.contains(node)) {
         node = document.createElement('div');
         node.id = `hf-clip-${ev.id}`;
         node.className = 'absolute transition-none pointer-events-none will-change-transform max-w-[92%] box-border flex items-center justify-center';
-        node.innerHTML = ev.html;
+        node.innerHTML = resolvedHtml;
+        node.setAttribute('data-hf-rendered', resolvedHtml);
         container.appendChild(node);
         this.activeNodes.set(ev.id, node);
+      } else if (node.getAttribute('data-hf-rendered') !== resolvedHtml) {
+        node.innerHTML = resolvedHtml;
+        node.setAttribute('data-hf-rendered', resolvedHtml);
       }
 
       // Compute style transforms based on animationIn, animationOut, and audio reactivity
@@ -1029,7 +1272,8 @@ export class HyperFramesEngine {
     }
 
     // Try rendering via SVG foreignObject cache
-    const cacheKey = `${ev.id}_${cvW}x${cvH}_${ev.html.length}`;
+    const resolvedHtml = this.resolveEventHtml(ev);
+    const cacheKey = `${ev.id}_${cvW}x${cvH}_${resolvedHtml.length}_${ev.title || ''}`;
     const cached = rasterCache.get(cacheKey);
 
     if (cached && cached.loaded && cached.img) {
@@ -1049,7 +1293,7 @@ export class HyperFramesEngine {
 
     // If raster isn't cached yet, initiate background SVG render
     if (!cached && typeof Image !== 'undefined') {
-      this.rasterizeSvg(ev, cvW, cvH, cacheKey);
+      this.rasterizeSvg(ev, cvW, cvH, cacheKey, resolvedHtml);
     }
 
     // Fallback: draw high-fidelity stylized Canvas 2D card with theme styling and audio reactivity
@@ -1058,12 +1302,38 @@ export class HyperFramesEngine {
   }
 
   /**
+   * Resolves the HTML for a HyperFrameEvent, replacing hardcoded demo boilerplate
+   * whenever a story-specific title/subtitle/badge is present on the event.
+   */
+  public static resolveEventHtml(ev: HyperFrameEvent): string {
+    const rawHtml = (ev.html || '').trim();
+    const rawTitle = (ev.title || '').trim();
+    const isDefaultPresetName = HYPERFRAME_PRESETS.some(p => p.name === rawTitle);
+    const hasCustomStoryText = Boolean((rawTitle && !isDefaultPresetName) || ev.subtitle || ev.badge || ev.statValue);
+    const hasLegacyBoilerplate = LEGACY_DEMO_SNIPPETS.some(snippet => rawHtml.includes(snippet));
+
+    if (!rawHtml || (hasCustomStoryText && hasLegacyBoilerplate)) {
+      const upgraded = buildHyperFrameHtml(ev.templateId || ev.presetId || 'apple-feature', {
+        title: ev.title,
+        subtitle: ev.subtitle,
+        badge: ev.badge,
+        statValue: ev.statValue,
+      });
+      ev.html = upgraded;
+      return upgraded;
+    }
+    return rawHtml;
+  }
+
+  /**
    * Pre-warms the SVG foreignObject raster for a HyperFrame up-front.
    * Uses the identical cache key to drawToCanvas so the very first frame renders the full raster.
    */
   public static async prewarmRaster(ev: HyperFrameEvent, cvW: number, cvH: number): Promise<void> {
-    if (!ev || !ev.html || typeof Image === 'undefined') return;
-    const cacheKey = `${ev.id}_${cvW}x${cvH}_${ev.html.length}`;
+    if (!ev || typeof Image === 'undefined') return;
+    const resolvedHtml = this.resolveEventHtml(ev);
+    if (!resolvedHtml) return;
+    const cacheKey = `${ev.id}_${cvW}x${cvH}_${resolvedHtml.length}_${ev.title || ''}`;
     const cached = rasterCache.get(cacheKey);
     if (cached && cached.loaded) return;
 
@@ -1075,7 +1345,7 @@ export class HyperFramesEngine {
 <svg xmlns="http://www.w3.org/2000/svg" width="${cardW}" height="${cardH}">
   <foreignObject width="100%" height="100%">
     <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
-      ${ev.html}
+      ${resolvedHtml}
     </div>
   </foreignObject>
 </svg>`;
@@ -1105,15 +1375,16 @@ export class HyperFramesEngine {
   /**
    * Asynchronously converts HTML snippet into SVG foreignObject image for canvas exports
    */
-  private static rasterizeSvg(ev: HyperFrameEvent, cvW: number, cvH: number, cacheKey: string) {
+  private static rasterizeSvg(ev: HyperFrameEvent, cvW: number, cvH: number, cacheKey: string, htmlOverride?: string) {
     try {
       const cardW = 540;
       const cardH = 220;
+      const htmlContent = htmlOverride || this.resolveEventHtml(ev);
       const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${cardW}" height="${cardH}">
   <foreignObject width="100%" height="100%">
     <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
-      ${ev.html}
+      ${htmlContent}
     </div>
   </foreignObject>
 </svg>`;
@@ -1206,7 +1477,8 @@ export class HyperFramesEngine {
     ctx.fillStyle = accent;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(ev.audioReactive ? '🎵 AUDIO SYNC' : 'HYPERFRAMES', pillX + pillW / 2, pillY + pillH / 2);
+    const badgeLabel = (ev.badge || (ev.audioReactive ? 'KEY HIGHLIGHT' : 'SPOTLIGHT')).toUpperCase().slice(0, 18);
+    ctx.fillText(badgeLabel, pillX + pillW / 2, pillY + pillH / 2);
 
     // Dynamic Equalizer Bars in Fallback Card
     if (ev.audioReactive && energy) {
@@ -1235,30 +1507,15 @@ export class HyperFramesEngine {
     ctx.fillStyle = ev.textColor || '#ffffff';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const titleText = ev.title || 'Interactive Composition';
+    const titleText = ev.title || 'Key Highlight';
     ctx.fillText(titleText, x + 20 * sc, y + 46 * sc, cardW - 40 * sc);
 
-    // Subtitle / Prompt excerpt
-    ctx.font = `normal ${11 * sc}px -apple-system, sans-serif`;
-    ctx.fillStyle = '#94a3b8';
-    const subText = 'Deterministic code-driven motion overlay layer';
-    ctx.fillText(subText, x + 20 * sc, y + 76 * sc, cardW - 40 * sc);
-
-    // Footer divider line
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.lineWidth = 1 * sc;
-    ctx.beginPath();
-    ctx.moveTo(x + 20 * sc, y + 102 * sc);
-    ctx.lineTo(x + cardW - 20 * sc, y + 102 * sc);
-    ctx.stroke();
-
-    // Footer tags
-    ctx.font = `600 ${9 * sc}px monospace`;
-    ctx.fillStyle = accent;
-    ctx.fillText('⚡ 60FPS SEEKABLE', x + 20 * sc, y + 114 * sc);
-
-    ctx.fillStyle = '#64748b';
-    ctx.fillText('• DETERMINISTIC MP4', x + 150 * sc, y + 114 * sc);
+    // Subtitle / Context excerpt
+    if (ev.subtitle) {
+      ctx.font = `normal ${11 * sc}px -apple-system, sans-serif`;
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText(ev.subtitle, x + 20 * sc, y + 76 * sc, cardW - 40 * sc);
+    }
 
     ctx.restore();
   }

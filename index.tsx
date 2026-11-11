@@ -203,12 +203,35 @@ function registerEventListeners() {
         pkg.addEventListener('click', miscHandlers.handleSelectCreditPackage);
     });
     dom.checkoutBtn?.addEventListener('click', miscHandlers.handleCheckout);
-    dom.startAppBtn?.addEventListener('click', miscHandlers.startAppFromLanding);
-    dom.startAppBtnHero?.addEventListener('click', () => { projectHandlers.startNewProject(false); miscHandlers.startAppFromLanding(); });
-    dom.resumeAppBtn?.addEventListener('click', miscHandlers.startAppFromLanding);
+    dom.startAppBtn?.addEventListener('click', () => miscHandlers.startAppFromLanding(false));
+    dom.startAppBtnHero?.addEventListener('click', async () => {
+        await miscHandlers.startAppFromLanding(true);
+        await projectHandlers.startNewProject(false);
+    });
+    dom.resumeAppBtn?.addEventListener('click', () => miscHandlers.startAppFromLanding(false));
     dom.exitAppBtn?.addEventListener('click', miscHandlers.exitAppToLanding);
     dom.exitAppBtnMobile?.addEventListener('click', miscHandlers.exitAppToLanding);
 
+    // Landing Page Brand Scroll-to-Top & Footer Platform Actions
+    document.querySelectorAll('#landing-brand-top, #landing-brand-footer').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            dom.landingPage?.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+
+    document.getElementById('footer-studio-btn')?.addEventListener('click', () => {
+        miscHandlers.startAppFromLanding(false);
+    });
+
+    document.getElementById('footer-api-console-btn')?.addEventListener('click', async () => {
+        await miscHandlers.startAppFromLanding(false);
+        const apiAccordion = document.getElementById('accordion-system-api') as HTMLDetailsElement | null;
+        if (apiAccordion) {
+            apiAccordion.open = true;
+            apiAccordion.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
 
     // Landing Page Sample Story Launchers
     const heroGenerateBtn = document.getElementById('landing-hero-generate-btn');
@@ -216,13 +239,16 @@ function registerEventListeners() {
     heroGenerateBtn?.addEventListener('click', async () => {
         const prompt = heroPromptInput?.value?.trim();
         if (prompt && dom.storyInput) {
-            projectHandlers.startNewProject(false);
+            await miscHandlers.startAppFromLanding(true);
+            await projectHandlers.startNewProject(false);
             dom.storyInput.value = prompt;
             ui.updateUiForStoryChange();
-            projectHandlers.saveVersion(true);
+            await projectHandlers.saveVersion(false, true);
+            dom.storyInput.focus();
+            ui.showStatus('✨ Story script loaded into Director Studio!', false, 3000);
+        } else {
+            await miscHandlers.startAppFromLanding(false);
         }
-        await miscHandlers.startAppFromLanding();
-        ui.showStatus('✨ Story script loaded into Director Studio!', false, 3000);
     });
 
     document.querySelectorAll('.landing-hero-chip').forEach(chip => {
@@ -239,13 +265,16 @@ function registerEventListeners() {
         btn.addEventListener('click', async (e) => {
             const prompt = (e.currentTarget as HTMLButtonElement).dataset.prompt;
             if (prompt && dom.storyInput) {
-                projectHandlers.startNewProject(false);
+                await miscHandlers.startAppFromLanding(true);
+                await projectHandlers.startNewProject(false);
                 dom.storyInput.value = prompt;
                 ui.updateUiForStoryChange();
-                projectHandlers.saveVersion(true);
+                await projectHandlers.saveVersion(false, true);
+                dom.storyInput.focus();
+                ui.showStatus('✨ Story template loaded into Director Studio!', false, 3000);
+            } else {
+                await miscHandlers.startAppFromLanding(false);
             }
-            await miscHandlers.startAppFromLanding();
-            ui.showStatus('✨ Story template loaded into Director Studio!', false, 3000);
         });
     });
 
@@ -1598,15 +1627,18 @@ function registerEventListeners() {
     const updateTimelineCollapseUI = (isCollapsed: boolean) => {
         if (!dom.timelineEditorContainer) return;
         const icon = document.getElementById('collapse-timeline-icon');
+        const bottomBar = document.getElementById('timeline-bottom-scrubber-bar');
         if (isCollapsed) {
             dom.timelineEditorContainer.classList.add('is-collapsed');
             dom.timelineEditorContainer.style.height = '42px';
             if (dom.timelineClipsContainer) dom.timelineClipsContainer.classList.add('hidden');
+            if (bottomBar) bottomBar.classList.add('hidden');
             if (icon) icon.textContent = '▲';
         } else {
             dom.timelineEditorContainer.classList.remove('is-collapsed');
             dom.timelineEditorContainer.style.height = '';
             if (dom.timelineClipsContainer) dom.timelineClipsContainer.classList.remove('hidden');
+            if (bottomBar) bottomBar.classList.remove('hidden');
             if (icon) icon.textContent = '▼';
             ui.renderTimelineEditor();
         }

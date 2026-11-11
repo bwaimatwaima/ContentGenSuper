@@ -5,7 +5,7 @@ import * as utils from './utils';
 import * as dom from './dom';
 import * as ui from './ui';
 import { GraphicEvent, getGraphicBounds } from './graphics-engine';
-import { HYPERFRAME_PRESETS, HyperFramesEngine } from './hyperframes-engine';
+import { HYPERFRAME_PRESETS, HyperFramesEngine, buildHyperFrameHtml } from './hyperframes-engine';
 import { AudioSynthesizer, type ProceduralSfxType } from './audioSynthesizer';
 import { drawVideoFrame, getPipOverlayBounds, TimelineClip } from './videoRenderer';
 import { handleSplitClip, handleTrimClip, handleTimelineZoomIn, handleTimelineZoomOut, handleTimelineZoomFit, handleVideoPlayPause, handleDeleteClip, handleTrimDeadAir, handleUndoTimeline, handleRedoTimeline, handleResyncTimeline } from './videoController';
@@ -2775,8 +2775,19 @@ export function setupCanvasInteraction() {
         });
     }
     if (dom.geColor) dom.geColor.addEventListener('input', updateGraphicFromEditorLive);
-    if (dom.geTitle) dom.geTitle.addEventListener('input', updateGraphicFromEditorLive);
-    if (dom.geSubtitle) dom.geSubtitle.addEventListener('input', updateGraphicFromEditorLive);
+    const syncHyperFrameHtmlFromTitleSub = () => {
+        if (dom.geType?.value === 'hyperFrame' && dom.geHfPresetSelect && dom.geHfPresetSelect.value !== 'custom') {
+            const presetId = dom.geHfPresetSelect.value || 'apple-feature';
+            const nextHtml = buildHyperFrameHtml(presetId, {
+                title: dom.geTitle?.value,
+                subtitle: dom.geSubtitle?.value,
+            });
+            if (dom.geHfHtml) dom.geHfHtml.value = nextHtml;
+        }
+        updateGraphicFromEditorLive();
+    };
+    if (dom.geTitle) dom.geTitle.addEventListener('input', syncHyperFrameHtmlFromTitleSub);
+    if (dom.geSubtitle) dom.geSubtitle.addEventListener('input', syncHyperFrameHtmlFromTitleSub);
     if (dom.gePosition) dom.gePosition.addEventListener('change', updateGraphicFromEditorLive);
     if (dom.geBackdrop) dom.geBackdrop.addEventListener('change', updateGraphicFromEditorLive);
     if (dom.geIcon) dom.geIcon.addEventListener('change', updateGraphicFromEditorLive);
@@ -2858,12 +2869,20 @@ export function setupCanvasInteraction() {
             const selected = dom.geHfPresetSelect.value;
             const preset = HYPERFRAME_PRESETS.find(p => p.id === selected);
             if (preset) {
-                if (dom.geHfHtml) dom.geHfHtml.value = preset.html.trim();
+                const curTitle = dom.geTitle?.value?.trim() || '';
+                const isGenericPresetTitle = HYPERFRAME_PRESETS.some(p => p.name === curTitle);
+                if (!curTitle || isGenericPresetTitle) {
+                    if (dom.geTitle) dom.geTitle.value = preset.name;
+                }
+                const nextHtml = buildHyperFrameHtml(preset.id, {
+                    title: dom.geTitle?.value,
+                    subtitle: dom.geSubtitle?.value,
+                });
+                if (dom.geHfHtml) dom.geHfHtml.value = nextHtml;
                 if (dom.geHfAnimIn) dom.geHfAnimIn.value = preset.animationIn;
                 if (dom.geHfAnimOut) dom.geHfAnimOut.value = preset.animationOut;
                 if (dom.geHfPosition) dom.geHfPosition.value = preset.position;
                 if (dom.geColor) dom.geColor.value = preset.accentColor;
-                if (dom.geTitle) dom.geTitle.value = preset.name;
                 if (dom.geHfAudioReactive) dom.geHfAudioReactive.checked = preset.audioReactive ?? false;
                 if (dom.geHfMusicGlow) dom.geHfMusicGlow.checked = preset.musicReactiveGlow ?? false;
                 if (dom.geHfSfxTrigger) dom.geHfSfxTrigger.value = preset.sfxTrigger ?? 'none';
@@ -2876,7 +2895,12 @@ export function setupCanvasInteraction() {
         dom.geHfResetCodeBtn.addEventListener('click', () => {
             const selected = dom.geHfPresetSelect?.value || 'launch-hero';
             const preset = HYPERFRAME_PRESETS.find(p => p.id === selected) || HYPERFRAME_PRESETS[0];
-            if (dom.geHfHtml) dom.geHfHtml.value = preset.html.trim();
+            if (dom.geHfHtml) {
+                dom.geHfHtml.value = buildHyperFrameHtml(preset.id, {
+                    title: dom.geTitle?.value,
+                    subtitle: dom.geSubtitle?.value,
+                });
+            }
             updateGraphicFromEditorLive();
         });
     }

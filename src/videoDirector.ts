@@ -17,7 +17,7 @@ import { updateVideoContext } from './videoContextBridge';
 import { saveVersion } from './handlers-project';
 import type { GraphicEvent } from './graphics-engine';
 import type { ProceduralSfxType } from './audioSynthesizer';
-import { HYPERFRAME_PRESETS } from './hyperframes-engine';
+import { HYPERFRAME_PRESETS, buildHyperFrameHtml } from './hyperframes-engine';
 import type { DirectorReviewResult, DirectorSuggestion, DirectorActionResult, CameraKeyframesConfig } from './types';
 
 interface NarrationDirection {
@@ -956,7 +956,7 @@ interface GraphicsDetection {
   versusCards?: { leftTitle: string; leftPoints: string[]; rightTitle: string; rightPoints: string[]; vsBadgeText?: string; anchor: string; importance?: Importance }[];
   socialBadges?: { platform: 'youtube' | 'instagram' | 'tiktok' | 'x' | 'discord' | 'custom'; handle: string; anchor: string; importance?: Importance }[];
   spotlightFocus?: { title?: string; subtitle?: string; anchor: string; importance?: Importance }[];
-  hyperFrames?: { title: string; templateId?: string; anchor: string; importance?: Importance }[];
+  hyperFrames?: { title: string; subtitle?: string; badge?: string; statValue?: string; templateId?: string; anchor: string; importance?: Importance }[];
 }
 
 interface IntensityConfig {
@@ -1424,10 +1424,17 @@ function buildGraphics(
     if (!passesFilter(hf.importance)) continue;
     const hit = findAnchorTime(words, hf.anchor || hf.title);
     if (!hit) continue;
-    const template = HYPERFRAME_PRESETS.find(p => p.id === hf.templateId) || HYPERFRAME_PRESETS[0];
+    const defaultTemplate = HYPERFRAME_PRESETS.find(p => p.id === 'apple-feature') || HYPERFRAME_PRESETS[0];
+    const template = HYPERFRAME_PRESETS.find(p => p.id === hf.templateId) || defaultTemplate;
     const dur = template.defaultDuration || 4.5;
     const mode = (state as any).autoOverlaySfxMode || 'none';
     const sfx = mode === 'none' ? 'none' : (template.sfxTrigger || (mode === 'high-energy' ? 'whoosh' : 'pop'));
+    const dynamicHtml = buildHyperFrameHtml(template.id, {
+      title: hf.title,
+      subtitle: hf.subtitle,
+      badge: hf.badge,
+      statValue: hf.statValue,
+    });
     candidates.push({
       time: hit.start,
       c: {
@@ -1438,8 +1445,11 @@ function buildGraphics(
           start: hit.start,
           end: Math.min(hit.start + dur, totalDur),
           title: hf.title || template.name,
+          subtitle: hf.subtitle,
+          badge: hf.badge,
+          statValue: hf.statValue,
           templateId: template.id,
-          html: template.html.trim(),
+          html: dynamicHtml,
           animationIn: template.animationIn,
           animationOut: template.animationOut,
           position: template.position,
@@ -1534,7 +1544,7 @@ export async function autoGenerateGraphics(isSilent = false, forceFresh = false)
   const cfg = INTENSITY_CONFIG[intensity];
 
   const script = words.map((w: any) => w.word).join(' ');
-  const cacheKey = getCacheKey('graphics', { script, intensity });
+  const cacheKey = getCacheKey('graphics_v2', { script, intensity });
   const cached = !forceFresh ? getCache(cacheKey) : null;
   if (cached) {
     const events = buildGraphics(cached, words, intensity);
@@ -1557,7 +1567,7 @@ export async function autoGenerateGraphics(isSilent = false, forceFresh = false)
     const response = await generateContentWithFallback({
       model: constants.PRIMARY_MODEL,
       contents: `Narration script:\n"""${script}"""`,
-      systemInstruction: `You are a documentary and viral video motion-graphics director. From the narration, extract:
+      systemInstruction: `You are a documentary and narrative video motion-graphics director. From the narration, extract:
 1) lowerThirds: the 3-6 MOST IMPORTANT named people/organizations (protagonists, key figures). Only the FIRST introduction of each. Skip minor or passing mentions.
 2) titleCards: major section/chapter boundaries (clear topic shifts) that deserve a full-screen title. Titles must be SHORT (2-5 words).
 3) statCounters: impressive numbers, financial figures, growth metrics, or single statistics (e.g. "$500M", "10x", "50,000 users").
@@ -1565,7 +1575,17 @@ export async function autoGenerateGraphics(isSilent = false, forceFresh = false)
 5) versusCards: distinct comparisons or battles between two items/sides (e.g. "iPhone vs Android", "Old Way vs New Way").
 6) socialBadges: calls to action, channel subscriptions, social handles, or website links.
 7) spotlightFocus: critical pivotal moments or focal objects calling for dramatic spotlighting.
-8) hyperFrames: 1-4 high-impact viral hooks, launch cards, e-commerce promo badges, audio-reactive cards, or retention callouts. Choose templateId from: "launch-hero", "flash-sale", "ecommerce-cta", "trust-reviews", "price-slash", "pattern-wait", "pattern-mistake", "apple-feature", "reels-hook", "stat-metric", "music-eq-card", "cinematic-act", "podcast-speaker". Titles must be punchy (2-5 words).
+8) hyperFrames: 1-3 story-driven kinetic callout cards that reinforce a pivotal turning point, key insight, chapter theme, warning, or quote directly from the narration.
+   - Choose templateId ONLY from templates that fit the script's genre:
+     * "apple-feature": clean minimal insight card (great for documentaries, essays, explanations, and general stories).
+     * "cinematic-act": dramatic chapter/turning-point card with serif typography and quote (great for storytelling, history, drama).
+     * "launch-hero": spotlight milestone card with pulsing indicator.
+     * "reels-hook": bold kinetic headline banner (ONLY use with a real 2-5 word phrase from the script—never generic clickbait like "This Changes Everything").
+     * "pattern-wait": suspenseful reveal callout for a genuine twist in the script.
+     * "pattern-mistake": red warning callout ONLY when the script discusses a real danger, risk, or mistake.
+     * "stat-metric": metric card ONLY when a specific number/stat is mentioned (populate "statValue").
+     * "podcast-speaker": speaker/perspective pill.
+   - NEVER use generic clickbait filler ("This Changes Everything", "Wait For It", "Don't Scroll"). Every "title" (2-5 words), "subtitle" (4-10 word supporting context from the script), and "badge" (1-3 word category label like "KEY INSIGHT", "TURNING POINT", "HISTORICAL FACT", "CRITICAL RISK") MUST be 100% specific to the narration topic.
 
 Overlay density for this pass: ${cfg.promptGuidance}
 
@@ -1698,6 +1718,9 @@ If nothing qualifies for a category, return an empty array. Never invent facts.`
               type: Type.OBJECT,
               properties: {
                 title: { type: Type.STRING },
+                subtitle: { type: Type.STRING },
+                badge: { type: Type.STRING },
+                statValue: { type: Type.STRING },
                 templateId: { type: Type.STRING },
                 anchor: { type: Type.STRING },
                 importance: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
@@ -2223,7 +2246,18 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
     const mainClips = clips.filter((c: any) => c && c.displayMode !== 'pip_overlay');
     const mainIndex = mainClips.findIndex((c: any) => c.id === targetClip.id);
 
-    if (timelineState.mode === 'audio_locked') {
+    if (timelineState.editMode === 'lift') {
+      const nextClip = mainIndex >= 0 && mainIndex < mainClips.length - 1 ? mainClips[mainIndex + 1] : null;
+      const maxLiftDur = nextClip ? Math.max(MIN_CLIP_DUR, nextClip.startTime - targetClip.startTime) : clampedDesired;
+      const finalLiftDur = Math.max(MIN_CLIP_DUR, Math.min(clampedDesired, maxLiftDur));
+      targetClip.duration = finalLiftDur;
+      targetClip.endTime = targetClip.startTime + finalLiftDur;
+      return {
+        success: true,
+        changed: Math.abs(finalLiftDur - oldDur) >= 0.02,
+        message: `Lift-adjusted shot duration from ${oldDur.toFixed(1)}s to ${finalLiftDur.toFixed(1)}s.`,
+      };
+    } else if (timelineState.mode === 'audio_locked') {
       // Rolling edit: adjust shared boundary with adjacent main-track neighbor
       if (mainIndex >= 0 && mainIndex < mainClips.length - 1) {
         const neighbor = mainClips[mainIndex + 1];
@@ -2261,14 +2295,13 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
         return { success: false, changed: false, message: 'Cannot adjust duration of solitary shot in audio-locked mode.' };
       }
     } else {
+      const delta = clampedDesired - oldDur;
       targetClip.duration = clampedDesired;
       targetClip.endTime = targetClip.startTime + clampedDesired;
-      let currentStart = targetClip.endTime;
       if (mainIndex >= 0) {
         for (let i = mainIndex + 1; i < mainClips.length; i++) {
-          mainClips[i].startTime = currentStart;
-          mainClips[i].endTime = currentStart + mainClips[i].duration;
-          currentStart = mainClips[i].endTime;
+          mainClips[i].startTime = Math.max(mainClips[i - 1].endTime, mainClips[i].startTime + delta);
+          mainClips[i].endTime = mainClips[i].startTime + mainClips[i].duration;
         }
       }
       return { success: true, changed: true, message: `Rippled shot duration from ${oldDur.toFixed(1)}s to ${clampedDesired.toFixed(1)}s.` };
@@ -2484,16 +2517,23 @@ export async function applyDirectorSuggestion(suggestionId: string, skipSnapshot
   const mainTrackClips = clips.filter((c: any) => c && c.displayMode !== 'pip_overlay');
   const pipClips = clips.filter((c: any) => c && c.displayMode === 'pip_overlay');
 
+  const preserveGaps = timelineState.editMode === 'lift';
   let mainCursor = 0;
   for (let i = 0; i < mainTrackClips.length; i++) {
     const c = mainTrackClips[i];
     if (c.duration <= 0) c.duration = MIN_CLIP_DUR;
     if (i === 0) {
-      if (c.startTime < 0) c.startTime = 0;
+      if (c.startTime < 0 || !preserveGaps) c.startTime = preserveGaps ? Math.max(0, c.startTime) : 0;
       c.endTime = c.startTime + c.duration;
       mainCursor = c.endTime;
     } else {
-      c.startTime = mainCursor;
+      if (preserveGaps) {
+        if (c.startTime < mainCursor - 0.001) {
+          c.startTime = mainCursor;
+        }
+      } else {
+        c.startTime = mainCursor;
+      }
       c.endTime = c.startTime + c.duration;
       mainCursor = c.endTime;
     }

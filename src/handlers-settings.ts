@@ -3324,16 +3324,16 @@ export function updateSmartCaptionStatusUI() {
     const clips = timelineState.clips || [];
     const smartClips = clips.filter(c => c.subtitlePlacement && c.subtitlePlacement.source === 'smart');
 
-    if (state.smartCaptionPlacementEnabled || smartClips.length > 0) {
+    if (state.smartCaptionPlacementEnabled) {
         dom.smartCaptionStatus.textContent = `🎯 Smart placement active on ${smartClips.length}/${clips.length} clips.`;
         dom.smartCaptionStatus.className = 'text-[10px] text-indigo-300 font-medium leading-tight';
         if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = true;
-        state.smartCaptionPlacementEnabled = true;
     } else {
-        dom.smartCaptionStatus.textContent = 'Smart placement off - centered manually';
+        dom.smartCaptionStatus.textContent = smartClips.length > 0
+            ? `Smart placement off (${smartClips.length}/${clips.length} analyzed) - centered manually`
+            : 'Smart placement off - centered manually';
         dom.smartCaptionStatus.className = 'text-[10px] text-gray-400 leading-tight';
         if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = false;
-        state.smartCaptionPlacementEnabled = false;
     }
 }
 

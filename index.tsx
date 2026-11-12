@@ -1450,6 +1450,9 @@ function registerEventListeners() {
     dom.videoTransitionStyleSelect?.addEventListener('change', videoController.handleVideoTransitionChange);
     dom.videoTransitionSpeedSelect?.addEventListener('change', videoController.handleVideoTransitionSpeedChange);
 
+    // Smart Caption Analysis & Placement listeners
+    settingsHandlers.initSmartCaptionListeners();
+
     // Background Audio & Transcript Editor
     dom.generateBgAudioBtn?.addEventListener('click', imageHandlers.generateBgAudio);
     dom.openTranscriptEditorBtn?.addEventListener('click', () => transcriptHandlers.handleOpenTranscriptEditor());

@@ -2593,6 +2593,15 @@ export function toggleVideoSubtitles() {
     if (dom.uploadSubtitleFontBtn) {
         dom.uploadSubtitleFontBtn.disabled = !timelineState.showSubtitles;
     }
+    if (dom.videoSmartCaptionToggle) {
+        dom.videoSmartCaptionToggle.disabled = !timelineState.showSubtitles;
+    }
+    if (dom.btnAnalyzeSmartCaptions) {
+        dom.btnAnalyzeSmartCaptions.disabled = !timelineState.showSubtitles;
+    }
+    if (dom.btnResetSmartCaptions) {
+        dom.btnResetSmartCaptions.disabled = !timelineState.showSubtitles;
+    }
     renderSubtitleColorPickers();
     updateSubtitleTimestampsStatus();
     if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);

@@ -1433,6 +1433,7 @@ function registerEventListeners() {
     dom.videoSubtitlesCheckbox?.addEventListener('change', videoController.toggleVideoSubtitles);
     dom.videoSubtitleStyleSelect?.addEventListener('change', videoController.handleSubtitleStyleChange);
     dom.videoSubtitleFontSelect?.addEventListener('change', videoController.handleSubtitleFontChange);
+    dom.videoSubtitleSizeRange?.addEventListener('input', videoController.handleSubtitleSizeChange);
     dom.uploadSubtitleFontBtn?.addEventListener('click', () => {
         dom.customFontFileInput?.click();
     });

@@ -688,6 +688,11 @@ export function truncatePrompt(prompt: string, maxLength: number = 4096): string
     return protectedSuffix ? (head + protectedSuffix).trim() : head.trim();
 }
 
+export function isStylizedCharacterModifier(modifier?: string): boolean {
+    if (!modifier || !modifier.trim()) return false;
+    return /\b(cartoon|chibi|stick|sketch|ink|line\s*art|2d|flat|blocky|square|voxel|minecraft|anime|manga|claymation|puppet|silhouette|faceless|oval-shaped|dot\s*eyes|no\s*facial|featureless|jaiden|odd1sout|struthless|becker|cyanide|pixar)\b/i.test(modifier);
+}
+
 export function buildPromptForModel(
     styleTemplate: string,
     sceneDescription: string,
@@ -698,7 +703,11 @@ export function buildPromptForModel(
 ): string {
     const sanitizedScene = sanitizeSceneForStyle(sceneDescription);
     const isImagen = model.startsWith('imagen');
-    const intentNegative = styleIntent ? INTENT_NEGATIVE_PROMPTS[styleIntent] : negativePrompt;
+    const hasStylizedCharMod = isStylizedCharacterModifier(characterModifier);
+    const effectiveIntent = (hasStylizedCharMod && (!styleIntent || styleIntent === StyleIntent.CINEMATIC))
+        ? StyleIntent.ANIMATED
+        : styleIntent;
+    const intentNegative = effectiveIntent ? INTENT_NEGATIVE_PROMPTS[effectiveIntent] : negativePrompt;
 
     let positiveStyle = styleTemplate;
     if (positiveStyle.includes('[scene]')) {
@@ -707,26 +716,30 @@ export function buildPromptForModel(
         positiveStyle = `${sanitizedScene}. ${positiveStyle}`;
     }
 
-    if (characterModifier) {
-        positiveStyle += buildCharacterModifierSuffix(characterModifier);
+    if (characterModifier && characterModifier.trim()) {
+        positiveStyle += buildCharacterModifierSuffix(characterModifier.trim(), 'strong');
         // CHARACTER_MODIFIER_FIX F2: the style template gets its [scene]
         // replaced above, but the modifier is appended after that pass — any
         // [scene] inside it would leak literally into the final prompt.
         positiveStyle = positiveStyle.replace(/\[scene\]/g, sanitizedScene);
     }
 
+    const isAnimatedOrStylized = effectiveIntent === StyleIntent.ANIMATED || hasStylizedCharMod;
+
     if (isImagen) {
-        // Imagen 4.0 responds strongly to camera/lens language.
-        // It prefers natural descriptive sentences.
         let finalPrompt = positiveStyle;
-        finalPrompt += `\nShot on 35mm lens, high optical quality, cinematic photography.`;
+        if (isAnimatedOrStylized) {
+            finalPrompt += `\nHigh-definition visual quality, crisp intentional composition, consistent character design.`;
+        } else {
+            // Imagen 4.0 responds strongly to camera/lens language for photorealistic/cinematic styles.
+            finalPrompt += `\nShot on 35mm lens, high optical quality, cinematic photography.`;
+        }
         if (intentNegative) {
             finalPrompt += `\nAvoid these elements entirely: ${intentNegative}`;
         }
         return finalPrompt;
     } else {
-        // Gemini 2.5 responds to narrative framing.
-        // It also prefers natural descriptive sentences.
+        // Gemini image models respond strongly to narrative framing.
         let finalPrompt = positiveStyle;
         finalPrompt += `\nThis image plays a key narrative role in the story. Ensure strong emotional framing and storytelling execution.`;
         if (intentNegative) {
@@ -744,9 +757,10 @@ export function buildPromptForModel(
  */
 export function buildCharacterModifierSuffix(modifier: string, weight: 'subtle' | 'normal' | 'strong' = 'normal'): string {
     if (!modifier || !modifier.trim()) return '';
-    let wording = modifier;
-    if (weight === 'subtle') wording = `${modifier} (apply subtly; do not let it override realism or naturalism)`;
-    if (weight === 'strong') wording = `STRICT: ${modifier} — every character in this image must obey this design without exception`;
+    const trimmed = modifier.trim();
+    let wording = trimmed;
+    if (weight === 'subtle') wording = `${trimmed} (apply subtly; do not let it override realism or naturalism)`;
+    if (weight === 'strong') wording = `STRICT: ${trimmed} — every character in this image must obey this design without exception`;
     return ` Character design note: ${wording}`;
 }
 

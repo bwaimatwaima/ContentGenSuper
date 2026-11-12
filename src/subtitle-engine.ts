@@ -241,7 +241,8 @@ function precomputeLayout(
 ): SubtitleLayout {
     const words = text.split(/\s+/).filter(Boolean);
 
-    const sizeScale = typography?.sizeScale ?? 1.0;
+    const userScale = timelineState.videoSubtitleSizeScale || 1.0;
+    const sizeScale = (typography?.sizeScale ?? 1.0) * userScale;
     const weight = typography?.fontWeight ?? 800;
     const family = resolveSubtitleFont(text, fontFamily, typography?.fontFamily);
 
@@ -506,9 +507,10 @@ export const SubtitleEngine = {
     ): number {
         if (!text || position !== 'bottom') return 0;
         const entry = styleName ? this._registry.get(styleName) : null;
-        const sizeScale = entry?.typography?.sizeScale ?? 1.0;
+        const userScale = timelineState.videoSubtitleSizeScale || 1.0;
+        const sizeScale = (entry?.typography?.sizeScale ?? 1.0) * userScale;
         const font = entry?.typography?.fontFamily || timelineState.videoSubtitleFont || 'Montserrat';
-        const key = `${width}-${height}-${font}-${sizeScale}`;
+        const key = `${width}-${height}-${font}-${sizeScale.toFixed(3)}`;
         let offset = heightOffsetCache.get(key);
         if (offset === undefined) {
             // Cheap approximation matching rendered chunks (chunks are ≤4 words ≈ 1 line on landscape, 2 lines on vertical portrait).
@@ -685,9 +687,10 @@ export const SubtitleEngine = {
         const colors = { ...defaultConfig, ...(styleCustomColors ?? {}) };
 
         const currentFont = timelineState.videoSubtitleFont || 'Montserrat';
+        const userScale = timelineState.videoSubtitleSizeScale || 1.0;
         const weight = typography?.fontWeight ?? 800;
         const family = resolveSubtitleFont(displayText, currentFont, typography?.fontFamily);
-        const typoKey = `${weight}-${typography?.sizeScale ?? 1}-${family}-${typography?.letterSpacing ?? ''}`;
+        const typoKey = `${weight}-${((typography?.sizeScale ?? 1) * userScale).toFixed(3)}-${family}-${typography?.letterSpacing ?? ''}`;
         const placementKey = placement ? `${placement.x.toFixed(3)}:${placement.y.toFixed(3)}:${placement.align}` : '';
         const cacheKey = `${displayText}-${width}-${height}-${position}-${styleName}-${typoKey}${emphasisSig ? `-${emphasisSig}` : ''}${placementKey ? `-${placementKey}` : ''}`;
         let layout = layoutCache.get(cacheKey);

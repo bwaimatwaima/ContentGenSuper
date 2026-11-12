@@ -2586,6 +2586,10 @@ export function toggleVideoSubtitles() {
         dom.videoSubtitleFontSelect.disabled = !timelineState.showSubtitles;
         dom.videoSubtitleFontSelect.classList.toggle('opacity-50', !timelineState.showSubtitles);
     }
+    if (dom.videoSubtitleSizeRange) {
+        dom.videoSubtitleSizeRange.disabled = !timelineState.showSubtitles;
+        dom.videoSubtitleSizeRange.classList.toggle('opacity-50', !timelineState.showSubtitles);
+    }
     if (dom.uploadSubtitleFontBtn) {
         dom.uploadSubtitleFontBtn.disabled = !timelineState.showSubtitles;
     }
@@ -2777,9 +2781,11 @@ export function handleLyricsVideoPreset() {
         modeSelect.dispatchEvent(new Event('change'));
     }
     
-    // Re-enable style/position selects
+    // Re-enable style/position/font/size controls
     dom.videoSubtitleStyleSelect.disabled = false;
     dom.videoSubtitlePositionSelect.disabled = false;
+    if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.disabled = false;
+    if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.disabled = false;
     
     // Reset custom colors when preset changes so we start from the new style defaults
     state.videoSubtitleColors = {};
@@ -2811,6 +2817,19 @@ export function handleSubtitleFontChange() {
     } catch {}
     if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
     ui.showStatus(`Typography Font set to "${selectedFont}"`, false, 2000);
+}
+
+export function handleSubtitleSizeChange() {
+    const pct = dom.videoSubtitleSizeRange ? parseInt(dom.videoSubtitleSizeRange.value, 10) || 100 : 100;
+    const scale = Math.max(0.6, Math.min(1.6, pct / 100));
+    timelineState.setVideoSubtitleSizeScale(scale);
+    if (dom.videoSubtitleSizeVal) {
+        dom.videoSubtitleSizeVal.textContent = `${Math.round(scale * 100)}%`;
+    }
+    try {
+        SubtitleEngine.clearCache();
+    } catch {}
+    if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
 }
 
 export function refreshCustomFontSelect() {

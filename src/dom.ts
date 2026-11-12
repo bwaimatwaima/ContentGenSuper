@@ -966,6 +966,8 @@ export let videoSubtitlesCheckbox: HTMLInputElement;
 export let videoSubtitleStyleSelect: HTMLSelectElement;
 export let videoSubtitlePositionSelect: HTMLSelectElement;
 export let videoSubtitleFontSelect: HTMLSelectElement;
+export let videoSubtitleSizeRange: HTMLInputElement;
+export let videoSubtitleSizeVal: HTMLElement;
 export let videoSmartCaptionToggle: HTMLInputElement;
 export let btnAnalyzeSmartCaptions: HTMLButtonElement;
 export let btnResetSmartCaptions: HTMLButtonElement;
@@ -2081,6 +2083,8 @@ export function initDOM() {
     videoSubtitleStyleSelect = document.getElementById('video-subtitle-style-select') as HTMLSelectElement;
     videoSubtitlePositionSelect = document.getElementById('video-subtitle-position-select') as HTMLSelectElement;
     videoSubtitleFontSelect = document.getElementById('video-subtitle-font-select') as HTMLSelectElement;
+    videoSubtitleSizeRange = document.getElementById('video-subtitle-size-range') as HTMLInputElement;
+    videoSubtitleSizeVal = document.getElementById('video-subtitle-size-val') as HTMLElement;
     videoSmartCaptionToggle = document.getElementById('video-smart-caption-toggle') as HTMLInputElement;
     btnAnalyzeSmartCaptions = document.getElementById('btn-analyze-smart-captions') as HTMLButtonElement;
     btnResetSmartCaptions = document.getElementById('btn-reset-smart-captions') as HTMLButtonElement;

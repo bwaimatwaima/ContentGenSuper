@@ -270,6 +270,7 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
         videoSubtitleStyle: timelineState.videoSubtitleStyle,
         videoSubtitlePosition: timelineState.videoSubtitlePosition,
         videoSubtitleFont: timelineState.videoSubtitleFont,
+        videoSubtitleSizeScale: timelineState.videoSubtitleSizeScale,
         videoSubtitleColors: state.videoSubtitleColors,
         smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
         customFonts: state.customFonts,
@@ -840,9 +841,13 @@ export async function loadProject() {
             if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.value = timelineState.videoSubtitlePosition;
             timelineState.setVideoSubtitleFont(projectData.videoSubtitleFont || 'Montserrat');
             if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.value = timelineState.videoSubtitleFont;
+            timelineState.setVideoSubtitleSizeScale(typeof projectData.videoSubtitleSizeScale === 'number' ? projectData.videoSubtitleSizeScale : 1.0);
+            if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.value = String(Math.round(timelineState.videoSubtitleSizeScale * 100));
+            if (dom.videoSubtitleSizeVal) dom.videoSubtitleSizeVal.textContent = `${Math.round(timelineState.videoSubtitleSizeScale * 100)}%`;
             if (dom.videoSubtitleStyleSelect) dom.videoSubtitleStyleSelect.disabled = !timelineState.showSubtitles;
             if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.disabled = !timelineState.showSubtitles;
             if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.disabled = !timelineState.showSubtitles;
+            if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.disabled = !timelineState.showSubtitles;
             if (dom.uploadSubtitleFontBtn) dom.uploadSubtitleFontBtn.disabled = !timelineState.showSubtitles;
             
             if (Array.isArray(projectData.customFonts) && projectData.customFonts.length > 0) {
@@ -886,6 +891,7 @@ export async function loadProject() {
             // Update UI from restored settings
             if (dom.detailLevelSelect) ui.handlePacingChange(dom.detailLevelSelect.value);
             ui.handleImageStyleChange();
+            ui.handleCharacterModifierChange();
             ui.handleImageModelChange();
 
             // Run character frequency analysis after loading story and characters
@@ -1065,6 +1071,9 @@ export function startNewProject(shouldConfirm: boolean | Event = true) {
         if (dom.enableTextOverlayCheckbox) dom.enableTextOverlayCheckbox.checked = false;
         state.motionGraphicsEnabled = false;
         if (dom.enableMotionGraphicsCheckbox) dom.enableMotionGraphicsCheckbox.checked = false;
+        if (dom.characterModifierSelect) dom.characterModifierSelect.value = '';
+        if (dom.characterModifierCustom) dom.characterModifierCustom.value = '';
+        ui.handleCharacterModifierChange();
         const currentRatio = dom.imageResolutionSelect?.value || '16:9';
         updateAspectRatioState(currentRatio);
         ui.updateUiForStoryChange();

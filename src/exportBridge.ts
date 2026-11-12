@@ -182,6 +182,11 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
   timelineState.setVideoSubtitleStyle(payload.videoSubtitleStyle || 'anime');
   timelineState.setVideoSubtitlePosition(payload.videoSubtitlePosition || 'bottom');
   if (payload.videoSubtitleFont) timelineState.setVideoSubtitleFont(payload.videoSubtitleFont);
+  if (typeof (payload as any).videoSubtitleSizeScale === 'number') {
+    timelineState.setVideoSubtitleSizeScale((payload as any).videoSubtitleSizeScale);
+  } else if (typeof payload.videoSubtitleFontSize === 'number' && payload.videoSubtitleFontSize > 0) {
+    timelineState.setVideoSubtitleSizeScale(payload.videoSubtitleFontSize / 54);
+  }
   state.videoSubtitleColors = (payload.videoSubtitleColors && typeof payload.videoSubtitleColors === 'object') ? payload.videoSubtitleColors : {};
   timelineState.setVideoTransitionStyle(payload.videoTransitionStyle || 'narrative_guided');
   timelineState.setVideoEffects(payload.videoEffects || {});

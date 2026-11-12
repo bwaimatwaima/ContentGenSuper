@@ -148,7 +148,12 @@ interface IdentifyConfig {
 const ASSET_CONFIGS: Record<AssetType, IdentifyConfig> = {
     character: {
         type: 'character',
-        prompt: (story: string) => `Identify ONLY distinct individual characters from this story (including non-human characters like animals, insects, or robots if they act as characters). For each named character, output:
+        prompt: (story: string) => {
+            const activeCharModifier = ui.getCurrentCharacterModifier();
+            const modifierRule = activeCharModifier
+                ? `\n- **Active Character Style Modifier**: "${activeCharModifier}" — Ensure each character's appearance_anchor harmonizes with this character design rule (focusing on signature clothing, color-coding, accessories, and silhouette compatible with this style rather than conflicting realistic facial anatomy).`
+                : '';
+            return `Identify ONLY distinct individual characters from this story (including non-human characters like animals, insects, or robots if they act as characters). For each named character, output:
 - name (Full canonical name, e.g. "Joseph Bates")
 - aliases: array of all alternate names, first names, last names, titles, or nicknames used to refer to this character in the story (e.g. ["Joseph", "Bates", "Captain Bates", "Joe"])
 - appearance_anchor
@@ -176,10 +181,11 @@ Rules:
 - Do NOT include mood, actions, camera, lighting, location, props, or backstory.
 - **INCLUDE the main character/protagonist** as the first entry if they are a specific individual.
 - **Name vs. Title Rule**: If a character has a name and a title (e.g., "King Ahab", "Doctor Smith"), use their proper name as the 'name' (e.g., "Ahab", "Smith"). The title should be part of the description. If a character is only ever referred to by a title (e.g., "the King", "the Doctor"), then use that title as their 'name'.
-- **EXCLUDE generic background characters** like "someone", "everyone", "the narrator", "workers", "people", "villagers", "the crowd". Only identify specific, named, or distinct individuals.
+- **EXCLUDE generic background characters** like "someone", "everyone", "the narrator", "workers", "people", "villagers", "the crowd". Only identify specific, named, or distinct individuals.${modifierRule}
 
 Story:
-${story}`,
+${story}`;
+        },
         schemaKey: 'characters',
         stateKey: 'characterProfiles',
         filterFn: filterGenericCharacters,
@@ -565,7 +571,7 @@ export async function identifyCharacters() {
                 25
             );
 
-            const result = await extractCharacters(storyText, true);
+            const result = await extractCharacters(storyText, true, ui.getCurrentCharacterModifier());
 
             stopProgress2();
             stopProgress2 = null;

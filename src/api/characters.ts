@@ -8,7 +8,7 @@ import { sanitizeAndParseJson, wrapContentForApi } from '../utils';
 import { safeJsonStringify } from '../utils-core';
 import { PRIMARY_MODEL, SECONDARY_MODEL, TERTIARY_MODEL } from '../constants';
 
-export async function extractCharacterWithTimelineContext(storyText: string, _skipPerspectiveCheck = false) {
+export async function extractCharacterWithTimelineContext(storyText: string, _skipPerspectiveCheck = false, characterModifier = '') {
     // Truncate story text to avoid hitting token limits or triggering safety filters on long content
     const truncatedStory = storyText.length > 15000 ? storyText.substring(0, 15000) + "..." : storyText;
     const framedStory = wrapContentForApi(truncatedStory);
@@ -19,6 +19,10 @@ export async function extractCharacterWithTimelineContext(storyText: string, _sk
             throw new Error('Story is not first-person. Use extractOtherCharacters instead.');
         }
     }
+
+    const modifierRule = characterModifier.trim()
+        ? `\n- ACTIVE CHARACTER STYLE MODIFIER: "${characterModifier.trim()}" — Ensure visual descriptions harmonize with this character design rule (focusing on clothing, colors, accessories, silhouette, and traits compatible with this style rather than conflicting realistic facial anatomy).`
+        : '';
 
     const prompt = `
 Analyze this first-person narrative and extract the narrator's appearance at different life stages.
@@ -62,7 +66,7 @@ GUIDELINES:
 - Symbolic scenes might include: abstract concepts, close-ups of objects, environmental shots without people
 - Visual descriptions MUST follow this exact format:
   Male, late 50s. Bald, thick gray beard. Sun-weathered olive skin, long angular face, dark eyes. Lean, rugged, upright. Rough wool prophetic mantle over simple earth-toned tunic.
-  Never: hair on scalp, clean-shaven, young, modern or royal clothing.
+  Never: hair on scalp, clean-shaven, young, modern or royal clothing.${modifierRule}
 
 Return ONLY valid JSON.
 `;
@@ -323,13 +327,13 @@ export async function detectNarrativePerspective(story: string): Promise<boolean
     }
 }
 
-export async function extractCharacters(storyText: string, isFirstPersonOverride?: boolean) {
+export async function extractCharacters(storyText: string, isFirstPersonOverride?: boolean, characterModifier = '') {
     const isFirstPerson = isFirstPersonOverride ?? await detectNarrativePerspective(storyText);
     
     if (isFirstPerson) {
         try {
-            const timeline = await extractCharacterWithTimelineContext(storyText, true);
-            const otherChars = await extractContextualCharacters(storyText);
+            const timeline = await extractCharacterWithTimelineContext(storyText, true, characterModifier);
+            const otherChars = await extractContextualCharacters(storyText, characterModifier);
             return {
                 type: 'narrator' as const,
                 timeline,
@@ -337,14 +341,14 @@ export async function extractCharacters(storyText: string, isFirstPersonOverride
             };
         } catch (error) {
             console.error('Narrator extraction failed, falling back to standard extraction:', error);
-            const characters = await extractContextualCharacters(storyText);
+            const characters = await extractContextualCharacters(storyText, characterModifier);
             return {
                 type: 'characters' as const,
                 characters
             };
         }
     } else {
-        const characters = await extractContextualCharacters(storyText);
+        const characters = await extractContextualCharacters(storyText, characterModifier);
         return {
             type: 'characters' as const,
             characters
@@ -352,10 +356,13 @@ export async function extractCharacters(storyText: string, isFirstPersonOverride
     }
 }
 
-export async function extractOtherCharacters(storyText: string) {
+export async function extractOtherCharacters(storyText: string, characterModifier = '') {
     // Truncate story text to avoid hitting token limits or triggering safety filters on long content
     const truncatedStory = storyText.length > 15000 ? storyText.substring(0, 15000) + "..." : storyText;
     const framedStory = wrapContentForApi(truncatedStory);
+    const modifierDirective = characterModifier.trim()
+        ? `\n- ACTIVE CHARACTER STYLE MODIFIER: "${characterModifier.trim()}" — Ensure appearance_anchor harmonizes with this character design rule (focusing on signature clothing, color-coding, accessories, and silhouette compatible with this style rather than conflicting realistic facial anatomy).`
+        : '';
 
     const prompt = `
 Analyze the story below and extract every named character.
@@ -379,7 +386,7 @@ Rules:
 - If details are missing, make a conservative visual production choice rather than writing "unspecified" for every field.
 - The goal is visual consistency across repeated image generations.
 - Add 4–8 constraints after "Never:" for traits that would break character identity.
-- Do NOT include mood, actions, camera, lighting, location, props, or backstory.
+- Do NOT include mood, actions, camera, lighting, location, props, or backstory.${modifierDirective}
 
 Return a JSON object with a "characters" array.
 
@@ -426,11 +433,14 @@ ${framedStory}
     }
 }
 
-export async function extractContextualCharacters(storyText: string) {
+export async function extractContextualCharacters(storyText: string, characterModifier = '') {
     const truncatedStory = storyText.length > 15000 
         ? storyText.substring(0, 15000) + "..." 
         : storyText;
     const framedStory = wrapContentForApi(truncatedStory);
+    const modifierDirective = characterModifier.trim()
+        ? `\nACTIVE CHARACTER STYLE MODIFIER: "${characterModifier.trim()}"\nEnsure each character's appearance_anchor respects this design style (focusing on signature clothing, color-coding, accessories, and silhouette compatible with this style rather than conflicting realistic facial anatomy).\n`
+        : '';
 
     const prompt = `
 Analyze the story below and extract ALL significant characters (including humans, animals, insects, robots) —
@@ -448,7 +458,7 @@ For EACH character, you MUST use ALL available context clues to determine appear
 You ARE allowed and ENCOURAGED to infer race, ethnicity, and skin tone 
 from geographic and cultural story context. This is essential for 
 visual accuracy and cultural representation.
-
+${modifierDirective}
 Format each appearance_anchor with:
 1. A compact identity paragraph including: gender, age range, skin tone, 
    facial features, hair, build, clothing

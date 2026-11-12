@@ -92,6 +92,7 @@ class TimelineState {
     private _videoSubtitleStyle: any = 'anime';
     private _videoSubtitlePosition: 'bottom' | 'center' | 'top' = 'bottom';
     private _videoSubtitleFont: string = 'Montserrat';
+    private _videoSubtitleSizeScale: number = 1.0;
     private _videoTransitionStyle: any = 'narrative_guided';
     private _transitionSpeed: 'fast' | 'medium' | 'slow' | 'ultrafast' = 'medium';
     private _timelineSnapPoints: number[] = [];
@@ -187,6 +188,8 @@ class TimelineState {
     get videoSubtitleStyle(): any { return this._videoSubtitleStyle; }
     get videoSubtitlePosition(): 'bottom' | 'center' | 'top' { return this._videoSubtitlePosition; }
     get videoSubtitleFont(): string { return this._videoSubtitleFont; }
+    get videoSubtitleSizeScale(): number { return this._videoSubtitleSizeScale; }
+    get videoSubtitleFontSize(): number { return Math.round(54 * this._videoSubtitleSizeScale); }
     get videoTransitionStyle(): any { return this._videoTransitionStyle; }
     get transitionSpeed(): 'fast' | 'medium' | 'slow' | 'ultrafast' { return this._transitionSpeed; }
     get timelineSnapPoints(): number[] { return this._timelineSnapPoints; }
@@ -905,6 +908,12 @@ class TimelineState {
 
     setVideoSubtitleFont(font: string) {
         this._videoSubtitleFont = font || 'Montserrat';
+        this.emitSettingChange();
+    }
+
+    setVideoSubtitleSizeScale(scale: number) {
+        const num = Number(scale);
+        this._videoSubtitleSizeScale = Number.isFinite(num) ? Math.max(0.5, Math.min(2.0, num)) : 1.0;
         this.emitSettingChange();
     }
 

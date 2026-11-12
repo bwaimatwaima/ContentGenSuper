@@ -1279,13 +1279,26 @@
                                     <label for="character-modifier-select" class="text-xs text-gray-400 block mb-1">Character Style Modifier</label>
                                     <select id="character-modifier-select" class="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white">
                                         <option value="">None (use style default)</option>
-                                        <option value="Characters have rounded, soft heads instead of sharp or angular shapes.">Rounded Heads</option>
-                                        <option value="Characters have large heads and small bodies, chibi-style proportions.">Chibi Proportions</option>
-                                        <option value="Characters have elongated limbs and a lanky, exaggerated build.">Long Limbs</option>
-                                        <option value="Characters have square, blocky heads and rigid geometric bodies.">Blocky/Square Heads</option>
-                                        <option value="Loose, scratchy hand-drawn ink line art characters, minimal or no color, expressive rough linework.">Hand-Drawn Ink Sketch (Struthless-style)</option>
-                                        <option value="Thick clean black outlines, flat pastel colors, large expressive round eyes, simplified friendly cartoon proportions.">Storytime Vlog Look (JaidenAnimations-style)</option>
-                                        <option value="Oval-shaped heads, small dot eyes, thin stick-like arms, deadpan flat expressions.">Deadpan Storytime Look (TheOdd1sOut-style)</option>
+                                        <optgroup label="✏️ YouTube & Storytime Personas">
+                                            <option value="Loose, scratchy hand-drawn ink line art characters, minimal or no color, expressive rough linework.">Hand-Drawn Ink Sketch (Struthless-style)</option>
+                                            <option value="Thick clean black outlines, flat pastel colors, large expressive round eyes, simplified friendly cartoon proportions.">Storytime Vlog Look (JaidenAnimations-style)</option>
+                                            <option value="Oval-shaped heads, small dot eyes, thin stick-like arms, deadpan flat expressions.">Deadpan Storytime Look (TheOdd1sOut-style)</option>
+                                            <option value="Modern animator stick figures with solid color-coded filled circle heads, no facial features, expressive full-body posture and dynamic action poses.">Solid-Head Stick Animator (Alan Becker-style)</option>
+                                            <option value="Clean thick black outlines, bold flat colors, oval heads, simple dot eyes and expressive curved mouths, webcomic stick figure proportions.">Webcomic Stick Figure (Cyanide &amp; Happiness-style)</option>
+                                        </optgroup>
+                                        <optgroup label="📐 Stylized Proportions & Silhouettes">
+                                            <option value="Characters have rounded, soft heads instead of sharp or angular shapes.">Rounded Heads</option>
+                                            <option value="Characters have large heads and small bodies, chibi-style proportions.">Chibi Proportions</option>
+                                            <option value="Characters have elongated limbs and a lanky, exaggerated build.">Long Limbs</option>
+                                            <option value="Characters have square, blocky heads and rigid geometric bodies.">Blocky/Square Heads</option>
+                                            <option value="Minimalist faceless geometric characters with smooth featureless heads, no eyes or mouth, readable through posture, clothing, and silhouette.">Faceless Infographic Figures</option>
+                                            <option value="High-contrast solid black silhouette characters with expressive theatrical posture and crisp rim-lit edges.">Dramatic Shadow Silhouettes</option>
+                                        </optgroup>
+                                        <optgroup label="🎬 Animation, 3D & Tactile">
+                                            <option value="Expressive anime character proportions with large emotive eyes, defined stylized hair silhouettes, and clean cel-shaded facial features.">Anime / Manga Expressive</option>
+                                            <option value="Stylized 3D animated feature film characters with appealing rounded proportions, expressive oversized eyes, and soft subsurface skin shading.">3D Animated Feature (Pixar-style)</option>
+                                            <option value="Handcrafted stop-motion claymation puppet characters with tactile sculpted clay surfaces, subtle thumbprint textures, and matte finish.">Claymation Stop-Motion Puppet</option>
+                                        </optgroup>
                                         <option value="custom">Custom...</option>
                                     </select>
                                     <textarea id="character-modifier-custom" placeholder="Describe the character look, e.g. 'rounded heads, stubby arms, oversized eyes'" class="hidden mt-1 w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white" rows="2"></textarea>

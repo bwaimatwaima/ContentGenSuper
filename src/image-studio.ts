@@ -7,7 +7,8 @@ import * as DOM from './dom';
 import { generateImageWithFallback, editImageWithGemini } from './api/images';
 import { generateContentWithFallback } from './api/core';
 import { state } from './state';
-import { showStatus, renderVideoClips, renderResults } from './ui';
+import { showStatus, renderVideoClips, renderResults, getCurrentCharacterModifier } from './ui';
+import { buildCharacterModifierSuffix } from './utils';
 import { saveVersion } from './handlers-project';
 import { assetStorage } from './assetStorage';
 import { readImageBlobFromSystemClipboard, processAndRoutePastedImage } from './handlers-images';
@@ -207,7 +208,9 @@ export function initImageStudio() {
         DOM.studioEnhancePromptBtn.disabled = true;
         DOM.studioEnhancePromptBtn.innerText = '✨ Enhancing...';
         try {
-            const prompt = `Expand this image prompt into a highly detailed, cinematic visual prompt for AI image generation (1-2 sentences with vivid details and lighting instructions): "${raw}"`;
+            const charMod = getCurrentCharacterModifier();
+            const charModNote = charMod ? ` Ensure any characters follow this Character Style Modifier: "${charMod}".` : '';
+            const prompt = `Expand this image prompt into a highly detailed, cinematic visual prompt for AI image generation (1-2 sentences with vivid details and lighting instructions): "${raw}".${charModNote}`;
             const result = await generateContentWithFallback({ contents: prompt });
             if (result.text) {
                 DOM.studioPromptInput.value = result.text.trim();
@@ -233,8 +236,9 @@ export function initImageStudio() {
         try {
             const aspect = (DOM.studioAspectSelect.value || '16:9') as any;
             const model = DOM.studioModelSelect.value || 'gemini-3.1-flash-lite-image';
+            const charModSuffix = buildCharacterModifierSuffix(getCurrentCharacterModifier(), 'strong');
 
-            const res = await generateImageWithFallback(prompt, aspect, model);
+            const res = await generateImageWithFallback(`${prompt}${charModSuffix}`, aspect, model);
             if (res.base64) {
                 setStudioResult(res.base64, res.mimeType || 'image/png');
                 showStatus(`Image generated successfully using ${res.engine || 'AI'}!`, false);
@@ -345,8 +349,9 @@ export function initImageStudio() {
         try {
             const aspect = (DOM.studioAspectSelect.value || '16:9') as any;
             const model = DOM.studioModelSelect.value || 'gemini-3.1-flash-lite-image';
+            const charModSuffix = buildCharacterModifierSuffix(getCurrentCharacterModifier(), 'strong');
 
-            const res = await editImageWithGemini(currentStudioSourceImage, instruction, aspect, model);
+            const res = await editImageWithGemini(currentStudioSourceImage, `${instruction}${charModSuffix}`, aspect, model);
             if (res.base64) {
                 setStudioResult(res.base64, res.mimeType || 'image/png');
                 showStatus('Image edited successfully!', false);

@@ -1509,6 +1509,14 @@ export const MODAL_TEMPLATES = `
                                         </button>
                                     </div>
                                 </div>
+
+                                <div class="space-y-1 pt-0.5">
+                                    <div class="flex items-center justify-between">
+                                        <label for="video-subtitle-size-range" class="block text-[10px] uppercase font-mono text-gray-400">Font Size</label>
+                                        <span id="video-subtitle-size-val" class="text-[10px] font-mono text-indigo-300">100%</span>
+                                    </div>
+                                    <input type="range" id="video-subtitle-size-range" min="60" max="160" step="5" value="100" class="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50" disabled title="Subtitle Font Size (60% – 160%)">
+                                </div>
                             </div>
                             <div id="video-subtitle-colors-container"></div>
                             

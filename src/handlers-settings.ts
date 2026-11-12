@@ -3436,6 +3436,7 @@ export function initSmartCaptionListeners() {
             if (dom.videoSubtitleStyleSelect) dom.videoSubtitleStyleSelect.disabled = !timelineState.showSubtitles;
             if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.disabled = !timelineState.showSubtitles;
             if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.disabled = !timelineState.showSubtitles;
+            if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.disabled = !timelineState.showSubtitles;
             if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.disabled = !timelineState.showSubtitles;
             if (dom.btnAnalyzeSmartCaptions) dom.btnAnalyzeSmartCaptions.disabled = !timelineState.showSubtitles;
             if (dom.btnResetSmartCaptions) dom.btnResetSmartCaptions.disabled = !timelineState.showSubtitles;

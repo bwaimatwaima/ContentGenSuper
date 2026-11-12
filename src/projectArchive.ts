@@ -93,6 +93,7 @@ export async function exportProjectArchive(onProgress?: (percent: number, messag
             videoSubtitleStyle: timelineState.videoSubtitleStyle,
             videoSubtitlePosition: timelineState.videoSubtitlePosition,
             videoSubtitleFont: timelineState.videoSubtitleFont,
+            videoSubtitleSizeScale: timelineState.videoSubtitleSizeScale,
             videoSubtitleColors: state.videoSubtitleColors,
             smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
             customFonts: state.customFonts,
@@ -680,9 +681,13 @@ export async function importProjectArchive(file: File) {
         if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.value = timelineState.videoSubtitlePosition;
         timelineState.setVideoSubtitleFont(importedState.videoSubtitleFont || 'Montserrat');
         if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.value = timelineState.videoSubtitleFont;
+        timelineState.setVideoSubtitleSizeScale(typeof importedState.videoSubtitleSizeScale === 'number' ? importedState.videoSubtitleSizeScale : 1.0);
+        if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.value = String(Math.round(timelineState.videoSubtitleSizeScale * 100));
+        if (dom.videoSubtitleSizeVal) dom.videoSubtitleSizeVal.textContent = `${Math.round(timelineState.videoSubtitleSizeScale * 100)}%`;
         if (dom.videoSubtitleStyleSelect) dom.videoSubtitleStyleSelect.disabled = !timelineState.showSubtitles;
         if (dom.videoSubtitlePositionSelect) dom.videoSubtitlePositionSelect.disabled = !timelineState.showSubtitles;
         if (dom.videoSubtitleFontSelect) dom.videoSubtitleFontSelect.disabled = !timelineState.showSubtitles;
+        if (dom.videoSubtitleSizeRange) dom.videoSubtitleSizeRange.disabled = !timelineState.showSubtitles;
         if (dom.uploadSubtitleFontBtn) dom.uploadSubtitleFontBtn.disabled = !timelineState.showSubtitles;
 
         if (Array.isArray(importedState.customFonts) && importedState.customFonts.length > 0) {
@@ -784,6 +789,7 @@ export async function importProjectArchive(file: File) {
         if (dom.storyInput) dom.storyInput.value = storyText;
         if (dom.detailLevelSelect) ui.handlePacingChange(dom.detailLevelSelect.value);
         ui.handleImageStyleChange();
+        ui.handleCharacterModifierChange();
         ui.handleImageModelChange();
         analyzeCharacterFrequency();
 

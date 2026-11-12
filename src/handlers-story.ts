@@ -722,6 +722,10 @@ function getVisualConsistencyContext(): string {
         const propLines = state.keyElementProfiles.map(p => `- ${p.name}: ${p.description || ''}`).join('\n');
         sections.push(`CONSISTENT KEY PROPS & OBJECTS:\n${propLines}`);
     }
+    const activeCharModifier = ui.getCurrentCharacterModifier();
+    if (activeCharModifier) {
+        sections.push(`CHARACTER STYLE MODIFIER (Enforce across all character depictions in "image_prompt"):\n- ${activeCharModifier}\n* Ensure character poses, expressions, and anatomical descriptions in "image_prompt" harmonize with this character design rule and do NOT introduce conflicting photorealistic facial anatomy.`);
+    }
     if (sections.length === 0) {
         return `CINEMATIC VISUAL PACING & DYNAMIC CUTTING DIRECTIVE:
 - Prioritize meaningful visual beats matching the requested pacing density.
@@ -1571,9 +1575,13 @@ ${storyText}
         // Log Complete Pipeline Audit for Shot 1 (Verification of all 12 stages)
         if (newScenes.length > 0) {
             const sampleStylePrompt = ui.getCurrentStylePrompt() || 'Cinematic realism';
+            const sampleCharModifier = ui.getCurrentCharacterModifier();
+            const sampleStyleWithMod = sampleCharModifier
+                ? `${sampleStylePrompt}\n[CHARACTER MODIFIER]\nCharacter design note: ${sampleCharModifier}`
+                : sampleStylePrompt;
             const sampleStyleIntent = constants.styleIntentMap[sampleStylePrompt] || constants.StyleIntent.CINEMATIC;
             const sampleNegPrompt = constants.INTENT_NEGATIVE_PROMPTS[sampleStyleIntent] || '';
-            const sampleExportedScene = `[SHOT 1]\n[SCENE]\n${newScenes[0].image_prompt}\n\n[VISUAL STYLE — APPLY TO FINAL OUTPUT]\n${sampleStylePrompt}\n\n[NEGATIVE PROMPT]\n${sampleNegPrompt}\n\n[RENDERING INSTRUCTION]\nRender the entire scene exclusively in the visual style described. Do not deviate.`;
+            const sampleExportedScene = `[SHOT 1]\n[SCENE]\n${newScenes[0].image_prompt}\n\n[VISUAL STYLE — APPLY TO FINAL OUTPUT]\n${sampleStyleWithMod}\n\n[NEGATIVE PROMPT]\n${sampleNegPrompt}\n\n[RENDERING INSTRUCTION]\nRender the entire scene exclusively in the visual style described. Do not deviate.`;
             
             logVisualDirectorPipelineShot(
                 0,

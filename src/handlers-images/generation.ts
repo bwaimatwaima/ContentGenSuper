@@ -771,17 +771,25 @@ export async function handleMagicPrompt(btn: HTMLButtonElement) {
     try {
         const styleName = dom.imageStyleSelect.options[dom.imageStyleSelect.selectedIndex]?.text || "Cinematic";
         const styleDescription = ui.getCurrentStylePrompt();
+        const characterModifier = ui.getCurrentCharacterModifier();
+        const isStylizedChar = utils.isStylizedCharacterModifier(characterModifier);
+        const charModRule = characterModifier
+            ? `\n        Character Style Modifier to Enforce: "${characterModifier}".\n        CRITICAL: Ensure all character descriptions strictly follow this character design rule and do NOT add conflicting photorealistic facial anatomy or skin textures.`
+            : '';
+        const postureRule = isStylizedChar
+            ? `4. Subject-Appropriate Posture: Describe expressive body language, silhouette, and gesture compatible with the Character Style Modifier ("${characterModifier}") rather than photorealistic facial micro-expressions.`
+            : `4. Subject-Appropriate Posture: If the subject is human, explicitly define micro-expressions and body language. If the subject is an animal or creature, rely ONLY on realistic, species-appropriate physical posture (e.g., 'antennae twitching') and STRICTLY AVOID human emotional facial expressions.`;
         
         const systemInstruction = `You are an expert Prompt Engineer for AI Image Generators. 
         Your task is to take a simple shot description and rewrite it into a highly detailed, vivid, and artistic prompt.
         
-        Global Style to Apply: "${styleName}" (${styleDescription}).
+        Global Style to Apply: "${styleName}" (${styleDescription}).${charModRule}
         
         Rules:
         1. Keep the core subject and action of the shot. (CRITICAL: Ensure the subject itself is explicitly named in the output prompt. Never replace a specific subject like a character or animal with just a description of the background)
         2. Maintain Environmental Continuity: Do not change the underlying setting, time of day, or weather if it is already implied or stated.
         3. Temporal Isolation (No Spoilers): Only include visual elements that exist AT THIS EXACT MOMENT. Do not bleed future events into earlier shots (e.g., if a dry path blooms later, early shots must show a dry path).
-        4. Subject-Appropriate Posture: If the subject is human, explicitly define micro-expressions and body language. If the subject is an animal or creature, rely ONLY on realistic, species-appropriate physical posture (e.g., 'antennae twitching') and STRICTLY AVOID human emotional facial expressions.
+        ${postureRule}
         5. Enhance lighting, texture, camera angle, and atmosphere using specific artistic terminology.
         6. AVOID generic AI buzzwords like "8K", "hyperrealistic", "trending on ArtStation", "masterpiece", or "ultra-detailed".
         7. Focus on physical properties: material textures, light scattering, color harmony, and lens characteristics (e.g., "anamorphic flare", "soft rim lighting", "tactile fabric weave").
@@ -831,7 +839,10 @@ export async function handleImageEdit() {
     try {
         const referenceImage = { data: state.modalImageSrc, mimeType: state.modalImageMimeType! };
         const currentModel = dom.imageModelSelect.value || constants.DEFAULT_IMAGE_MODEL;
-        const result = await generateImageWithFallback(editPrompt, '16:9', currentModel, referenceImage);
+        const aspectRatio = (dom.imageResolutionSelect?.value || '16:9') as AspectRatio;
+        const charModSuffix = utils.buildCharacterModifierSuffix(ui.getCurrentCharacterModifier(), 'strong');
+        const finalEditPrompt = `${editPrompt}${charModSuffix}`;
+        const result = await generateImageWithFallback(finalEditPrompt, aspectRatio, currentModel, referenceImage);
 
         if (result.base64) {
             const isPaced = state.currentScenes[0] && typeof state.currentScenes[0].shot_number !== 'undefined';

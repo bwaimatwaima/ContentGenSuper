@@ -63,16 +63,23 @@ export function initParallaxAdvancedControls(onDirty?: () => void) {
     state.parallaxOrbit = isNaN(v) ? 0.35 : v;
   }
 
+  const savedDepthBlur = localStorage.getItem('parallaxDepthBlur');
+  if (savedDepthBlur !== null) state.parallaxDepthBlur = savedDepthBlur === 'true';
+
+  if (!localStorage.getItem('parallaxBlurDefault005')) {
+    localStorage.setItem('parallaxBlurDefault005', '1');
+    localStorage.removeItem('parallaxBlurStrength');
+  }
   const savedBlur = localStorage.getItem('parallaxBlurStrength');
   if (savedBlur !== null) {
     const v = parseFloat(savedBlur);
-    state.parallaxBlurStrength = isNaN(v) ? 0.0 : v;
+    state.parallaxBlurStrength = isNaN(v) ? 0.05 : v;
   } else {
-    state.parallaxBlurStrength = state.parallaxBlurStrength ?? 0.0;
+    state.parallaxBlurStrength = (state.parallaxBlurStrength ?? 0) > 0 ? state.parallaxBlurStrength : 0.05;
   }
-
-  const savedDepthBlur = localStorage.getItem('parallaxDepthBlur');
-  if (savedDepthBlur !== null) state.parallaxDepthBlur = savedDepthBlur === 'true';
+  if (state.parallaxDepthBlur && (state.parallaxBlurStrength ?? 0) <= 0) {
+    state.parallaxBlurStrength = 0.05;
+  }
 
   const savedHaze = localStorage.getItem('parallaxHazeAmount');
   if (savedHaze !== null) {
@@ -198,12 +205,14 @@ export function initParallaxAdvancedControls(onDirty?: () => void) {
     blurSlider.min = '0';
     blurSlider.max = '2';
     blurSlider.step = '0.05';
-    blurSlider.value = String(state.parallaxBlurStrength ?? 0.0);
+    blurSlider.value = String(state.parallaxBlurStrength ?? 0.05);
     if (blurVal) blurVal.textContent = Number(blurSlider.value).toFixed(2);
     blurSlider.addEventListener('input', () => {
       const val = parseFloat(blurSlider.value) || 0;
       state.parallaxBlurStrength = val;
       state.parallaxDepthBlur = val > 0;
+      const dofCheckbox = document.getElementById('enable-parallax-dof-checkbox') as HTMLInputElement | null;
+      if (dofCheckbox) dofCheckbox.checked = state.parallaxDepthBlur;
       localStorage.setItem('parallaxBlurStrength', String(val));
       localStorage.setItem('parallaxDepthBlur', String(state.parallaxDepthBlur));
       if (blurVal) blurVal.textContent = val.toFixed(2);

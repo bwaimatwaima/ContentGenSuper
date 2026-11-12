@@ -124,7 +124,7 @@ const chunkCache = new LRUCache<string, SubtitleChunk[]>(200);
 const heightOffsetCache = new LRUCache<string, number>(50);
 
 // Static styles with no per-word active animation that can be cached to offscreen bitmaps
-const STATIC_STYLES = new Set(['cinematic', 'anime', 'yellow_box', 'aesthetic_serif']);
+const STATIC_STYLES = new Set(['cinematic', 'anime', 'yellow_box']);
 
 // Note on resolution / DPR: Bitmap cache is keyed on width, height, position, font, and color signature.
 // Preview and export resolutions receive separate cached entries.
@@ -200,12 +200,25 @@ function recordFrameTime(startTime: number, styleName: string, wordCount: number
 // HELPER FUNCTIONS
 // ---------------------------------------------------------------------------
 
-export function resolveSubtitleFont(text: string, requestedFont?: string): string {
+export function resolveSubtitleFont(text: string, requestedFont?: string, styleDefaultFont?: string): string {
     if (/[\u4E00-\u9FFF\u3040-\u30FF]/.test(text)) return '"Noto Sans JP", sans-serif';
     if (/[\u0600-\u06FF]/.test(text)) return '"Noto Sans Arabic", sans-serif';
     if (/[\u0400-\u04FF\u0100-\u024F\u1E00-\u1EFF]/.test(text) === false && /[^\x00-\x7F]/.test(text)) return '"Noto Sans", sans-serif';
     
-    const fontName = requestedFont || timelineState.videoSubtitleFont || 'Montserrat';
+    const userFont = (requestedFont || timelineState.videoSubtitleFont || '').trim();
+    // If the user explicitly picked a font other than the default 'Montserrat', honor their choice across all styles
+    if (userFont && userFont !== 'Montserrat') {
+        if (userFont.startsWith('"') || userFont.startsWith("'")) {
+            return `${userFont}, sans-serif`;
+        }
+        return `"${userFont}", sans-serif`;
+    }
+
+    if (styleDefaultFont) {
+        return styleDefaultFont;
+    }
+
+    const fontName = userFont || 'Montserrat';
     if (fontName.startsWith('"') || fontName.startsWith("'")) {
         return `${fontName}, sans-serif`;
     }
@@ -230,7 +243,7 @@ function precomputeLayout(
 
     const sizeScale = typography?.sizeScale ?? 1.0;
     const weight = typography?.fontWeight ?? 800;
-    const family = typography?.fontFamily ?? resolveSubtitleFont(text, fontFamily);
+    const family = resolveSubtitleFont(text, fontFamily, typography?.fontFamily);
 
     if (words.length === 0) {
         const fallbackFontSize = Math.floor(height * 0.05 * sizeScale);
@@ -443,7 +456,7 @@ function prerenderStaticText(
     })!;
     
     const weight = typography?.fontWeight ?? 800;
-    const family = typography?.fontFamily ?? resolveSubtitleFont(layout.plainText);
+    const family = resolveSubtitleFont(layout.plainText, timelineState.videoSubtitleFont, typography?.fontFamily);
     ctx.font = `${weight} ${fontSize}px ${family}`;
     if (typography?.letterSpacing && 'letterSpacing' in ctx) {
         (ctx as any).letterSpacing = typography.letterSpacing;
@@ -607,8 +620,11 @@ export const SubtitleEngine = {
                 const curW = wordTimestamps[globalActiveWordIndex];
                 const nextW = wordTimestamps[globalActiveWordIndex + 1];
                 if (clipTime > curW.end + 0.35 && (!nextW || clipTime < nextW.start - 0.06)) {
-                    // If pause between chunks is long (> 0.65s), hide the finished chunk during silence
-                    if (nextW && nextW.start - curW.end > 0.65 && clipTime > curW.end + 0.25) {
+                    // If pause between chunks is long (> 0.65s) or trailing end-of-shot silence (> 0.55s), hide the finished chunk
+                    if (
+                        (nextW && nextW.start - curW.end > 0.65 && clipTime > curW.end + 0.25) ||
+                        (!nextW && clipTime > curW.end + 0.55)
+                    ) {
                         return;
                     }
                 }
@@ -670,7 +686,7 @@ export const SubtitleEngine = {
 
         const currentFont = timelineState.videoSubtitleFont || 'Montserrat';
         const weight = typography?.fontWeight ?? 800;
-        const family = typography?.fontFamily ?? resolveSubtitleFont(displayText, currentFont);
+        const family = resolveSubtitleFont(displayText, currentFont, typography?.fontFamily);
         const typoKey = `${weight}-${typography?.sizeScale ?? 1}-${family}-${typography?.letterSpacing ?? ''}`;
         const placementKey = placement ? `${placement.x.toFixed(3)}:${placement.y.toFixed(3)}:${placement.align}` : '';
         const cacheKey = `${displayText}-${width}-${height}-${position}-${styleName}-${typoKey}${emphasisSig ? `-${emphasisSig}` : ''}${placementKey ? `-${placementKey}` : ''}`;
@@ -734,7 +750,7 @@ export const SubtitleEngine = {
                 activeWordIndex = Math.max(-1, activeWordIndexInChunk);
             }
         } else {
-            const isPerWordStyle = styleName === 'karaoke' || styleName === 'tiktok' || styleName === 'neon' || styleName === 'hormozi' || styleName === 'mrbeast' || styleName === 'bilingual' || styleName === 'minimal_editorial' || styleName === 'terminal' || styleName === 'kinetic_gold';
+            const isPerWordStyle = styleName === 'karaoke' || styleName === 'tiktok' || styleName === 'neon' || styleName === 'hormozi' || styleName === 'mrbeast' || styleName === 'bilingual' || styleName === 'minimal_editorial' || styleName === 'terminal' || styleName === 'kinetic_gold' || styleName === 'aesthetic_serif';
             if (isPerWordStyle && progress < 0.01 && globalActiveWordIndex === 0) {
                 activeWordIndex = -1;
             } else {
@@ -744,6 +760,7 @@ export const SubtitleEngine = {
 
         const canCacheWordBitmap =
             styleName !== 'typewriter' &&
+            styleName !== 'terminal' &&
             (STATIC_STYLES.has(styleName) || chunkEntranceProgress >= 1);
 
         if (canCacheWordBitmap) {
@@ -768,6 +785,9 @@ export const SubtitleEngine = {
             }
             ctx.drawImage(bmpEntry.canvas, 0, bmpEntry.y);
             ctx.restore();
+            if ('letterSpacing' in ctx && (ctx as any).letterSpacing !== 'normal') {
+                (ctx as any).letterSpacing = 'normal';
+            }
 
             recordFrameTime(startTime, styleName, layout.totalWords);
             return;
@@ -798,6 +818,9 @@ export const SubtitleEngine = {
         ctx.beginPath();
         renderer.draw(ctx, layout, progress, options);
         ctx.restore();
+        if ('letterSpacing' in ctx && (ctx as any).letterSpacing !== 'normal') {
+            (ctx as any).letterSpacing = 'normal';
+        }
         
         recordFrameTime(startTime, styleName, layout.totalWords);
     },
@@ -892,7 +915,6 @@ SubtitleEngine.registerStyle("bilingual", BilingualRenderer, SubtitleColorPreset
     sizeScale: 0.95,
 });
 SubtitleEngine.registerStyle("kinetic_gold", KineticGoldRenderer, SubtitleColorPresets.kinetic_gold, {
-    fontFamily: '"Montserrat", "Inter", system-ui, sans-serif',
     fontWeight: 800,
     sizeScale: 1.02,
     transform: "none",

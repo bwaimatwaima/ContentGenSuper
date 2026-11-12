@@ -1401,12 +1401,12 @@ export function getKeyframeCameraTransforms(
     canvasHeight = Math.max(1, safeNum(canvasHeight, 1080));
     
     let t = progress;
-    const easing = keyframes?.easing || 'easeInOut';
-    if (easing === 'easeInOut') {
+    const easing = (keyframes?.easing || 'easeInOut') as string;
+    if (easing === 'easeInOut' || easing === 'ease-in-out') {
         t = easeInOutCubic(progress);
-    } else if (easing === 'easeIn') {
+    } else if (easing === 'easeIn' || easing === 'ease-in') {
         t = progress * progress * progress;
-    } else if (easing === 'easeOut') {
+    } else if (easing === 'easeOut' || easing === 'ease-out') {
         t = 1 - Math.pow(1 - progress, 3);
     } else if (easing === 'whip') {
         const shaped = Math.pow(progress, 2) * (3 - 2 * progress);
@@ -1757,7 +1757,8 @@ export function getKenBurnsTransforms(
         }
 
         // --- ORBIT (slow circular drift around subject focalPoint) ---
-        case 'orbit_clockwise': {
+        case 'orbit_clockwise':
+        case 'drone_flyover': {
             const crop = getAspectCrop(1 - panCrop);
             sWidth = crop.w;
             sHeight = crop.h;
@@ -1822,8 +1823,8 @@ export function getKenBurnsTransforms(
             const crop = getAspectCrop(1.0);
             sWidth = crop.w;
             sHeight = crop.h;
-            sx = (imgW - sWidth) / 2;
-            sy = (imgH - sHeight) / 2;
+            sx = (imgW - sWidth) * focusX;
+            sy = (imgH - sHeight) * focusY;
             break;
         }
     }

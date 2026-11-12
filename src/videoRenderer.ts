@@ -2318,7 +2318,7 @@ function drawVideoFrameImpl(
 
   const activeVideosThisFrame = new Set<HTMLVideoElement>();
 
-  const drawImageContain = (media: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | ImageBitmap | any, movement: string, progress: number, alpha = 1, clipDuration = 5, focalPoint?: { x: number; y: number }, videoStartOffset = 0, cameraKeyframes?: any, associatedClip?: any) => {
+  const drawImageContain = (media: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | ImageBitmap | any, movement: string, progress: number, alpha = 1, clipDuration = 5, focalPoint?: { x: number; y: number }, videoStartOffset = 0, cameraKeyframes?: any, associatedClip?: any, extraFilterCss?: string) => {
     if (!media) return;
     if (timelineState.isTrackHidden('video')) return;
 
@@ -2332,6 +2332,12 @@ function drawVideoFrameImpl(
     const shotFilter = activeClip?.colorFilter || 'none';
     const shotFilterIntensity = typeof activeClip?.colorFilterIntensity === 'number' ? activeClip.colorFilterIntensity : 1.0;
     const shotFilterCss = getShotFilterCss(shotFilter, shotFilterIntensity);
+    const inheritedFilter = (ctx.filter && ctx.filter !== 'none') ? String(ctx.filter) : '';
+    const combinedFilterCss = [
+      inheritedFilter,
+      extraFilterCss || '',
+      shotFilterCss !== 'none' ? shotFilterCss : ''
+    ].filter(Boolean).join(' ').trim() || 'none';
 
     let dW: number, dH: number, dX: number, dY: number;
 
@@ -2432,7 +2438,9 @@ function drawVideoFrameImpl(
 
         const fadeIn = (clip as any)?.fadeIn || 0;
         const fadeOut = (clip as any)?.fadeOut || 0;
-        const clipElapsed = progress * effectiveClipDur;
+        const clipElapsed = (isAbs && activeClip && isNum(activeClip.startTime))
+          ? Math.max(0, time - activeClip.startTime)
+          : (progress * effectiveClipDur);
         if (fadeIn > 0 && clipElapsed < fadeIn) {
             targetVol *= (clipElapsed / fadeIn);
         }
@@ -2461,7 +2469,7 @@ function drawVideoFrameImpl(
             ? (activeClip?.startTime || 0)
             : (videoStartOffset || 0);
 
-        let targetTime = effectiveOffset + (progress * effectiveClipDur * rate);
+        let targetTime = effectiveOffset + (clipElapsed * rate);
         if (video.duration && targetTime > video.duration) {
             const remainder = targetTime % video.duration;
             targetTime = remainder === 0 ? 0 : Math.min(video.duration - 0.03, remainder);
@@ -2481,8 +2489,8 @@ function drawVideoFrameImpl(
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        if (shotFilterCss !== 'none' && (targetCanvas || state.isExporting || cvH >= 520)) {
-          ctx.filter = shotFilterCss;
+        if (combinedFilterCss !== 'none' && (targetCanvas || state.isExporting || cvH >= 520 || extraFilterCss || inheritedFilter)) {
+          ctx.filter = combinedFilterCss;
         }
         if (state.cameraShakeHandheld) {
           const motionMult = typeof state.cameraMotionIntensity === 'number' ? state.cameraMotionIntensity : 1.0;
@@ -2508,7 +2516,8 @@ function drawVideoFrameImpl(
     }
 
     const image = media as HTMLImageElement;
-    const bgProgress = progress * 0.95;
+    // Center the background/foreground parallax differential around 0.5 so 3D depth separation is present at clip start (progress=0) and end (progress=1)
+    const bgProgress = Math.min(1, Math.max(0, 0.5 + (progress - 0.5) * 0.92));
     const fgProgress = progress;
 
     let bg: any;
@@ -2523,8 +2532,8 @@ function drawVideoFrameImpl(
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    if (shotFilterCss !== 'none') {
-      ctx.filter = shotFilterCss;
+    if (combinedFilterCss !== 'none') {
+      ctx.filter = combinedFilterCss;
     }
 
     if (state.cameraShakeHandheld) {
@@ -2538,8 +2547,12 @@ function drawVideoFrameImpl(
     }
 
     if (fg.rotation) {
+      const absRot = Math.abs(fg.rotation);
+      const aspect = dW > 0 && dH > 0 ? Math.max(dW / dH, dH / dW) : 16 / 9;
+      const rotCoverScale = Math.cos(absRot) + Math.sin(absRot) * aspect;
       ctx.translate(dX + dW / 2, dY + dH / 2);
       ctx.rotate(fg.rotation);
+      ctx.scale(rotCoverScale, rotCoverScale);
       ctx.translate(-(dX + dW / 2), -(dY + dH / 2));
     }
 
@@ -2569,10 +2582,15 @@ function drawVideoFrameImpl(
       }
     };
 
-    if (!cameraKeyframes && movement === 'static' && alpha === 1 && isHtmlImageWithSrc) {
+    const wantsWebGLParallax = !lite && state.enableParallaxEffect && !isVideoMedia && Boolean(image);
+    const hasCustomFocal = Boolean(
+      focalPoint && (Math.abs(focalPoint.x - 0.5) > 0.01 || Math.abs(focalPoint.y - 0.5) > 0.01)
+    );
+
+    if (!cameraKeyframes && movement === 'static' && !wantsWebGLParallax && !hasCustomFocal && alpha === 1 && isHtmlImageWithSrc) {
       const cached = getCachedScaledImage(image, Math.round(dW), Math.round(dH));
       safeDraw(cached, dX, dY);
-    } else if (!cameraKeyframes && movement === 'static') {
+    } else if (!cameraKeyframes && movement === 'static' && !wantsWebGLParallax) {
       safeDraw(media, fg.sx, fg.sy, fg.sWidth, fg.sHeight, dX, dY, dW, dH);
     } else {
       // Whip pan: smear a couple of trailing offset copies during the fast middle
@@ -2589,7 +2607,7 @@ function drawVideoFrameImpl(
       }
 
       // 2.5D Depth Parallax using WebGL (runs for both HTMLImageElement and prescaled _exportOptimizedImage bitmaps, never for video frames)
-      const webglCanvas = !lite && state.enableParallaxEffect && !isVideoMedia && image
+      const webglCanvas = wantsWebGLParallax
         ? drawWebGLParallax(
             image, Math.round(dW), Math.round(dH), bg, fg, movement, progress, focalPoint,
             fg.speedFactor,            // kept for signature compatibility; blur no longer depends on it
@@ -2636,11 +2654,10 @@ function drawVideoFrameImpl(
   };
 
   const sMedia = t0();
-  const prog = Math.min(1, tIn / curLen);
   const globalStyle = timelineState.videoTransitionStyle || 'narrative_guided';
-  let resolvedTransition = cur.transitionToNext;
-
-  if (!resolvedTransition) {
+  const resolveClipTransition = (c: any): string => {
+    if (!c) return 'cut';
+    if (c.transitionToNext) return c.transitionToNext;
     if (globalStyle === 'random_mix') {
       const candidateTransitions = [
         'cross_dissolve',
@@ -2650,14 +2667,34 @@ function drawVideoFrameImpl(
         'blur_dissolve',
         'fade_to_black',
       ];
-      const hash = (cur.id || '').split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-      resolvedTransition = candidateTransitions[hash % candidateTransitions.length];
-    } else if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
-      resolvedTransition = globalStyle;
-    } else {
-      resolvedTransition = 'cut';
+      const hash = (c.id || '').split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0);
+      return candidateTransitions[hash % candidateTransitions.length];
     }
-  }
+    if (globalStyle !== 'narrative_guided' && globalStyle !== 'ai_directed') {
+      return globalStyle;
+    }
+    return 'cut';
+  };
+
+  // If the previous main-track clip transitioned into `cur`, start `cur`'s camera progress
+  // at `prev._transitionStart` so camera motion is 100% continuous across the transition boundary.
+  const prevMain = curMainIndex > 0 ? mainTrackClips[curMainIndex - 1] : null;
+  const prevTType = resolveClipTransition(prevMain).replace(/_/g, '').toLowerCase();
+  const hasPrevTransitionLeadIn = Boolean(
+    prevMain &&
+    prevTType !== 'cut' &&
+    typeof prevMain._transitionStart === 'number' &&
+    typeof prevMain._transitionEnd === 'number' &&
+    Math.abs(prevMain._transitionEnd - (cur.startTime || 0)) <= 0.05
+  );
+  const curVisualStart = hasPrevTransitionLeadIn ? prevMain!._transitionStart! : (cur.startTime || 0);
+  const curVisualEnd = (isAbs && isNum(cur.endTime)) ? cur.endTime : ((cur.startTime || 0) + curLen);
+  const curVisualLen = Math.max(0.001, curVisualEnd - curVisualStart);
+  const prog = hasPrevTransitionLeadIn
+    ? Math.min(1, Math.max(0, (time - curVisualStart) / curVisualLen))
+    : Math.min(1, tIn / curLen);
+
+  const resolvedTransition = resolveClipTransition(cur);
   const tType = resolvedTransition.replace(/_/g, '').toLowerCase();
   const wantsTransition = Boolean(nxt && tType !== 'cut');
 
@@ -2699,8 +2736,10 @@ function drawVideoFrameImpl(
   const nxtBg = getBg(nxt);
 
   if (isTrans && curBg && nxtBg && nxt) {
-    const nxtLen = Math.max(0.001, isAbs && isNum(nxt.endTime) && isNum(nxt.startTime) ? nxt.endTime - nxt.startTime : (nxt.duration || 3));
-    const nxtProg = Math.min(1, Math.max(0, (time - (nxt.startTime || 0)) / nxtLen));
+    const nxtVisualStart = typeof cur._transitionStart === 'number' ? cur._transitionStart : (nxt.startTime || 0);
+    const nxtVisualEnd = isAbs && isNum(nxt.endTime) ? nxt.endTime : ((nxt.startTime || 0) + (nxt.duration || 3));
+    const nxtVisualLen = Math.max(0.001, nxtVisualEnd - nxtVisualStart);
+    const nxtProg = Math.min(1, Math.max(0, (time - nxtVisualStart) / nxtVisualLen));
     const easedT = tP < 0.5 ? 4 * tP * tP * tP : 1 - Math.pow(-2 * tP + 2, 3) / 2;
     let curEffectiveBg = curBg;
     const whipT = Math.pow(tP, 2.5);
@@ -2723,27 +2762,107 @@ function drawVideoFrameImpl(
       }
     }
 
-    // --- SWIPE / WIPE / PUSH ---
-    if (tType.startsWith('swipe') || tType === 'push' || tType === 'wipe') {
+    // --- WHIP PUSH (Physical Push of Both Clips + Motion Smear) ---
+    if (tType.startsWith('push')) {
+      const dirX = tType === 'pushright' ? 1 : tType === 'pushup' || tType === 'pushdown' ? 0 : -1;
+      const dirY = tType === 'pushdown' ? 1 : tType === 'pushup' ? -1 : 0;
+      const dxOut = dirX * cvW * easedT;
+      const dyOut = dirY * cvH * easedT;
+      const dxIn = -dirX * cvW * (1 - easedT);
+      const dyIn = -dirY * cvH * (1 - easedT);
+      const whipBlurPx = Math.round(velocityPeak * 8);
+      const whipFilter = whipBlurPx >= 1 ? `blur(${whipBlurPx}px) brightness(${(1 + velocityPeak * 0.08).toFixed(2)})` : undefined;
+
+      ctx.save();
+      ctx.translate(dxOut, dyOut);
+      drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur, whipFilter);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(dxIn, dyIn);
+      drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt, whipFilter);
+      ctx.restore();
+
+    // --- DIRECTIONAL SWIPE (Incoming Slides Over Recessed Outgoing with Edge Shadow) ---
+    } else if (tType.startsWith('swipe')) {
+      const dirX = tType === 'swiperight' ? 1 : tType === 'swipeup' || tType === 'swipedown' ? 0 : -1;
+      const dirY = tType === 'swipedown' ? 1 : tType === 'swipeup' ? -1 : 0;
+
+      // Outgoing slightly recesses with subtle dim for depth
+      ctx.save();
+      ctx.translate(dirX * cvW * 0.18 * easedT, dirY * cvH * 0.18 * easedT);
+      drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - easedT * 0.35, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
+      ctx.restore();
+
+      // Incoming slides over with a crisp leading-edge shadow
+      const slideX = -dirX * cvW * (1 - easedT);
+      const slideY = -dirY * cvH * (1 - easedT);
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+      ctx.shadowBlur = 28;
+      ctx.shadowOffsetX = dirX * 12;
+      ctx.shadowOffsetY = dirY * 12;
+      ctx.translate(slideX, slideY);
+      drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
+      ctx.restore();
+
+    // --- LINEAR WIPE (Stationary Mask Reveal with Feathered Seam Highlight) ---
+    } else if (tType.startsWith('wipe')) {
       ctx.save();
       drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
       ctx.restore();
 
       ctx.save();
       ctx.beginPath();
-      if (tType === 'swipeleft' || tType === 'pushleft' || tType === 'wipeleft') {
-        ctx.rect(cvW * (1 - whipT), 0, cvW * whipT, cvH);
-      } else if (tType === 'swiperight' || tType === 'pushright' || tType === 'wiperight') {
-        ctx.rect(0, 0, cvW * whipT, cvH);
-      } else if (tType === 'swipeup' || tType === 'pushup' || tType === 'wipeup') {
-        ctx.rect(0, cvH * (1 - whipT), cvW, cvH * whipT);
-      } else if (tType === 'swipedown' || tType === 'pushdown' || tType === 'wipedown') {
-        ctx.rect(0, 0, cvW, cvH * whipT);
+      if (tType === 'wiperight') {
+        ctx.rect(0, 0, cvW * easedT, cvH);
+      } else if (tType === 'wipeup') {
+        ctx.rect(0, cvH * (1 - easedT), cvW, cvH * easedT);
+      } else if (tType === 'wipedown') {
+        ctx.rect(0, 0, cvW, cvH * easedT);
       } else {
-        ctx.rect(cvW * (1 - whipT), 0, cvW * whipT, cvH);
+        ctx.rect(cvW * (1 - easedT), 0, cvW * easedT, cvH);
       }
       ctx.clip();
       drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
+      ctx.restore();
+
+      // Subtle luminous wipe edge line
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 255, 255, ${(velocityPeak * 0.35).toFixed(2)})`;
+      if (tType === 'wiperight') {
+        ctx.fillRect(cvW * easedT - 1.5, 0, 3, cvH);
+      } else if (tType === 'wipeup') {
+        ctx.fillRect(0, cvH * (1 - easedT) - 1.5, cvW, 3);
+      } else if (tType === 'wipedown') {
+        ctx.fillRect(0, cvH * easedT - 1.5, cvW, 3);
+      } else {
+        ctx.fillRect(cvW * (1 - easedT) - 1.5, 0, 3, cvH);
+      }
+      ctx.restore();
+
+    // --- BLUR DISSOLVE (Optical Defocus Cross-Dissolve) ---
+    } else if (tType === 'blurdissolve') {
+      const blurPx = Math.max(0.5, velocityPeak * 16);
+      const blurFilter = `blur(${blurPx.toFixed(1)}px) brightness(${(1 + velocityPeak * 0.1).toFixed(2)})`;
+      drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1 - easedT, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur, blurFilter);
+      drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, easedT, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt, blurFilter);
+
+    // --- DIP TO BLACK / DIP TO WHITE ---
+    } else if (tType === 'fadetoblack' || tType === 'fadetowhite') {
+      const dipAlpha = tP < 0.5
+        ? Math.min(1, Math.pow(tP * 2, 1.5))
+        : Math.min(1, Math.pow((1 - tP) * 2, 1.5));
+      if (tP < 0.5) {
+        drawImageContain(curEffectiveBg!, cur.cameraMovement, prog, 1, cur.duration, cur.focalPoint, cur.videoStartOffset || 0, cur.cameraKeyframes, cur);
+      } else {
+        drawImageContain(nxtBg!, nxt.cameraMovement, nxtProg, 1, nxt.duration, nxt.focalPoint, nxt.videoStartOffset || 0, nxt.cameraKeyframes, nxt);
+      }
+      ctx.save();
+      ctx.fillStyle = tType === 'fadetowhite'
+        ? `rgba(255, 255, 255, ${dipAlpha.toFixed(3)})`
+        : `rgba(0, 0, 0, ${dipAlpha.toFixed(3)})`;
+      ctx.fillRect(0, 0, cvW, cvH);
       ctx.restore();
 
     // --- ZOOM DISSOLVE ---

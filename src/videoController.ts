@@ -2553,7 +2553,23 @@ function renderSubtitleColorPickers() {
         wrapper.appendChild(label);
     });
 
-    if (wrapper.children.length > 0) container.appendChild(wrapper);
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.textContent = 'Reset';
+    resetBtn.title = 'Reset style colors to preset defaults';
+    resetBtn.className = 'ml-auto self-center text-[10px] px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-gray-300 hover:text-white border border-white/10 transition cursor-pointer';
+    resetBtn.addEventListener('click', () => {
+        if ((state.videoSubtitleColors as any)[styleName]) {
+            delete (state.videoSubtitleColors as any)[styleName];
+        }
+        SubtitleEngine.clearBitmapCache();
+        renderSubtitleColorPickers();
+        if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
+    });
+    if (wrapper.children.length > 0) {
+        wrapper.appendChild(resetBtn);
+        container.appendChild(wrapper);
+    }
 }
 
 export function toggleVideoSubtitles() {
@@ -2776,13 +2792,14 @@ export function handleLyricsVideoPreset() {
 
 export function handleSubtitleStyleChange() {
     timelineState.setVideoSubtitleStyle(dom.videoSubtitleStyleSelect.value as any);
-    SubtitleEngine.clearBitmapCache();
+    SubtitleEngine.clearCache();
     renderSubtitleColorPickers();
     if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
 }
 
 export function handleSubtitlePositionChange() {
     timelineState.setVideoSubtitlePosition(dom.videoSubtitlePositionSelect.value as any);
+    SubtitleEngine.clearCache();
     if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
 }
 
@@ -2790,7 +2807,7 @@ export function handleSubtitleFontChange() {
     const selectedFont = dom.videoSubtitleFontSelect ? dom.videoSubtitleFontSelect.value : 'Montserrat';
     timelineState.setVideoSubtitleFont(selectedFont);
     try {
-        SubtitleEngine.clearBitmapCache();
+        SubtitleEngine.clearCache();
     } catch {}
     if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
     ui.showStatus(`Typography Font set to "${selectedFont}"`, false, 2000);
@@ -2894,7 +2911,7 @@ export async function handleCustomFontUpload(file: File) {
         timelineState.setVideoSubtitleFont(cleanName);
         
         try {
-            SubtitleEngine.clearBitmapCache();
+            SubtitleEngine.clearCache();
         } catch {}
         
         if (!state.isVideoPlaying && videoRenderContext) {

@@ -66,6 +66,8 @@
 }
 
 /* Honor both ContentGen's .hidden and video-studio's [hidden] */
+.vs-director.hidden,
+.vs-director[hidden],
 .vs-director [hidden],
 .vs-director .hidden,
 .vs-mg-gallery [hidden],
@@ -1934,7 +1936,10 @@
   display: flex !important; flex: 1 1 0%; min-height: 0; overflow: hidden !important;
   border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important;
 }
-.vs-director #shot-inspector-drawer.hidden { display: none !important; }
+.vs-director #shot-inspector-drawer.vs-workspace-docked #close-shot-inspector-btn {
+  display: none !important;
+}
+.vs-director #shot-inspector-drawer:not(.vs-workspace-docked).hidden { display: none !important; }
 .vs-director #shot-inspector-drawer .inspector-body { min-height: 0; overflow-y: auto; }
 .vs-director #ckf-panel.vs-workspace-ckf {
   position: static !important; inset: auto !important; transform: none !important; width: 100% !important;
@@ -4469,7 +4474,7 @@
 #transcript-editor-workspace:not(.hidden) {
   display: flex !important;
   flex-direction: column !important;
-  z-index: 90 !important;
+  z-index: 120 !important;
 }
 
 /* 2. Keep the top bar & Close button always visible and inside bounds */

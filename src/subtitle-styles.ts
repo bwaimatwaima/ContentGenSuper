@@ -438,23 +438,41 @@ export const HormoziRenderer: SubtitleStyle = {
         ctx.lineJoin = "round";
         ctx.miterLimit = 2;
 
-        ctx.lineWidth = Math.max(3, Math.floor(options.fontSize * 0.14));
+        // Subtle drop shadow for depth over bright footage
+        ctx.shadowColor = "rgba(0, 0, 0, 0.75)";
+        ctx.shadowBlur = Math.max(4, Math.floor(options.fontSize * 0.10));
+        ctx.shadowOffsetY = Math.max(2, Math.floor(options.fontSize * 0.05));
+
+        ctx.lineWidth = Math.max(3, Math.floor(options.fontSize * 0.15));
         ctx.strokeStyle = options.colors.outline || "#000000";
-        ctx.fillStyle = options.colors.inactive || "#FFFFFF";
 
         const active = splitActiveWord(layout, options.activeWordIndex, (word) => {
             ctx.strokeText(word.text, word.x, word.y);
+            // Emphasized power words / numbers stay gold-tinted even when inactive
+            ctx.fillStyle = word.isEmphasized
+                ? (options.colors.activeBox || "#FACC15")
+                : (options.colors.inactive || "#FFFFFF");
             ctx.fillText(word.text, word.x, word.y);
         });
 
         if (active) {
+            ctx.save();
+            const popScale = active.word.isEmphasized ? 1.18 : 1.13;
+            const tilt = active.index % 2 === 0 ? -0.024 : 0.024;
+            ctx.translate(active.word.x, active.word.y);
+            ctx.scale(popScale, popScale);
+            ctx.rotate(tilt);
+
             ctx.lineWidth = Math.max(4, Math.floor(options.fontSize * 0.18));
-            ctx.strokeText(active.word.text, active.word.x, active.word.y);
+            ctx.strokeStyle = options.colors.outline || "#000000";
+            ctx.strokeText(active.word.text, 0, 0);
+
             const activeColor = active.word.isEmphasized
                 ? (options.colors.activeBox || "#FACC15")
                 : (options.colors.active || "#22C55E");
             ctx.fillStyle = activeColor;
-            ctx.fillText(active.word.text, active.word.x, active.word.y);
+            ctx.fillText(active.word.text, 0, 0);
+            ctx.restore();
         }
 
         ctx.restore();
@@ -474,9 +492,10 @@ export const MrBeastRenderer: SubtitleStyle = {
         ctx.miterLimit = 2;
 
         const outerOutline = options.colors.outerOutline || "#000000";
-        const inactiveOuterWidth = Math.max(3, Math.floor(options.fontSize * 0.14));
+        const inactiveOuterWidth = Math.max(3, Math.floor(options.fontSize * 0.16));
         const inactiveInnerWidth = Math.max(1.5, Math.floor(options.fontSize * 0.07));
         const inactiveFill = options.colors.inactive || "#FFFFFF";
+        const accentOutline = options.colors.innerOutline || "#00E5FF";
 
         const active = splitActiveWord(layout, options.activeWordIndex, (word) => {
             ctx.lineWidth = inactiveOuterWidth;
@@ -484,7 +503,7 @@ export const MrBeastRenderer: SubtitleStyle = {
             ctx.strokeText(word.text, word.x, word.y);
 
             ctx.lineWidth = inactiveInnerWidth;
-            ctx.strokeStyle = "#334155";
+            ctx.strokeStyle = word.isEmphasized ? accentOutline : "#334155";
             ctx.strokeText(word.text, word.x, word.y);
 
             ctx.fillStyle = inactiveFill;
@@ -492,16 +511,24 @@ export const MrBeastRenderer: SubtitleStyle = {
         });
 
         if (active) {
-            ctx.lineWidth = Math.max(4, Math.floor(options.fontSize * 0.18));
-            ctx.strokeStyle = outerOutline;
-            ctx.strokeText(active.word.text, active.word.x, active.word.y);
+            ctx.save();
+            const popScale = active.word.isEmphasized ? 1.18 : 1.13;
+            const tilt = active.index % 2 === 0 ? 0.028 : -0.028;
+            ctx.translate(active.word.x, active.word.y);
+            ctx.scale(popScale, popScale);
+            ctx.rotate(tilt);
 
-            ctx.lineWidth = Math.max(2, Math.floor(options.fontSize * 0.09));
-            ctx.strokeStyle = options.colors.innerOutline || "#00E5FF";
-            ctx.strokeText(active.word.text, active.word.x, active.word.y);
+            ctx.lineWidth = Math.max(4, Math.floor(options.fontSize * 0.20));
+            ctx.strokeStyle = outerOutline;
+            ctx.strokeText(active.word.text, 0, 0);
+
+            ctx.lineWidth = Math.max(2, Math.floor(options.fontSize * 0.095));
+            ctx.strokeStyle = accentOutline;
+            ctx.strokeText(active.word.text, 0, 0);
 
             ctx.fillStyle = options.colors.active || "#FACC15";
-            ctx.fillText(active.word.text, active.word.x, active.word.y);
+            ctx.fillText(active.word.text, 0, 0);
+            ctx.restore();
         }
 
         ctx.restore();
@@ -645,23 +672,46 @@ export const BilingualRenderer: SubtitleStyle = {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.lineJoin = "round";
+
+        // Subtle dark translucent backing pill so dual-tier hierarchy reads cleanly on any footage
+        const bgPadX = Math.round(options.fontSize * 0.28);
+        const bgPadY = Math.round(options.fontSize * 0.10);
+        drawLineBackgrounds(ctx, layout, options.lineHeight, bgPadX, bgPadY, 6, "rgba(10, 15, 28, 0.58)");
+
         ctx.lineWidth = Math.max(2, Math.floor(options.fontSize * 0.12));
         ctx.strokeStyle = options.colors.outline || "#000000";
 
-        // Pass 1: batched inactive words
-        ctx.fillStyle = options.colors.primary || "#FFFFFF";
-        const active = splitActiveWord(layout, options.activeWordIndex, (word) => {
+        const primaryColor = options.colors.primary || "#FFFFFF";
+        const secondaryColor = options.colors.secondary || "#94A3B8";
+        const activeColor = options.colors.active || "#F59E0B";
+
+        // Build word -> lineIndex lookup so Line 0 renders in primary and Line 1+ renders in secondary
+        // (Or if single line, spoken/upcoming words split between primary and secondary)
+        const hasMultipleLines = layout.lines.length >= 2;
+        const wordLineMap = new Map<LayoutWord, number>();
+        for (let lIdx = 0; lIdx < layout.lines.length; lIdx++) {
+            for (const w of layout.lines[lIdx].words) {
+                wordLineMap.set(w, lIdx);
+            }
+        }
+
+        const active = splitActiveWord(layout, options.activeWordIndex, (word, idx) => {
+            const lineIdx = wordLineMap.get(word) ?? 0;
+            const useSecondary = hasMultipleLines
+                ? lineIdx > 0
+                : (options.activeWordIndex >= 0 ? idx > options.activeWordIndex : idx >= Math.ceil(layout.totalWords / 2));
             ctx.strokeText(word.text, word.x, word.y);
+            ctx.fillStyle = useSecondary ? secondaryColor : primaryColor;
             ctx.fillText(word.text, word.x, word.y);
         });
 
-        // Pass 2: single active word with transform
+        // Pass 2: active word with scale pop + subtle amber underline bar
         if (active) {
             ctx.save();
             ctx.translate(active.word.x, active.word.y);
             ctx.scale(1.10, 1.10);
             ctx.strokeText(active.word.text, 0, 0);
-            ctx.fillStyle = options.colors.active || "#F59E0B";
+            ctx.fillStyle = activeColor;
             ctx.fillText(active.word.text, 0, 0);
             ctx.restore();
         }
@@ -727,7 +777,6 @@ export const AestheticSerifRenderer: SubtitleStyle = {
         ctx.textBaseline = 'middle';
         ctx.lineJoin = 'round';
 
-        // Keep the shadow subtle. Avoid large blur values because this renderer runs per frame.
         ctx.shadowColor = options.colors.shadow || 'rgba(0, 0, 0, 0.88)';
         ctx.shadowBlur = Math.min(7, Math.max(2, options.fontSize * 0.075));
         ctx.shadowOffsetX = Math.max(1, options.fontSize * 0.018);
@@ -737,14 +786,25 @@ export const AestheticSerifRenderer: SubtitleStyle = {
         ctx.strokeStyle = options.colors.outline || 'rgba(0, 0, 0, 0.35)';
         ctx.fillStyle = options.colors.text || '#F6D8E4';
 
-        for (const line of layout.lines) {
-            for (const word of line.words) {
-                ctx.strokeText(word.text, word.x, word.y);
-                ctx.fillText(word.text, word.x, word.y);
-            }
+        const active = splitActiveWord(layout, options.activeWordIndex, (word) => {
+            ctx.strokeText(word.text, word.x, word.y);
+            ctx.fillText(word.text, word.x, word.y);
+        });
+
+        if (active) {
+            ctx.save();
+            ctx.translate(active.word.x, active.word.y);
+            ctx.scale(1.05, 1.05);
+            ctx.shadowColor = options.colors.text || '#F6D8E4';
+            ctx.shadowBlur = Math.min(12, Math.max(4, options.fontSize * 0.14));
+            ctx.strokeText(active.word.text, 0, 0);
+            ctx.fillStyle = '#FFF7FB';
+            ctx.fillText(active.word.text, 0, 0);
+            ctx.restore();
         }
 
         ctx.restore();
     },
 };
+
 

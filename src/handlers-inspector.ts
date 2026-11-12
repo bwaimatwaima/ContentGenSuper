@@ -18,6 +18,7 @@ import { removeSecondaryMedia } from './memoryManager';
 import { mountInspectorPositionGlyphs, mountInspectorSpeedChips } from './director-workspace';
 import { focusTransitionForClip } from './transitions-studio-panel';
 import { isVillainFoilClip } from './constants';
+import { autoReframeClipOrShot } from './camera-keyframes-ui';
 
 export let activeShotId: string | null = null;
 let inspectorPreviewVoiceEnabled = true;
@@ -619,18 +620,27 @@ export function openInspectorForShot(shotId?: string) {
     }
 
     // Camera Movement & Keyframes
-    const currentMovement = shot.camera_movement || 'static';
+    const timelineClip = timelineState.clips?.find((c: any) => c.id === shot.id);
+    if (timelineClip) {
+        if (!shot.focalPoint && timelineClip.focalPoint) {
+            shot.focalPoint = timelineClip.focalPoint;
+        }
+        if (timelineClip.cameraKeyframes && !shot.cameraKeyframes) {
+            shot.cameraKeyframes = timelineClip.cameraKeyframes;
+        }
+    }
+    const currentMovement = shot.camera_movement || timelineClip?.cameraMovement || 'static';
     if (dom.inspectorCameraMovementSelect) {
-        if (shot.cameraKeyframes && !['static', 'zoom_in', 'zoom_out', 'pan_left', 'pan_right', 'pan_up', 'pan_down', 'pan_slow', 'dolly_zoom', 'whip_pan'].includes(currentMovement)) {
+        if (shot.cameraKeyframes) {
             dom.inspectorCameraMovementSelect.value = 'custom_keyframes';
         } else {
-            dom.inspectorCameraMovementSelect.value = currentMovement;
+            const knownMovs = Array.from(dom.inspectorCameraMovementSelect.options).map(o => o.value);
+            dom.inspectorCameraMovementSelect.value = knownMovs.includes(currentMovement) ? currentMovement : 'pan_slow';
         }
     }
     populateInspectorKeyframeUI(shot);
 
     // Display Mode & PiP Settings
-    const timelineClip = timelineState.clips?.find((c: any) => c.id === shot.id);
     const activeDisplayMode = shot.displayMode || timelineClip?.displayMode || 'fullscreen';
     const activePipPos = shot.pipPosition || timelineClip?.pipPosition || 'top_right';
     const activePipAnim = shot.pipAnimation || timelineClip?.pipAnimation || 'pop_spring';
@@ -924,12 +934,16 @@ export function openInspectorForShot(shotId?: string) {
     updateInspectorFilterUIState(activeFilter);
     applyInspectorMediaFilter(activeFilter, filterIntensity);
 
-    // Show Drawer with Smooth Animation
+    // Show Drawer with Smooth Animation (and activate Shot tab when docked in Studio UI)
     if (dom.shotInspectorDrawer) {
         dom.shotInspectorDrawer.classList.remove('hidden');
         requestAnimationFrame(() => {
             dom.shotInspectorDrawer.classList.remove('translate-x-full');
         });
+        const shotInspTabBtn = document.querySelector<HTMLButtonElement>('#vs-right-inspector-panel [data-vs-insp-tab="shot"]');
+        if (shotInspTabBtn && shotInspTabBtn.getAttribute('aria-selected') !== 'true') {
+            shotInspTabBtn.click();
+        }
     }
 
     // Highlight target shot card in storyboard grid
@@ -965,7 +979,7 @@ export function openInspectorForShot(shotId?: string) {
     if (transBadge) {
         if (isLastShot) {
             transBadge.textContent = 'End of Timeline';
-            transBadge.style.color = 'var(--text-3, #71717a)';
+            transBadge.style.color = 'var(--text-3, #7177a1)';
         } else {
             transBadge.textContent = `${getTransitionIcon(shotTrans)} ${getTransitionLabel(shotTrans)}`;
             transBadge.style.color = 'var(--accent-text, #818cf8)';
@@ -991,6 +1005,11 @@ export function closeInspector() {
         if (vidEl) {
             try { vidEl.pause(); } catch (e) { }
         }
+    }
+    // When docked inside Studio UI (#vs-director-shell), keep the Shot Inspector panel mounted and visible
+    if (dom.shotInspectorDrawer.classList.contains('vs-workspace-docked') || document.getElementById('vs-director-shell')) {
+        clearShotCardHighlight();
+        return;
     }
     dom.shotInspectorDrawer.classList.add('translate-x-full');
     setTimeout(() => {
@@ -1032,45 +1051,53 @@ export function navigateInspectorShot(direction: number) {
  * Helper to populate inspector keyframe sliders and values from shot config
  */
 export function populateInspectorKeyframeUI(shot: any) {
-    const kf: CameraKeyframesConfig = shot.cameraKeyframes || presetToKeyframes(shot.camera_movement || 'static');
+    const kf: CameraKeyframesConfig = shot.cameraKeyframes || presetToKeyframes(shot.camera_movement || 'static', shot.focalPoint);
 
-    if (dom.inspectorKfStartScale) dom.inspectorKfStartScale.value = String(kf.start.scale);
-    if (dom.inspectorKfStartScaleVal) dom.inspectorKfStartScaleVal.textContent = `${kf.start.scale.toFixed(2)}x`;
+    const sScale = Math.max(1.0, kf.start.scale || 1.0);
+    const eScale = Math.max(1.0, kf.end.scale || 1.0);
+
+    if (dom.inspectorKfStartScale) dom.inspectorKfStartScale.value = String(sScale);
+    if (dom.inspectorKfStartScaleVal) dom.inspectorKfStartScaleVal.textContent = `${sScale.toFixed(2)}x`;
     if (dom.inspectorKfStartRot) dom.inspectorKfStartRot.value = String(kf.start.rotation || 0);
     if (dom.inspectorKfStartRotVal) dom.inspectorKfStartRotVal.textContent = `${Math.round(kf.start.rotation || 0)}°`;
-    if (dom.inspectorKfStartX) dom.inspectorKfStartX.value = String(Math.round((kf.start.x || 0) * 100));
-    if (dom.inspectorKfStartXVal) dom.inspectorKfStartXVal.textContent = `${Math.round((kf.start.x || 0) * 100)}%`;
-    if (dom.inspectorKfStartY) dom.inspectorKfStartY.value = String(Math.round((kf.start.y || 0) * 100));
-    if (dom.inspectorKfStartYVal) dom.inspectorKfStartYVal.textContent = `${Math.round((kf.start.y || 0) * 100)}%`;
+    if (dom.inspectorKfStartX) dom.inspectorKfStartX.value = String(Math.round((kf.start.x ?? 0.5) * 100));
+    if (dom.inspectorKfStartXVal) dom.inspectorKfStartXVal.textContent = `${Math.round((kf.start.x ?? 0.5) * 100)}%`;
+    if (dom.inspectorKfStartY) dom.inspectorKfStartY.value = String(Math.round((kf.start.y ?? 0.5) * 100));
+    if (dom.inspectorKfStartYVal) dom.inspectorKfStartYVal.textContent = `${Math.round((kf.start.y ?? 0.5) * 100)}%`;
 
-    if (dom.inspectorKfEndScale) dom.inspectorKfEndScale.value = String(kf.end.scale);
-    if (dom.inspectorKfEndScaleVal) dom.inspectorKfEndScaleVal.textContent = `${kf.end.scale.toFixed(2)}x`;
+    if (dom.inspectorKfEndScale) dom.inspectorKfEndScale.value = String(eScale);
+    if (dom.inspectorKfEndScaleVal) dom.inspectorKfEndScaleVal.textContent = `${eScale.toFixed(2)}x`;
     if (dom.inspectorKfEndRot) dom.inspectorKfEndRot.value = String(kf.end.rotation || 0);
     if (dom.inspectorKfEndRotVal) dom.inspectorKfEndRotVal.textContent = `${Math.round(kf.end.rotation || 0)}°`;
-    if (dom.inspectorKfEndX) dom.inspectorKfEndX.value = String(Math.round((kf.end.x || 0) * 100));
-    if (dom.inspectorKfEndXVal) dom.inspectorKfEndXVal.textContent = `${Math.round((kf.end.x || 0) * 100)}%`;
-    if (dom.inspectorKfEndY) dom.inspectorKfEndY.value = String(Math.round((kf.end.y || 0) * 100));
-    if (dom.inspectorKfEndYVal) dom.inspectorKfEndYVal.textContent = `${Math.round((kf.end.y || 0) * 100)}%`;
+    if (dom.inspectorKfEndX) dom.inspectorKfEndX.value = String(Math.round((kf.end.x ?? 0.5) * 100));
+    if (dom.inspectorKfEndXVal) dom.inspectorKfEndXVal.textContent = `${Math.round((kf.end.x ?? 0.5) * 100)}%`;
+    if (dom.inspectorKfEndY) dom.inspectorKfEndY.value = String(Math.round((kf.end.y ?? 0.5) * 100));
+    if (dom.inspectorKfEndYVal) dom.inspectorKfEndYVal.textContent = `${Math.round((kf.end.y ?? 0.5) * 100)}%`;
 
-    if (dom.inspectorKfEasingSelect) dom.inspectorKfEasingSelect.value = kf.easing || 'ease-in-out';
+    if (dom.inspectorKfEasingSelect) {
+        const rawE = (kf.easing || 'easeInOut') as string;
+        const normE = rawE === 'ease-in-out' ? 'easeInOut' : rawE === 'ease-in' ? 'easeIn' : rawE === 'ease-out' ? 'easeOut' : rawE;
+        dom.inspectorKfEasingSelect.value = normE;
+    }
 
     updateKeyframeSummaries(kf);
 
     // If movement is custom or keyframes exist, display container
-    const isCustom = dom.inspectorCameraMovementSelect?.value === 'custom_keyframes';
+    const isCustom = dom.inspectorCameraMovementSelect?.value === 'custom_keyframes' || Boolean(shot.cameraKeyframes);
     if (dom.inspectorKeyframesContainer) {
         if (isCustom) {
             dom.inspectorKeyframesContainer.classList.remove('hidden');
+            if (dom.inspectorKeyframesToggleIcon) dom.inspectorKeyframesToggleIcon.textContent = '▲';
         }
     }
 }
 
 function updateKeyframeSummaries(kf: CameraKeyframesConfig) {
     if (dom.inspectorKfStartSummary) {
-        dom.inspectorKfStartSummary.textContent = `${kf.start.scale.toFixed(2)}x (${Math.round((kf.start.x || 0) * 100)}%, ${Math.round((kf.start.y || 0) * 100)}%)`;
+        dom.inspectorKfStartSummary.textContent = `${Math.max(1.0, kf.start.scale || 1.0).toFixed(2)}x (${Math.round((kf.start.x ?? 0.5) * 100)}%, ${Math.round((kf.start.y ?? 0.5) * 100)}%)`;
     }
     if (dom.inspectorKfEndSummary) {
-        dom.inspectorKfEndSummary.textContent = `${kf.end.scale.toFixed(2)}x (${Math.round((kf.end.x || 0) * 100)}%, ${Math.round((kf.end.y || 0) * 100)}%)`;
+        dom.inspectorKfEndSummary.textContent = `${Math.max(1.0, kf.end.scale || 1.0).toFixed(2)}x (${Math.round((kf.end.x ?? 0.5) * 100)}%, ${Math.round((kf.end.y ?? 0.5) * 100)}%)`;
     }
 }
 
@@ -1084,17 +1111,17 @@ function syncActiveKeyframesFromSliders() {
     if (!targetItem) return;
 
     const shot = targetItem.shot;
-    const startScale = dom.inspectorKfStartScale ? parseFloat(dom.inspectorKfStartScale.value) || 1.0 : 1.0;
+    const startScale = Math.max(1.0, dom.inspectorKfStartScale ? parseFloat(dom.inspectorKfStartScale.value) || 1.0 : 1.0);
     const startRot = dom.inspectorKfStartRot ? parseFloat(dom.inspectorKfStartRot.value) || 0 : 0;
-    const startX = dom.inspectorKfStartX ? (parseFloat(dom.inspectorKfStartX.value) || 0) / 100 : 0;
-    const startY = dom.inspectorKfStartY ? (parseFloat(dom.inspectorKfStartY.value) || 0) / 100 : 0;
+    const startX = dom.inspectorKfStartX ? (parseFloat(dom.inspectorKfStartX.value) ?? 50) / 100 : 0.5;
+    const startY = dom.inspectorKfStartY ? (parseFloat(dom.inspectorKfStartY.value) ?? 50) / 100 : 0.5;
 
-    const endScale = dom.inspectorKfEndScale ? parseFloat(dom.inspectorKfEndScale.value) || 1.0 : 1.0;
+    const endScale = Math.max(1.0, dom.inspectorKfEndScale ? parseFloat(dom.inspectorKfEndScale.value) || 1.0 : 1.0);
     const endRot = dom.inspectorKfEndRot ? parseFloat(dom.inspectorKfEndRot.value) || 0 : 0;
-    const endX = dom.inspectorKfEndX ? (parseFloat(dom.inspectorKfEndX.value) || 0) / 100 : 0;
-    const endY = dom.inspectorKfEndY ? (parseFloat(dom.inspectorKfEndY.value) || 0) / 100 : 0;
+    const endX = dom.inspectorKfEndX ? (parseFloat(dom.inspectorKfEndX.value) ?? 50) / 100 : 0.5;
+    const endY = dom.inspectorKfEndY ? (parseFloat(dom.inspectorKfEndY.value) ?? 50) / 100 : 0.5;
 
-    const easing = (dom.inspectorKfEasingSelect?.value || 'ease-in-out') as any;
+    const easing = (dom.inspectorKfEasingSelect?.value || 'easeInOut') as any;
 
     const kf: CameraKeyframesConfig = {
         start: { scale: startScale, x: startX, y: startY, rotation: startRot },
@@ -1103,7 +1130,10 @@ function syncActiveKeyframesFromSliders() {
     };
 
     shot.cameraKeyframes = kf;
-    shot.camera_movement = dom.inspectorCameraMovementSelect?.value || 'custom_keyframes';
+    shot.camera_movement = 'custom_keyframes';
+    if (dom.inspectorCameraMovementSelect) {
+        dom.inspectorCameraMovementSelect.value = 'custom_keyframes';
+    }
 
     updateKeyframeSummaries(kf);
 
@@ -1111,7 +1141,7 @@ function syncActiveKeyframesFromSliders() {
     const clip = timelineState.clips?.find((c: any) => c.id === shot.id);
     if (clip) {
         clip.cameraKeyframes = kf;
-        clip.cameraMovement = shot.camera_movement;
+        clip.cameraMovement = 'custom_keyframes';
     }
 
     if (timelineState.videoGenerated && !state.isVideoPlaying) {
@@ -1238,6 +1268,9 @@ export function saveInspectorMetadata() {
     // Apply values to shot object
     shot.camera_angle = selectedAngle;
     shot.camera_movement = selectedMovement;
+    if (selectedMovement !== 'custom_keyframes') {
+        shot.cameraKeyframes = undefined;
+    }
     shot.lighting_prompt = lightingText;
     shot.duration_seconds = durationVal;
     shot.videoStartOffset = videoStartOffset;
@@ -1314,9 +1347,7 @@ export function saveInspectorMetadata() {
         clip.talkingHeadVideoElement = state.uploadedVideoElement;
         clip.videoStartOffset = videoStartOffset;
         clip.cameraMovement = shot.camera_movement;
-        if (shot.cameraKeyframes) {
-            clip.cameraKeyframes = shot.cameraKeyframes;
-        }
+        clip.cameraKeyframes = shot.cameraKeyframes ? shot.cameraKeyframes : undefined;
     }
 
     // Resize timeline clip duration and adjust downstream placement
@@ -1605,21 +1636,23 @@ export function initInspectorHandlers() {
                 dom.inspectorKeyframesContainer?.classList.remove('hidden');
                 if (dom.inspectorKeyframesToggleIcon) dom.inspectorKeyframesToggleIcon.textContent = '▲';
                 if (!targetItem.shot.cameraKeyframes) {
-                    targetItem.shot.cameraKeyframes = presetToKeyframes('zoom_in');
+                    const baseMove = targetItem.shot.camera_movement && targetItem.shot.camera_movement !== 'custom_keyframes'
+                        ? targetItem.shot.camera_movement
+                        : 'zoom_in';
+                    targetItem.shot.cameraKeyframes = presetToKeyframes(baseMove, targetItem.shot.focalPoint);
                 }
                 populateInspectorKeyframeUI(targetItem.shot);
                 syncActiveKeyframesFromSliders();
             } else {
-                // Preset selected
+                // Preset selected -> clear custom keyframes so getKenBurnsTransforms drives full preset motion + focalPoint
                 targetItem.shot.camera_movement = movement;
-                const kf = presetToKeyframes(movement);
-                targetItem.shot.cameraKeyframes = kf;
+                targetItem.shot.cameraKeyframes = undefined;
                 populateInspectorKeyframeUI(targetItem.shot);
                 
                 const clip = timelineState.clips?.find((c: any) => c.id === targetItem.shot.id);
                 if (clip) {
                     clip.cameraMovement = movement;
-                    clip.cameraKeyframes = kf;
+                    clip.cameraKeyframes = undefined;
                 }
                 if (timelineState.videoGenerated && !state.isVideoPlaying) {
                     drawVideoFrame(state.videoPauseTime || 0);
@@ -1627,6 +1660,25 @@ export function initInspectorHandlers() {
             }
         });
     }
+
+    // Refresh Shot Inspector camera fields if Magic Camera or Camera Keyframes panel updates shots
+    window.addEventListener('magic-camera-applied', () => {
+        if (!activeShotId) return;
+        const allShots = getAllStoryboardShots();
+        const targetItem = allShots.find(item => item.shot.id === activeShotId);
+        if (!targetItem) return;
+        const shot = targetItem.shot;
+        const currentMovement = shot.camera_movement || 'static';
+        if (dom.inspectorCameraMovementSelect) {
+            if (shot.cameraKeyframes) {
+                dom.inspectorCameraMovementSelect.value = 'custom_keyframes';
+            } else {
+                const knownMovs = Array.from(dom.inspectorCameraMovementSelect.options).map(o => o.value);
+                dom.inspectorCameraMovementSelect.value = knownMovs.includes(currentMovement) ? currentMovement : 'pan_slow';
+            }
+        }
+        populateInspectorKeyframeUI(shot);
+    });
 
     // Toggle Keyframes Container Button
     if (dom.inspectorToggleKeyframesBtn && dom.inspectorKeyframesContainer) {
@@ -1673,7 +1725,7 @@ export function initInspectorHandlers() {
             if (!targetItem) return;
 
             const preset = dom.inspectorCameraMovementSelect?.value || targetItem.shot.camera_movement || 'zoom_in';
-            const kf = presetToKeyframes(preset === 'custom_keyframes' ? 'zoom_in' : preset);
+            const kf = presetToKeyframes(preset === 'custom_keyframes' ? 'zoom_in' : preset, targetItem.shot.focalPoint);
             targetItem.shot.cameraKeyframes = kf;
             targetItem.shot.camera_movement = 'custom_keyframes';
             if (dom.inspectorCameraMovementSelect) dom.inspectorCameraMovementSelect.value = 'custom_keyframes';
@@ -1682,7 +1734,51 @@ export function initInspectorHandlers() {
             
             populateInspectorKeyframeUI(targetItem.shot);
             syncActiveKeyframesFromSliders();
-            showStatus(`Converted preset "${preset}" into editable keyframes`, false, 2500);
+            showStatus(`Converted "${preset}" into editable keyframes`, false, 2500);
+        });
+    }
+
+    // Auto-Reframe Subject Button inside Shot Inspector
+    const inspectorAutoReframeBtn = document.getElementById('inspector-auto-reframe-kf-btn') as HTMLButtonElement | null;
+    if (inspectorAutoReframeBtn) {
+        inspectorAutoReframeBtn.addEventListener('click', async () => {
+            if (!activeShotId) return;
+            const allShots = getAllStoryboardShots();
+            const targetItem = allShots.find(item => item.shot.id === activeShotId);
+            if (!targetItem) return;
+
+            const origText = inspectorAutoReframeBtn.textContent;
+            try {
+                inspectorAutoReframeBtn.disabled = true;
+                inspectorAutoReframeBtn.textContent = '⏳ Analyzing...';
+                const result = await autoReframeClipOrShot(targetItem.shot);
+                if (result && result.keyframes) {
+                    targetItem.shot.cameraKeyframes = result.keyframes;
+                    targetItem.shot.camera_movement = 'custom_keyframes';
+                    if (result.focalPoint) {
+                        targetItem.shot.focalPoint = result.focalPoint;
+                    }
+                    const clip = timelineState.clips?.find((c: any) => c.id === targetItem.shot.id);
+                    if (clip) {
+                        clip.cameraKeyframes = result.keyframes;
+                        clip.cameraMovement = 'custom_keyframes';
+                        if (result.focalPoint) clip.focalPoint = result.focalPoint;
+                    }
+                    if (dom.inspectorCameraMovementSelect) dom.inspectorCameraMovementSelect.value = 'custom_keyframes';
+                    if (dom.inspectorKeyframesContainer) dom.inspectorKeyframesContainer.classList.remove('hidden');
+                    if (dom.inspectorKeyframesToggleIcon) dom.inspectorKeyframesToggleIcon.textContent = '▲';
+                    populateInspectorKeyframeUI(targetItem.shot);
+                    if (timelineState.videoGenerated && !state.isVideoPlaying) {
+                        drawVideoFrame(state.videoPauseTime || 0);
+                    }
+                    showStatus(`Auto-Reframe applied (${state.aspectRatio || '9:16'})`, false, 2500);
+                }
+            } catch (err: any) {
+                showStatus(`Auto-Reframe failed: ${err?.message || 'unknown error'}`, true, 3000);
+            } finally {
+                inspectorAutoReframeBtn.disabled = false;
+                inspectorAutoReframeBtn.textContent = origText || '✨ Auto-Reframe';
+            }
         });
     }
 

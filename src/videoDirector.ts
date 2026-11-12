@@ -174,6 +174,7 @@ function applyCameraMovements(movements: { id: string; movement: string; focal_x
     return { 
       ...c, 
       cameraMovement: finalMovement, 
+      cameraKeyframes: undefined,
       focalPoint: focalPoint || c.focalPoint,
       video_prompt: undefined 
     };
@@ -218,6 +219,7 @@ function applyCameraMovements(movements: { id: string; movement: string; focal_x
 
         if (idMatches || urlMatches) {
           sceneShot.camera_movement = validMov;
+          sceneShot.cameraKeyframes = undefined;
           if (m.focal_x !== undefined && m.focal_y !== undefined) {
             sceneShot.focalPoint = { 
               x: Math.max(0, Math.min(1, Number(m.focal_x) || 0.5)), 
@@ -233,6 +235,7 @@ function applyCameraMovements(movements: { id: string; movement: string; focal_x
       // Fallback matching by flat shot index when IDs or URLs don't match
       if (!matched && allSceneShots[i]) {
         allSceneShots[i].camera_movement = validMov;
+        allSceneShots[i].cameraKeyframes = undefined;
         if (m.focal_x !== undefined && m.focal_y !== undefined) {
           allSceneShots[i].focalPoint = { 
             x: Math.max(0, Math.min(1, Number(m.focal_x) || 0.5)), 
@@ -244,6 +247,7 @@ function applyCameraMovements(movements: { id: string; movement: string; focal_x
     }
   }
 
+  window.dispatchEvent(new CustomEvent('magic-camera-applied'));
   if (invalidCount > 0) ui.showStatus(`Applied movements (${invalidCount} defaulted to smooth pan)`, false, 3000);
   if (!state.isVideoPlaying && videoRenderContext) drawVideoFrame(state.videoPauseTime);
 }

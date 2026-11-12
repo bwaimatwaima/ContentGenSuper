@@ -2398,6 +2398,15 @@ export function handleParallaxDustToggle(event: Event) {
 export function handleParallaxDofToggle(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
     state.parallaxDepthBlur = checked;
+    state.parallaxHaze = checked;
+    if (checked && (state.parallaxBlurStrength ?? 0) <= 0) {
+        state.parallaxBlurStrength = 0.05;
+        localStorage.setItem('parallaxBlurStrength', '0.05');
+        const blurSlider = document.getElementById('parallax-blur-range') as HTMLInputElement | null;
+        const blurVal = document.getElementById('parallax-blur-range-value');
+        if (blurSlider) blurSlider.value = '0.05';
+        if (blurVal) blurVal.textContent = '0.05';
+    }
     localStorage.setItem('parallaxDepthBlur', String(checked));
     if (!state.isVideoPlaying) {
         drawVideoFrame(state.lastRenderedTime);

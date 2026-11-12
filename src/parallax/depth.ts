@@ -6,7 +6,7 @@
  * IndexedDB/Memory caching, and live preview upgrade notifications.
  */
 
-import { buildDepthField, buildProceduralDepthField, guidedUpsample, normalizeDepth, type DepthField } from './depthProcessing';
+import { buildDepthField, buildProceduralDepthField, dilateNear, guidedUpsample, normalizeDepth, type DepthField } from './depthProcessing';
 
 const depthMemoryCache = new Map<any, DepthField>();
 const inFlightRequests = new Map<string, Promise<DepthField>>();
@@ -237,9 +237,10 @@ async function fetchServerDepth(blob: Blob, guideImg: { data: Uint8ClampedArray;
     rawLow[i] = imgData.data[i * 4];
   }
 
-  // Refine and upsample against full-res RGB image
+  // Refine and upsample against full-res RGB image, then dilate near edges by 1px to prevent foreground color bleed
   const refined = guidedUpsample(rawLow, w, h, guideImg, guideImg.width, guideImg.height);
-  return buildDepthField(refined, guideImg.width, guideImg.height, 'model', undefined, guideImg);
+  const dilated = dilateNear(refined, guideImg.width, guideImg.height, 1);
+  return buildDepthField(dilated, guideImg.width, guideImg.height, 'model', undefined, guideImg);
 }
 
 /**

@@ -599,6 +599,18 @@ export function activateVsWorkspace(): boolean {
       dom.shotInspectorDrawer.classList.add('vs-workspace-docked');
       mountInspectorPositionGlyphs();
       mountInspectorSpeedChips();
+      import('./handlers-inspector').then(({ activeShotId, openInspectorForShot }) => {
+        import('./state-timeline').then(({ timelineState }) => {
+          const playheadTime = state.lastRenderedTime || state.videoPauseTime || 0;
+          const activeClipAtPlayhead = timelineState.clips?.find(
+            (c: any) => typeof c.startTime === 'number' && typeof c.endTime === 'number' && playheadTime >= c.startTime && playheadTime < c.endTime
+          ) || timelineState.clips?.[0];
+          const targetShotId = activeShotId || activeClipAtPlayhead?.id;
+          if (targetShotId) {
+            openInspectorForShot(targetShotId);
+          }
+        });
+      }).catch(() => {});
     }
 
     const graphicInspSlot = shellEl.querySelector<HTMLElement>('#vs-insp-tab-graphic');
@@ -627,25 +639,29 @@ export function activateVsWorkspace(): boolean {
       productionSidebar.classList.add('vs-workspace-production');
     }
 
-    const narrationAccordion = document.getElementById('director-accordion-narration');
-    const musicAccordion = document.getElementById('director-accordion-music');
-    const subtitlesAccordion = document.getElementById('director-accordion-subtitles');
-    const cinemaAccordion = document.getElementById('director-accordion-cinema');
+    const narrationAccordion = document.getElementById('director-accordion-narration') as HTMLDetailsElement | null;
+    const musicAccordion = document.getElementById('director-accordion-music') as HTMLDetailsElement | null;
+    const subtitlesAccordion = document.getElementById('director-accordion-subtitles') as HTMLDetailsElement | null;
+    const cinemaAccordion = document.getElementById('director-accordion-cinema') as HTMLDetailsElement | null;
     if (narrationAccordion && audioSlot) {
       moveNode(narrationAccordion, audioSlot);
       narrationAccordion.classList.add('vs-workspace-accordion');
+      narrationAccordion.open = true;
     }
     if (musicAccordion && audioSlot) {
       moveNode(musicAccordion, audioSlot);
       musicAccordion.classList.add('vs-workspace-accordion');
+      musicAccordion.open = true;
     }
     if (subtitlesAccordion && captionsSlot) {
       moveNode(subtitlesAccordion, captionsSlot);
       subtitlesAccordion.classList.add('vs-workspace-accordion');
+      subtitlesAccordion.open = true;
     }
     if (cinemaAccordion && cinemaControlsSlot) {
       moveNode(cinemaAccordion, cinemaControlsSlot);
       cinemaAccordion.classList.add('vs-workspace-accordion');
+      cinemaAccordion.open = true;
     }
 
     // Keep the actual aspect/preview controls wired to their original handlers.
@@ -902,15 +918,17 @@ export function syncGraphicEditorToInspector(): void {
       rightInspector.querySelectorAll<HTMLButtonElement>('[data-vs-insp-tab]').forEach((b) => {
         b.setAttribute('aria-selected', String(b === tabBtn));
       });
-      ['shot', 'cinema', 'graphic'].forEach((k) => {
+      ['shot', 'graphic', 'cinema', 'production'].forEach((k) => {
         rightInspector.querySelector(`#vs-insp-tab-${k}`)?.classList.toggle('hidden', k !== 'graphic');
       });
     });
   }
 
-  if (graphicSlot && modal.parentElement !== graphicSlot) {
-    modal.classList.add('is-docked');
-    graphicSlot.appendChild(modal);
+  const graphicDrawerInner = modal.firstElementChild as HTMLElement | null;
+  if (graphicSlot && graphicDrawerInner && graphicDrawerInner.parentElement !== graphicSlot) {
+    modal.classList.add('hidden', 'is-docked');
+    moveNode(graphicDrawerInner, graphicSlot);
+    graphicDrawerInner.classList.add('vs-workspace-docked-graphic');
   }
 }
 
@@ -1593,7 +1611,7 @@ export function initStudioCommandPalette(): void {
       title: 'Configure Subtitle Styles',
       category: 'AI & Media',
       action: () => {
-        const tab = document.querySelector<HTMLElement>('[data-vs-left-tab="graphics"]');
+        const tab = document.querySelector<HTMLElement>('[data-vs-left-tab="captions"]');
         tab?.click();
       },
     },

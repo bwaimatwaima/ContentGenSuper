@@ -66,7 +66,7 @@ export interface IconOverlayEvent {
   scale?: number;             // override scale (default 1.0)
   rotation?: number;          // degrees e.g. 0, 45, 90, 180, 270
   animationType?: 'pop' | 'bounce' | 'fade' | 'slide-up' | 'slide-left' | 'rotate-spin' | 'elastic';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface BulletPanelEvent {
@@ -85,7 +85,7 @@ export interface BulletPanelEvent {
   customY?: number;
   scale?: number;
   animationType?: 'slide-left' | 'slide-up' | 'fade' | 'pop';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface EvidenceBoardItem {
@@ -108,7 +108,7 @@ export interface EvidenceBoardEvent {
   customX?: number;
   customY?: number;
   scale?: number;
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface RevealRouteNode {
@@ -133,7 +133,7 @@ export interface RevealRouteEvent {
   customX?: number;
   customY?: number;
   scale?: number;
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface StatCounterEvent {
@@ -156,7 +156,7 @@ export interface StatCounterEvent {
   customY?: number;
   scale?: number;
   animationType?: 'pop' | 'bounce' | 'slide-up' | 'fade';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface SpotlightFocusEvent {
@@ -179,7 +179,7 @@ export interface SpotlightFocusEvent {
   customY?: number;
   scale?: number;
   animationType?: 'fade' | 'pop';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface SocialBadgeEvent {
@@ -199,7 +199,7 @@ export interface SocialBadgeEvent {
   customY?: number;
   scale?: number;
   animationType?: 'pop' | 'bounce' | 'slide-up' | 'slide-left' | 'elastic';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface VersusCardEvent {
@@ -221,7 +221,7 @@ export interface VersusCardEvent {
   customY?: number;
   scale?: number;
   animationType?: 'slide-left' | 'pop' | 'bounce' | 'fade';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface DonutChartSegment {
@@ -251,7 +251,7 @@ export interface DonutChartEvent {
   customY?: number;
   scale?: number;
   animationType?: 'pop' | 'bounce' | 'slide-up' | 'slide-left' | 'fade' | 'elastic';
-  theme?: 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge';
+  theme?: GraphicTheme;
 }
 
 export interface SpectrumEvent {
@@ -309,7 +309,31 @@ const DEFAULT_ACCENT = '#F5C542';
 const DEFAULT_TEXT_COLOR = '#ffffff';
 let currentGlobalAccent: string | undefined;
 const getAccent = (ev: any) => ev.accentColor || currentGlobalAccent || (typeof state !== 'undefined' ? state?.graphicsAccentColor : undefined) || DEFAULT_ACCENT;
-const getTextColor = (ev: any, defaultFallback = DEFAULT_TEXT_COLOR) => ev.textColor || (ev.theme === 'bold-badge' ? '#000000' : defaultFallback);
+
+function isLightHexColor(hex?: string): boolean {
+  if (!hex) return false;
+  let h = hex.replace('#', '').trim();
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const num = parseInt(h, 16);
+  if (h.length !== 6 || isNaN(num)) return false;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.64;
+}
+
+const getTextColor = (ev: any, defaultFallback = DEFAULT_TEXT_COLOR) => {
+  const custom = (ev.textColor || '').trim();
+  const isDefaultWhite = !custom || custom.toLowerCase() === '#ffffff' || custom.toLowerCase() === '#fff';
+  if ((ev.theme === 'bold-badge' || ev.theme === 'solid-box') && isDefaultWhite) {
+    const accent = getAccent(ev);
+    if (ev.theme === 'bold-badge' || isLightHexColor(accent)) {
+      return '#09090b';
+    }
+  }
+  return custom || (ev.theme === 'bold-badge' ? '#09090b' : defaultFallback);
+};
 const IN_DUR = 0.5;
 const OUT_DUR = 0.4;
 
@@ -388,6 +412,121 @@ export function fitFontSize(ctx: CanvasRenderingContext2D, text: string, maxW: n
     ctx.font = `${weight} ${size}px ${fontFam}`;
   }
   return size;
+}
+
+/**
+ * Fits text into up to maxLines balanced lines before shrinking down to minSize.
+ */
+function fitAndWrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxW: number,
+  initialSize: number,
+  minSize: number,
+  maxLines: number,
+  weight: string,
+  fontFam: string
+): { fontSize: number; lines: string[]; maxLineWidth: number } {
+  const clean = (text || '').trim();
+  if (!clean || maxW <= 0) return { fontSize: initialSize, lines: [''], maxLineWidth: 0 };
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  const singleLineMin = maxLines <= 1 || words.length <= 2 ? minSize : Math.max(minSize, Math.round(initialSize * 0.76));
+  const singleSize = fitFontSize(ctx, clean, maxW, initialSize, singleLineMin, weight, fontFam);
+  ctx.font = `${weight} ${singleSize}px ${fontFam}`;
+  const singleW = ctx.measureText(clean).width;
+  if (maxLines <= 1 || words.length <= 1 || singleW <= maxW) {
+    return { fontSize: singleSize, lines: [clean], maxLineWidth: Math.min(maxW, singleW) };
+  }
+
+  let size = Math.round(initialSize * 0.88);
+  let wrapped: string[] = [clean];
+  while (size >= minSize) {
+    ctx.font = `${weight} ${size}px ${fontFam}`;
+    wrapped = wrapTextToLines(ctx, clean, maxW);
+    if (wrapped.length <= maxLines) break;
+    size -= 1;
+  }
+  size = Math.max(minSize, size);
+  ctx.font = `${weight} ${size}px ${fontFam}`;
+  wrapped = wrapTextToLines(ctx, clean, maxW);
+  if (wrapped.length > maxLines) {
+    const head = wrapped.slice(0, maxLines - 1);
+    const tail = wrapped.slice(maxLines - 1).join(' ');
+    wrapped = [...head, tail];
+  }
+
+  if (wrapped.length === 2 && words.length >= 4) {
+    let bestSplit = 1;
+    let bestDiff = Infinity;
+    for (let split = 1; split < words.length; split++) {
+      const l1 = words.slice(0, split).join(' ');
+      const l2 = words.slice(split).join(' ');
+      const w1 = ctx.measureText(l1).width;
+      const w2 = ctx.measureText(l2).width;
+      if (w1 <= maxW && w2 <= maxW) {
+        const diff = Math.abs(w1 - w2);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestSplit = split;
+        }
+      }
+    }
+    if (bestDiff < Infinity) {
+      wrapped = [words.slice(0, bestSplit).join(' '), words.slice(bestSplit).join(' ')];
+    }
+  }
+
+  let maxLineWidth = 0;
+  for (const ln of wrapped) {
+    maxLineWidth = Math.max(maxLineWidth, Math.min(maxW, ctx.measureText(ln).width));
+  }
+  return { fontSize: size, lines: wrapped, maxLineWidth };
+}
+
+/**
+ * Draws a single line of text with optional word-index accent coloring, strictly clamped to maxW.
+ */
+function drawTextLineWithAccents(
+  ctx: CanvasRenderingContext2D,
+  lineText: string,
+  wordStartIndex: number,
+  x: number,
+  y: number,
+  maxW: number,
+  align: 'left' | 'center',
+  baseColor: string,
+  accentColor: string,
+  accentWords?: number[]
+): number {
+  const words = lineText.split(/\s+/).filter(Boolean);
+  if (!accentWords || accentWords.length === 0 || words.length === 0) {
+    ctx.save();
+    ctx.textAlign = align;
+    ctx.fillStyle = baseColor;
+    ctx.fillText(lineText, x, y, maxW);
+    ctx.restore();
+    return wordStartIndex + words.length;
+  }
+
+  const naturalW = ctx.measureText(lineText).width;
+  const horizScale = naturalW > maxW && naturalW > 0 ? maxW / naturalW : 1;
+
+  ctx.save();
+  ctx.translate(x, y);
+  if (horizScale < 1) {
+    ctx.scale(horizScale, 1);
+  }
+  ctx.textAlign = 'left';
+  let cursorX = align === 'center' ? -naturalW / 2 : 0;
+  for (let i = 0; i < words.length; i++) {
+    const globalIdx = wordStartIndex + i;
+    ctx.fillStyle = accentWords.includes(globalIdx) ? accentColor : baseColor;
+    ctx.fillText(words[i], cursorX, 0);
+    cursorX += ctx.measureText(words[i] + ' ').width;
+  }
+  ctx.restore();
+  return wordStartIndex + words.length;
 }
 
 function timeline(ev: GraphicEvent, time: number) {
@@ -726,24 +865,23 @@ function drawLowerThird(ctx: CanvasRenderingContext2D, ev: LowerThirdEvent, alph
     }
   }
 
-  // Draw Title with staggered slide-in
+  // Draw Title with staggered slide-in and safe maxInnerW clamping
   ctx.save();
   ctx.globalAlpha = alpha * titleProg;
   const titleSlideX = (1 - titleProg) * -18;
   ctx.font = `800 ${fittedTitleSize}px ${FONT_FAM}`;
-
-  if (ev.accentWords && ev.accentWords.length > 0) {
-    const words = showTitle.split(' ');
-    let cx_curr = textX + titleSlideX;
-    for (let i = 0; i < words.length; i++) {
-      ctx.fillStyle = ev.accentWords.includes(i) ? accent : baseTextColor;
-      ctx.fillText(words[i], cx_curr, y + pad + fittedTitleSize * 0.85);
-      cx_curr += ctx.measureText(words[i] + ' ').width;
-    }
-  } else {
-    ctx.fillStyle = baseTextColor;
-    ctx.fillText(showTitle, textX + titleSlideX, y + pad + fittedTitleSize * 0.85, maxInnerW);
-  }
+  drawTextLineWithAccents(
+    ctx,
+    showTitle,
+    0,
+    textX + titleSlideX,
+    y + pad + fittedTitleSize * 0.85,
+    maxInnerW,
+    'left',
+    baseTextColor,
+    ev.theme === 'solid-box' || ev.theme === 'bold-badge' ? '#ffffff' : accent,
+    ev.accentWords
+  );
   ctx.restore();
 
   // Draw Subtitle 100ms after Title
@@ -752,7 +890,9 @@ function drawLowerThird(ctx: CanvasRenderingContext2D, ev: LowerThirdEvent, alph
     ctx.globalAlpha = alpha * subProg;
     const subSlideY = (1 - subProg) * 8;
     ctx.font = `600 ${fittedSubSize}px ${FONT_FAM}`;
-    ctx.fillStyle = ev.theme === 'bold-badge' ? 'rgba(0,0,0,0.75)' : accent;
+    ctx.fillStyle = (ev.theme === 'bold-badge' || ev.theme === 'solid-box')
+      ? (isLightHexColor(accent) ? 'rgba(9,9,11,0.78)' : 'rgba(255,255,255,0.88)')
+      : accent;
     ctx.fillText(showSub.toUpperCase(), textX, y + pad + fittedTitleSize + gap + fittedSubSize * 0.85 + subSlideY, maxInnerW);
     ctx.restore();
   }
@@ -773,46 +913,55 @@ function drawTitleCard(ctx: CanvasRenderingContext2D, ev: TitleCardEvent, alpha:
   }
 
   const sc = ev.scale || 1.0;
-  const titleSize = Math.round(Math.min(cvW, cvH) * 0.075 * sc);
+  const titleSize = Math.round(Math.min(cvW, cvH) * 0.072 * sc);
   const subSize = Math.round(Math.min(cvW, cvH) * 0.030 * sc);
   const accent = getAccent(ev);
   const anim = ev.animationType || 'slide-left';
   
-  const safeMargin = 8;
-  const padY = Math.round(titleSize * 0.4);
-  const padX = Math.round(titleSize * 0.7);
-  const maxAllowedBoxW = Math.max(100, cvW - safeMargin * 2);
-  const maxTextW = maxAllowedBoxW - padX * 2;
+  const safeMargin = 12;
+  const padY = Math.round(titleSize * 0.38);
+  const padX = Math.round(titleSize * 0.65);
+  const maxAllowedBoxW = Math.max(120, cvW - safeMargin * 2);
+  const maxTextW = Math.max(80, maxAllowedBoxW - padX * 2);
 
-  const fittedTitleSize = fitFontSize(ctx, ev.title, maxTextW, titleSize, Math.round(titleSize * 0.4), '800', FONT_FAM);
-  ctx.font = `800 ${fittedTitleSize}px ${FONT_FAM}`;
-  const titleW = ctx.measureText(ev.title).width;
+  const titleFit = fitAndWrapText(ctx, ev.title || '', maxTextW, titleSize, Math.round(titleSize * 0.45), 2, '800', FONT_FAM);
+  const fittedTitleSize = titleFit.fontSize;
+  const titleLines = titleFit.lines;
+  const titleLineH = Math.round(fittedTitleSize * 1.18);
+  const titleBlockH = titleLines.length * titleLineH;
 
   let fittedSubSize = subSize;
   let subW = 0;
   if (ev.subtitle) {
-      fittedSubSize = fitFontSize(ctx, ev.subtitle, maxTextW, subSize, Math.round(subSize * 0.5), '600', FONT_FAM);
-      ctx.font = `600 ${fittedSubSize}px ${FONT_FAM}`;
-      subW = ctx.measureText(ev.subtitle).width;
+    fittedSubSize = fitFontSize(ctx, ev.subtitle.toUpperCase(), maxTextW, subSize, Math.round(subSize * 0.5), '600', FONT_FAM);
+    ctx.font = `600 ${fittedSubSize}px ${FONT_FAM}`;
+    subW = Math.min(maxTextW, ctx.measureText(ev.subtitle.toUpperCase()).width);
   }
   
-  const boxW = Math.min(maxAllowedBoxW, Math.max(titleW, subW) + padX * 2);
+  const boxW = Math.min(maxAllowedBoxW, Math.max(Math.min(cvW, cvH) * 0.42 * sc, Math.max(titleFit.maxLineWidth, subW) + padX * 2));
   const halfW = boxW / 2;
+
+  const hasSub = !!ev.subtitle;
+  const dividerGap = hasSub ? Math.round(fittedTitleSize * 0.45) : 0;
+  const subBlockH = hasSub ? dividerGap + fittedSubSize : 0;
+  const boxH = padY * 2 + titleBlockH + subBlockH;
 
   let cx = ev.customX !== undefined ? ev.customX * cvW : cvW / 2;
   cx = Math.max(halfW + safeMargin, Math.min(cvW - halfW - safeMargin, cx));
   
-  const hasSub = !!ev.subtitle;
-  const baseTitleY = ev.customY !== undefined ? ev.customY * cvH : (cvH / 2 - (hasSub ? fittedTitleSize * 0.35 : 0));
+  let cy = ev.customY !== undefined ? ev.customY * cvH : cvH / 2;
+  cy = Math.max(boxH / 2 + safeMargin, Math.min(cvH - boxH / 2 - safeMargin, cy));
   
-  let drift = 0;
+  let driftY = 0;
   if (anim === 'slide-left') {
-      cx += (1 - appear) * Math.round(Math.min(cvW, cvH) * 0.03);
+    cx += (1 - appear) * Math.round(Math.min(cvW, cvH) * 0.03);
   } else if (anim === 'slide-up') {
-      drift = (1 - appear) * Math.round(Math.min(cvW, cvH) * 0.05);
+    driftY = (1 - appear) * Math.round(Math.min(cvW, cvH) * 0.05);
   }
   
-  const titleY = baseTitleY + drift;
+  const drawCy = cy + driftY;
+  const boxX = cx - boxW / 2;
+  const boxY = drawCy - boxH / 2;
   
   let drawAlpha = alpha;
   if (anim === 'fade') drawAlpha = appear;
@@ -820,114 +969,85 @@ function drawTitleCard(ctx: CanvasRenderingContext2D, ev: TitleCardEvent, alpha:
 
   ctx.globalAlpha = drawAlpha;
   
-  if (anim === 'pop') {
-      ctx.translate(cx, titleY);
-      ctx.scale(appear, appear);
-      ctx.translate(-cx, -titleY);
+  if (anim === 'pop' || anim === 'bounce' || anim === 'elastic') {
+    ctx.translate(cx, drawCy);
+    ctx.scale(appear, appear);
+    ctx.translate(-cx, -drawCy);
   }
 
-  const boxH = hasSub ? fittedTitleSize + padY + fittedSubSize + padY * 1.2 : fittedTitleSize + padY * 2;
-  const boxX = cx - boxW / 2;
-  const boxY = titleY - (hasSub ? fittedTitleSize * 0.7 : fittedTitleSize * 0.6);
-
-  if (ev.theme === 'solid-dark') {
-      roundRect(ctx, boxX, boxY, boxW, boxH, Math.round(Math.min(cvW, cvH) * 0.015));
-      ctx.fillStyle = '#0a0a0c';
-      ctx.fill();
-      ctx.strokeStyle = '#27272a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-  } else if (ev.theme === 'solid-box') {
-      roundRect(ctx, boxX, boxY, boxW, boxH, Math.round(Math.min(cvW, cvH) * 0.015));
-      ctx.fillStyle = accent;
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-  } else if (ev.theme === 'corporate') {
-      roundRect(ctx, boxX, boxY, boxW, boxH, Math.round(Math.min(cvW, cvH) * 0.015));
-      ctx.fillStyle = 'rgba(12, 12, 14, 0.72)';
-      ctx.fill();
-      ctx.strokeStyle = hexToRgba(accent, 0.4);
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-  } else if (ev.theme === 'gradient-glass') {
-      const grad = ctx.createLinearGradient(boxX, boxY, boxX + boxW, boxY + boxH);
-      grad.addColorStop(0, 'rgba(88, 28, 135, 0.85)');
-      grad.addColorStop(0.5, 'rgba(30, 58, 138, 0.85)');
-      grad.addColorStop(1, 'rgba(17, 24, 39, 0.85)');
-      roundRect(ctx, boxX, boxY, boxW, boxH, Math.round(Math.min(cvW, cvH) * 0.02));
-      ctx.fillStyle = grad;
-      ctx.fill();
-      ctx.strokeStyle = hexToRgba(accent, 0.6);
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-  } else if (ev.theme === 'neon') {
-      ctx.shadowColor = accent;
-      ctx.shadowBlur = Math.round(Math.min(cvW, cvH) * 0.025);
-      roundRect(ctx, boxX, boxY, boxW, boxH, Math.round(Math.min(cvW, cvH) * 0.015));
-      ctx.fillStyle = 'rgba(10, 10, 18, 0.85)';
-      ctx.fill();
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+  // Render full 10-theme panel styling via shared paintThemedPanel
+  if (ev.theme && ev.theme !== 'minimal') {
+    paintThemedPanel(ctx, ev.theme, boxX, boxY, boxW, boxH, accent, Math.round(Math.min(cvW, cvH) * 0.016));
   }
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.55)';
-  ctx.shadowBlur = Math.round(Math.min(cvW, cvH) * 0.02);
+  ctx.shadowColor = (ev.theme === 'bold-badge' || ev.theme === 'solid-box') ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur = Math.round(Math.min(cvW, cvH) * 0.018);
   
-  let showTitle = ev.title;
   let showSub = ev.subtitle || '';
-  if (anim === 'typewriter') {
-      const tLen = Math.floor(appear * ev.title.length);
-      showTitle = ev.title.substring(0, tLen);
-      if (ev.subtitle) {
-         const sLen = Math.floor(appear * ev.subtitle.length);
-         showSub = ev.subtitle.substring(0, sLen);
-      }
+  const totalTitleChars = (ev.title || '').length;
+  const visibleTitleChars = anim === 'typewriter' ? Math.floor(Math.min(1, appear) * totalTitleChars) : totalTitleChars;
+  if (anim === 'typewriter' && ev.subtitle) {
+    const sLen = Math.floor(Math.min(1, appear) * ev.subtitle.length);
+    showSub = ev.subtitle.substring(0, sLen);
   }
 
   const baseTextColor = getTextColor(ev);
+  const wordHighlightColor = (ev.theme === 'bold-badge' || ev.theme === 'solid-box') ? '#ffffff' : accent;
   ctx.font = `800 ${fittedTitleSize}px ${FONT_FAM}`;
   
-  if (ev.accentWords && ev.accentWords.length > 0) {
-      const words = showTitle.split(' ');
-      let tw = ctx.measureText(showTitle).width;
-      let startX = cx - tw / 2;
-      ctx.textAlign = 'left';
-      let cx_curr = startX;
-      for (let i = 0; i < words.length; i++) {
-          ctx.fillStyle = ev.accentWords.includes(i) ? accent : baseTextColor;
-          ctx.fillText(words[i], cx_curr, titleY, maxTextW);
-          cx_curr += ctx.measureText(words[i] + ' ').width;
-      }
-      ctx.textAlign = 'center'; // restore
-  } else {
-      ctx.fillStyle = baseTextColor;
-      ctx.fillText(showTitle, cx, titleY, maxTextW);
+  let wordCursor = 0;
+  let charBudget = visibleTitleChars;
+  const firstLineCenterY = boxY + padY + titleLineH / 2;
+
+  for (let lineIdx = 0; lineIdx < titleLines.length; lineIdx++) {
+    const rawLine = titleLines[lineIdx];
+    if (charBudget <= 0 && anim === 'typewriter') break;
+    const displayLine = anim === 'typewriter' ? rawLine.substring(0, Math.min(rawLine.length, charBudget)) : rawLine;
+    charBudget -= rawLine.length + 1;
+    const lineY = firstLineCenterY + lineIdx * titleLineH;
+
+    wordCursor = drawTextLineWithAccents(
+      ctx,
+      displayLine,
+      wordCursor,
+      cx,
+      lineY,
+      maxTextW,
+      'center',
+      baseTextColor,
+      wordHighlightColor,
+      ev.accentWords
+    );
   }
   
   ctx.shadowBlur = 0;
 
   if (hasSub) {
     const lineW = Math.round(Math.min(cvW, cvH) * 0.08);
-    const lineY = titleY + fittedTitleSize * 0.75;
+    const dividerY = boxY + padY + titleBlockH + Math.round(dividerGap * 0.48);
+    const subColor = (ev.theme === 'bold-badge' || ev.theme === 'solid-box')
+      ? (isLightHexColor(accent) ? 'rgba(9,9,11,0.82)' : 'rgba(255,255,255,0.9)')
+      : accent;
     
-    if (ev.theme !== 'minimal') {
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = Math.max(2, Math.round(Math.min(cvW, cvH) * 0.004));
-        ctx.beginPath();
-        ctx.moveTo(cx - (lineW / 2) * appear, lineY);
-        ctx.lineTo(cx + (lineW / 2) * appear, lineY);
-        ctx.stroke();
-    }
+    ctx.strokeStyle = subColor;
+    ctx.lineWidth = Math.max(2, Math.round(Math.min(cvW, cvH) * 0.004));
+    ctx.beginPath();
+    ctx.moveTo(cx - (lineW / 2) * Math.min(1, appear), dividerY);
+    ctx.lineTo(cx + (lineW / 2) * Math.min(1, appear), dividerY);
+    ctx.stroke();
 
     ctx.font = `600 ${fittedSubSize}px ${FONT_FAM}`;
+    ctx.fillStyle = subColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const subY = boxY + padY + titleBlockH + dividerGap + fittedSubSize * 0.5;
+    ctx.fillText(showSub.toUpperCase(), cx, subY, maxTextW);
+  } else if (ev.theme === 'minimal') {
+    const lineW = Math.round(boxW * 0.65);
     ctx.fillStyle = accent;
-    ctx.fillText(showSub.toUpperCase(), cx, lineY + fittedSubSize * 1.1, maxTextW);
+    ctx.fillRect(cx - (lineW * Math.min(1, appear)) / 2, boxY + boxH - 3, lineW * Math.min(1, appear), 3);
   }
   ctx.restore();
 }
@@ -1071,27 +1191,41 @@ function drawBulletPanel(ctx: CanvasRenderingContext2D, ev: BulletPanelEvent, al
 
   const pad = Math.round(Math.min(cvW, cvH) * 0.026 * sc);
   const titleSize = Math.round(Math.min(cvW, cvH) * 0.038 * sc);
-  const bulletSize = Math.round(Math.min(cvW, cvH) * 0.030 * sc);
-  const rowGap = Math.round(Math.min(cvW, cvH) * 0.018 * sc);
+  const bulletSize = Math.round(Math.min(cvW, cvH) * 0.028 * sc);
+  const rowGap = Math.round(Math.min(cvW, cvH) * 0.016 * sc);
   const glyphR = Math.round(bulletSize * 0.5);
 
   const marginX = Math.round(Math.min(cvW, cvH) * 0.06);
   const maxAllowedBoxW = Math.max(160, cvW - marginX * 2 - 16);
+  const maxBulletAllowedW = Math.max(60, maxAllowedBoxW - pad * 2 - glyphR * 2.6);
 
   ctx.save();
-  ctx.font = `700 ${bulletSize}px ${FONT_FAM}`;
+  const wrappedBullets = bullets.map(b =>
+    fitAndWrapText(ctx, b, maxBulletAllowedW, bulletSize, Math.round(bulletSize * 0.62), 2, '700', FONT_FAM)
+  );
+
   let contentW = 0;
-  for (const b of bullets) contentW = Math.max(contentW, ctx.measureText(b).width);
+  for (const wb of wrappedBullets) contentW = Math.max(contentW, wb.maxLineWidth);
   if (ev.title) {
     ctx.font = `800 ${titleSize}px ${FONT_FAM}`;
-    contentW = Math.max(contentW, ctx.measureText(ev.title).width);
+    contentW = Math.max(contentW, Math.min(maxAllowedBoxW - pad * 2, ctx.measureText(ev.title).width));
   }
   const minPanelW = Math.min(maxAllowedBoxW, Math.min(cvW, cvH) * 0.45 * sc);
   const neededBoxW = pad * 2 + glyphR * 2.6 + contentW;
   const boxW = Math.min(maxAllowedBoxW, Math.max(minPanelW, neededBoxW));
-  const rowH = bulletSize + rowGap;
   const titleBlockH = ev.title ? titleSize + Math.round(Math.min(cvW, cvH) * 0.02) : 0;
-  const boxH = pad * 2 + titleBlockH + bullets.length * rowH - (bullets.length ? rowGap * 0.3 : 0);
+
+  let totalBulletsH = 0;
+  const itemHeights: number[] = [];
+  for (const wb of wrappedBullets) {
+    const lineH = Math.round(wb.fontSize * 1.24);
+    const itemH = Math.max(bulletSize, wb.lines.length * lineH);
+    itemHeights.push(itemH);
+    totalBulletsH += itemH + rowGap;
+  }
+  if (wrappedBullets.length > 0) totalBulletsH -= rowGap * 0.3;
+
+  const boxH = pad * 2 + titleBlockH + totalBulletsH;
 
   let baseX = marginX;
   if (ev.position === 'center') baseX = (cvW - boxW) / 2;
@@ -1138,27 +1272,32 @@ function drawBulletPanel(ctx: CanvasRenderingContext2D, ev: BulletPanelEvent, al
 
   const localT = time - ev.start;
   const bulletStyle = ev.bulletStyle || 'check';
-  for (let i = 0; i < bullets.length; i++) {
+  const glyphColor = (ev.theme === 'bold-badge' || ev.theme === 'solid-box') ? textColor : accent;
+  for (let i = 0; i < wrappedBullets.length; i++) {
+    const wb = wrappedBullets[i];
+    const itemH = itemHeights[i];
     const revealAt = i * stagger;
     const rt = clamp01((localT - revealAt) / 0.35);
-    if (rt <= 0) { curY += rowH; continue; }
+    if (rt <= 0) { curY += itemH + rowGap; continue; }
     const rowAppear = easeOutCubic(rt);
 
     ctx.save();
     ctx.globalAlpha = drawAlpha * rowAppear;
     const rowOffX = (1 - rowAppear) * Math.round(Math.min(cvW, cvH) * 0.02);
+    const lineH = Math.round(wb.fontSize * 1.24);
     const gcx = px + pad + glyphR;
-    const gcy = curY + bulletSize * 0.5;
-    drawBulletGlyph(ctx, bulletStyle, i, gcx + rowOffX, gcy, glyphR, accent);
+    const gcy = curY + lineH * 0.5;
+    drawBulletGlyph(ctx, bulletStyle, i, gcx + rowOffX, gcy, glyphR, glyphColor);
 
-    const fittedBullet = fitFontSize(ctx, bullets[i], maxBulletW, bulletSize, Math.round(bulletSize * 0.55), '700', FONT_FAM);
     ctx.fillStyle = textColor;
-    ctx.font = `700 ${fittedBullet}px ${FONT_FAM}`;
+    ctx.font = `700 ${wb.fontSize}px ${FONT_FAM}`;
     ctx.textBaseline = 'middle';
-    ctx.fillText(bullets[i], px + pad + glyphR * 2.6 + rowOffX, gcy + 1, maxBulletW);
+    for (let lnIdx = 0; lnIdx < wb.lines.length; lnIdx++) {
+      ctx.fillText(wb.lines[lnIdx], px + pad + glyphR * 2.6 + rowOffX, curY + lineH * (lnIdx + 0.5), maxBulletW);
+    }
     ctx.restore();
 
-    curY += rowH;
+    curY += itemH + rowGap;
   }
 
   ctx.restore();
@@ -2012,6 +2151,82 @@ function drawSocialBadge(
   ctx.restore();
 }
 
+type VersusPointKind = 'check' | 'cross' | 'neutral';
+
+function parseVersusPoint(raw: string, defaultKind: VersusPointKind): { text: string; kind: VersusPointKind } {
+  const trimmed = (raw || '').trim();
+  if (/^(\+|✓|✔)\s+/.test(trimmed)) {
+    return { text: trimmed.replace(/^(\+|✓|✔)\s+/, ''), kind: 'check' };
+  }
+  if (/^(-|✗|✖|x|X)\s+/.test(trimmed)) {
+    return { text: trimmed.replace(/^(-|✗|✖|x|X)\s+/, ''), kind: 'cross' };
+  }
+  if (/^(•|\*|◆|>|→)\s+/.test(trimmed)) {
+    return { text: trimmed.replace(/^(•|\*|◆|>|→)\s+/, ''), kind: 'neutral' };
+  }
+  return { text: trimmed, kind: defaultKind };
+}
+
+function isProsConsComparison(leftTitle: string, rightTitle: string, rightAccent?: string): boolean {
+  const combined = `${leftTitle} | ${rightTitle}`.toLowerCase();
+  const prosConsPattern = /\b(pro|pros|con|cons|do|don't|dont|good|bad|old|new|before|after|with|without|myth|reality|truth|right|wrong|manual|auto|automated|legacy|modern|problem|solution|slow|fast|avoid|best)\b/i;
+  if (prosConsPattern.test(combined)) return true;
+  if (rightAccent && rightAccent.toLowerCase() !== '#ef4444') return false;
+  const isDefaultTitles = /^option\s+a$/i.test(leftTitle.trim()) && /^option\s+b$/i.test(rightTitle.trim());
+  return isDefaultTitles;
+}
+
+function drawVersusPointGlyph(
+  ctx: CanvasRenderingContext2D,
+  kind: VersusPointKind,
+  cx: number,
+  cy: number,
+  r: number,
+  cardColor: string
+) {
+  ctx.save();
+  const color = kind === 'check' ? '#10B981' : kind === 'cross' ? '#EF4444' : cardColor;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = hexToRgba(color, 0.20);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(color, 0.85);
+  ctx.lineWidth = Math.max(1.5, r * 0.18);
+  ctx.stroke();
+
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, r * 0.28);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (kind === 'check') {
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.44, cy + r * 0.02);
+    ctx.lineTo(cx - r * 0.10, cy + r * 0.38);
+    ctx.lineTo(cx + r * 0.46, cy - r * 0.34);
+    ctx.stroke();
+  } else if (kind === 'cross') {
+    const d = r * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(cx - d, cy - d);
+    ctx.lineTo(cx + d, cy + d);
+    ctx.moveTo(cx + d, cy - d);
+    ctx.lineTo(cx - d, cy + d);
+    ctx.stroke();
+  } else {
+    const d = r * 0.38;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - d);
+    ctx.lineTo(cx + d, cy);
+    ctx.lineTo(cx, cy + d);
+    ctx.lineTo(cx - d, cy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawVersusCard(
   ctx: CanvasRenderingContext2D,
   ev: VersusCardEvent,
@@ -2026,11 +2241,16 @@ function drawVersusCard(
   const bounds = getGraphicBounds(ev, cvW, cvH);
   const { x, y, w, h } = bounds;
 
+  const leftTitleText = ev.leftTitle || 'OPTION A';
+  const rightTitleText = ev.rightTitle || 'OPTION B';
+  const prosConsMode = isProsConsComparison(leftTitleText, rightTitleText, ev.rightAccent);
+
   const leftColor = ev.leftAccent || '#10B981';
-  const rightColor = ev.rightAccent || '#EF4444';
+  const rightColor = ev.rightAccent || (prosConsMode ? '#EF4444' : '#38BDF8');
   const vsText = ev.vsBadgeText || 'VS';
 
   const localElapsed = Math.max(0, time - ev.start);
+  const headerProg = easeOutCubic(clamp01(localElapsed / 0.30));
   const leftCardProg = easeOutCubic(clamp01(localElapsed / 0.38));
   const rightCardProg = easeOutCubic(clamp01((localElapsed - 0.10) / 0.38));
   const vsBadgeProg = easeOutBack(clamp01((localElapsed - 0.22) / 0.36));
@@ -2038,47 +2258,121 @@ function drawVersusCard(
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  const cardGap = Math.round(w * 0.04);
-  const halfW = (w - cardGap) / 2;
-  const titleSize = Math.round(Math.min(cvW, cvH) * 0.036 * sc);
-  const pointSize = Math.round(Math.min(cvW, cvH) * 0.024 * sc);
-  const pad = Math.round(Math.min(cvW, cvH) * 0.022 * sc);
+  const hasCustomHeader = Boolean(
+    (ev.title && ev.title.trim() && ev.title.trim().toLowerCase() !== 'comparison') ||
+    (ev.subtitle && ev.subtitle.trim())
+  );
+  const headerGap = hasCustomHeader ? Math.round(Math.min(cvW, cvH) * 0.014 * sc) : 0;
+  const headerBannerH = hasCustomHeader
+    ? Math.round(Math.min(cvW, cvH) * (ev.subtitle ? 0.088 : 0.062) * sc)
+    : 0;
 
-  const maxCardTextW = Math.max(40, halfW - pad * 2);
-  const maxBulletPtW = Math.max(30, halfW - pad * 2 - pointSize * 1.5);
+  const cardsY = y + headerBannerH + headerGap;
+  const cardsH = Math.max(120, h - headerBannerH - headerGap);
+
+  // Optional Main Comparison Header Banner
+  if (hasCustomHeader && headerProg > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = alpha * headerProg;
+    ctx.translate(0, (1 - headerProg) * -14);
+    const accent = getAccent(ev);
+    paintThemedPanel(ctx, ev.theme, x, y, w, headerBannerH, accent, Math.round(Math.min(cvW, cvH) * 0.014));
+
+    const headerMaxW = Math.max(80, w - Math.round(w * 0.06));
+    const mainHdrSize = Math.round(Math.min(cvW, cvH) * 0.030 * sc);
+    const subHdrSize = Math.round(Math.min(cvW, cvH) * 0.019 * sc);
+    const hdrTextColor = getTextColor(ev, '#FFFFFF');
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    if (ev.title && ev.title.trim().toLowerCase() !== 'comparison') {
+      const fittedHdr = fitFontSize(ctx, ev.title, headerMaxW, mainHdrSize, Math.round(mainHdrSize * 0.6), '800', FONT_FAM);
+      ctx.font = `800 ${fittedHdr}px ${FONT_FAM}`;
+      ctx.fillStyle = hdrTextColor;
+      const titleY = ev.subtitle ? y + headerBannerH * 0.38 : y + headerBannerH * 0.5;
+      ctx.fillText(ev.title.toUpperCase(), x + w / 2, titleY, headerMaxW);
+    }
+    if (ev.subtitle) {
+      const fittedSub = fitFontSize(ctx, ev.subtitle, headerMaxW, subHdrSize, Math.round(subHdrSize * 0.6), '600', FONT_FAM);
+      ctx.font = `600 ${fittedSub}px ${FONT_FAM}`;
+      ctx.fillStyle = accent;
+      const subY = (ev.title && ev.title.trim().toLowerCase() !== 'comparison') ? y + headerBannerH * 0.74 : y + headerBannerH * 0.5;
+      ctx.fillText(ev.subtitle.toUpperCase(), x + w / 2, subY, headerMaxW);
+    }
+    ctx.restore();
+  }
+
+  // Geometry with explicit center VS badge clearance so badge never overlaps text or icons
+  const vsR = Math.round(Math.min(cvW, cvH) * 0.042 * sc);
+  const cardGap = Math.round(w * 0.052);
+  const halfW = (w - cardGap) / 2;
+  const titleSize = Math.round(Math.min(cvW, cvH) * 0.034 * sc);
+  const pointSize = Math.round(Math.min(cvW, cvH) * 0.023 * sc);
+  const pad = Math.round(Math.min(cvW, cvH) * 0.022 * sc);
+  const glyphR = Math.max(7, Math.round(pointSize * 0.46));
+  const iconColW = Math.round(glyphR * 2.5);
+
+  const seamClearance = Math.max(0, Math.ceil(vsR - cardGap / 2 + pad * 0.45));
+  const leftTitleMaxW = Math.max(40, halfW - pad * 2);
+  const leftBulletMaxW = Math.max(36, halfW - pad - iconColW - pad - seamClearance);
+  const rightInnerPadLeft = pad + seamClearance;
+  const rightTitleMaxW = Math.max(40, halfW - rightInnerPadLeft - pad);
+  const rightBulletMaxW = Math.max(36, halfW - rightInnerPadLeft - iconColW - pad);
+
+  const defaultLeftKind: VersusPointKind = prosConsMode ? 'check' : 'neutral';
+  const defaultRightKind: VersusPointKind = prosConsMode ? 'cross' : 'neutral';
 
   // 1. Left Card slides in from left
   ctx.save();
   ctx.globalAlpha = alpha * leftCardProg;
   ctx.translate((1 - leftCardProg) * -48, 0);
   const leftX = x;
-  paintThemedPanel(ctx, ev.theme, leftX, y, halfW, h, leftColor, Math.round(Math.min(cvW, cvH) * 0.016));
+  paintThemedPanel(ctx, ev.theme, leftX, cardsY, halfW, cardsH, leftColor, Math.round(Math.min(cvW, cvH) * 0.016));
 
-  const leftTitleText = ev.leftTitle || 'OPTION A';
-  const fittedLeftTitle = fitFontSize(ctx, leftTitleText, maxCardTextW, titleSize, Math.round(titleSize * 0.55), '800', FONT_FAM);
+  ctx.fillStyle = hexToRgba(leftColor, 0.16);
+  roundRect(ctx, leftX + 2, cardsY + 2, halfW - 4, pad * 1.35 + titleSize, Math.round(Math.min(cvW, cvH) * 0.014));
+  ctx.fill();
+
+  const fittedLeftTitle = fitFontSize(ctx, leftTitleText, leftTitleMaxW, titleSize, Math.round(titleSize * 0.55), '800', FONT_FAM);
   ctx.font = `800 ${fittedLeftTitle}px ${FONT_FAM}`;
   ctx.fillStyle = leftColor;
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(leftTitleText, leftX + pad, y + pad, maxCardTextW);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(leftTitleText, leftX + pad, cardsY + pad * 0.7 + titleSize * 0.5, leftTitleMaxW);
 
-  const leftPts = ev.leftPoints || ['Fast performance', 'Easy integration', 'Reliable result'];
-  let ptY = y + pad + titleSize + Math.round(Math.min(cvW, cvH) * 0.02);
+  const leftPts = ev.leftPoints && ev.leftPoints.length > 0
+    ? ev.leftPoints
+    : ['Fast performance', 'Easy integration', 'Reliable result'];
+  const contentTopY = cardsY + pad * 1.55 + titleSize;
+  const availPtsH = Math.max(60, cardsH - (contentTopY - cardsY) - pad * 0.8);
+  const leftRowSlotH = Math.min(Math.round(pointSize * 2.4), Math.floor(availPtsH / Math.max(1, leftPts.length)));
+
+  let ptY = contentTopY;
   for (let i = 0; i < leftPts.length; i++) {
-    const ptProg = easeOutCubic(clamp01((localElapsed - 0.24 - i * 0.12) / 0.28));
+    const ptProg = easeOutCubic(clamp01((localElapsed - 0.22 - i * 0.11) / 0.28));
     if (ptProg > 0) {
+      const parsed = parseVersusPoint(leftPts[i], defaultLeftKind);
+      const wrapped = fitAndWrapText(ctx, parsed.text, leftBulletMaxW, pointSize, Math.round(pointSize * 0.65), 2, '600', FONT_FAM);
+      const lineH = Math.round(wrapped.fontSize * 1.22);
+      const slideY = (1 - ptProg) * 8;
+
       ctx.save();
       ctx.globalAlpha = alpha * ptProg;
-      const pt = leftPts[i];
-      const fittedPt = fitFontSize(ctx, pt, maxBulletPtW, pointSize, Math.round(pointSize * 0.6), '600', FONT_FAM);
-      ctx.font = `600 ${fittedPt}px ${FONT_FAM}`;
-      ctx.fillStyle = leftColor;
-      ctx.fillText('✔', leftX + pad, ptY + (1 - ptProg) * 8);
+      drawVersusPointGlyph(ctx, parsed.kind, leftX + pad + glyphR, ptY + lineH * 0.5 + slideY, glyphR, leftColor);
+
+      ctx.font = `600 ${wrapped.fontSize}px ${FONT_FAM}`;
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(pt, leftX + pad + pointSize * 1.5, ptY + (1 - ptProg) * 8, maxBulletPtW);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      for (let ln = 0; ln < wrapped.lines.length; ln++) {
+        ctx.fillText(wrapped.lines[ln], leftX + pad + iconColW, ptY + lineH * (ln + 0.5) + slideY, leftBulletMaxW);
+      }
       ctx.restore();
+      ptY += Math.max(leftRowSlotH, wrapped.lines.length * lineH + Math.round(pointSize * 0.35));
+    } else {
+      ptY += leftRowSlotH;
     }
-    ptY += pointSize + Math.round(Math.min(cvW, cvH) * 0.016 * sc);
   }
   ctx.restore();
 
@@ -2087,41 +2381,56 @@ function drawVersusCard(
   ctx.globalAlpha = alpha * rightCardProg;
   ctx.translate((1 - rightCardProg) * 48, 0);
   const rightX = x + halfW + cardGap;
-  paintThemedPanel(ctx, ev.theme, rightX, y, halfW, h, rightColor, Math.round(Math.min(cvW, cvH) * 0.016));
+  paintThemedPanel(ctx, ev.theme, rightX, cardsY, halfW, cardsH, rightColor, Math.round(Math.min(cvW, cvH) * 0.016));
 
-  const rightTitleText = ev.rightTitle || 'OPTION B';
-  const fittedRightTitle = fitFontSize(ctx, rightTitleText, maxCardTextW, titleSize, Math.round(titleSize * 0.55), '800', FONT_FAM);
+  ctx.fillStyle = hexToRgba(rightColor, 0.16);
+  roundRect(ctx, rightX + 2, cardsY + 2, halfW - 4, pad * 1.35 + titleSize, Math.round(Math.min(cvW, cvH) * 0.014));
+  ctx.fill();
+
+  const fittedRightTitle = fitFontSize(ctx, rightTitleText, rightTitleMaxW, titleSize, Math.round(titleSize * 0.55), '800', FONT_FAM);
   ctx.font = `800 ${fittedRightTitle}px ${FONT_FAM}`;
   ctx.fillStyle = rightColor;
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(rightTitleText, rightX + pad, y + pad, maxCardTextW);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(rightTitleText, rightX + rightInnerPadLeft, cardsY + pad * 0.7 + titleSize * 0.5, rightTitleMaxW);
 
-  const rightPts = ev.rightPoints || ['High latency', 'Manual maintenance', 'Complex setup'];
-  let rPtY = y + pad + titleSize + Math.round(Math.min(cvW, cvH) * 0.02);
+  const rightPts = ev.rightPoints && ev.rightPoints.length > 0
+    ? ev.rightPoints
+    : ['High latency', 'Manual maintenance', 'Complex setup'];
+  const rightRowSlotH = Math.min(Math.round(pointSize * 2.4), Math.floor(availPtsH / Math.max(1, rightPts.length)));
+
+  let rPtY = contentTopY;
   for (let i = 0; i < rightPts.length; i++) {
-    const ptProg = easeOutCubic(clamp01((localElapsed - 0.30 - i * 0.12) / 0.28));
+    const ptProg = easeOutCubic(clamp01((localElapsed - 0.28 - i * 0.11) / 0.28));
     if (ptProg > 0) {
+      const parsed = parseVersusPoint(rightPts[i], defaultRightKind);
+      const wrapped = fitAndWrapText(ctx, parsed.text, rightBulletMaxW, pointSize, Math.round(pointSize * 0.65), 2, '600', FONT_FAM);
+      const lineH = Math.round(wrapped.fontSize * 1.22);
+      const slideY = (1 - ptProg) * 8;
+
       ctx.save();
       ctx.globalAlpha = alpha * ptProg;
-      const pt = rightPts[i];
-      const fittedRPt = fitFontSize(ctx, pt, maxBulletPtW, pointSize, Math.round(pointSize * 0.6), '600', FONT_FAM);
-      ctx.font = `600 ${fittedRPt}px ${FONT_FAM}`;
-      ctx.fillStyle = rightColor;
-      ctx.fillText('✖', rightX + pad, rPtY + (1 - ptProg) * 8);
-      ctx.fillStyle = hexToRgba('#FFFFFF', 0.85);
-      ctx.fillText(pt, rightX + pad + pointSize * 1.5, rPtY + (1 - ptProg) * 8, maxBulletPtW);
+      drawVersusPointGlyph(ctx, parsed.kind, rightX + rightInnerPadLeft + glyphR, rPtY + lineH * 0.5 + slideY, glyphR, rightColor);
+
+      ctx.font = `600 ${wrapped.fontSize}px ${FONT_FAM}`;
+      ctx.fillStyle = parsed.kind === 'cross' ? hexToRgba('#FFFFFF', 0.88) : '#FFFFFF';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      for (let ln = 0; ln < wrapped.lines.length; ln++) {
+        ctx.fillText(wrapped.lines[ln], rightX + rightInnerPadLeft + iconColW, rPtY + lineH * (ln + 0.5) + slideY, rightBulletMaxW);
+      }
       ctx.restore();
+      rPtY += Math.max(rightRowSlotH, wrapped.lines.length * lineH + Math.round(pointSize * 0.35));
+    } else {
+      rPtY += rightRowSlotH;
     }
-    rPtY += pointSize + Math.round(Math.min(cvW, cvH) * 0.016 * sc);
   }
   ctx.restore();
 
   // 3. Center "VS" Badge slams in with spring overshoot
   if (vsBadgeProg > 0.01) {
-    const vsR = Math.round(Math.min(cvW, cvH) * 0.045 * sc);
     const vsCx = x + w / 2;
-    const vsCy = y + h / 2;
+    const vsCy = cardsY + cardsH / 2;
 
     ctx.save();
     ctx.globalAlpha = alpha * Math.min(1, vsBadgeProg);
@@ -2129,23 +2438,29 @@ function drawVersusCard(
     ctx.scale(vsBadgeProg, vsBadgeProg);
     ctx.translate(-vsCx, -vsCy);
 
-    ctx.shadowColor = '#000000';
-    ctx.shadowBlur = 16;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    ctx.shadowBlur = 18;
+    ctx.beginPath();
+    ctx.arc(vsCx, vsCy, vsR + 3 * sc, 0, Math.PI * 2);
+    ctx.fillStyle = '#090D16';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
     ctx.beginPath();
     ctx.arc(vsCx, vsCy, vsR, 0, Math.PI * 2);
     ctx.fillStyle = '#0F172A';
     ctx.fill();
-    ctx.shadowBlur = 0;
 
     ctx.strokeStyle = '#F59E0B';
-    ctx.lineWidth = 3 * sc;
+    ctx.lineWidth = Math.max(2, 2.8 * sc);
     ctx.stroke();
 
-    ctx.font = `900 ${Math.round(vsR * 0.95)}px ${FONT_FAM}`;
+    const fittedVsSize = fitFontSize(ctx, vsText, vsR * 1.45, Math.round(vsR * 0.92), Math.round(vsR * 0.5), '900', FONT_FAM);
+    ctx.font = `900 ${fittedVsSize}px ${FONT_FAM}`;
     ctx.fillStyle = '#F59E0B';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(vsText, vsCx, vsCy);
+    ctx.fillText(vsText, vsCx, vsCy + 1, vsR * 1.5);
     ctx.restore();
   }
 
@@ -3009,32 +3324,49 @@ export function getGraphicBounds(ev: GraphicEvent, cvW: number, cvH: number): { 
     x = Math.max(safeMargin, Math.min(cvW - w - safeMargin, x));
     y = Math.max(safeMargin, Math.min(cvH - h - safeMargin, y));
   } else if (ev.type === 'titleCard') {
-    const titleSize = Math.round(Math.min(cvW, cvH) * 0.075 * sc);
+    const titleSize = Math.round(Math.min(cvW, cvH) * 0.072 * sc);
     const subSize = Math.round(Math.min(cvW, cvH) * 0.030 * sc);
-    let titleW = (ev.title || '').length * titleSize * 0.58;
-    let subW = (ev.subtitle || '').length * subSize * 0.58;
+    const safeMargin = 12;
+    const padY = Math.round(titleSize * 0.38);
+    const padX = Math.round(titleSize * 0.65);
+    const maxAllowedBoxW = Math.max(120, cvW - safeMargin * 2);
+    const maxTextW = Math.max(80, maxAllowedBoxW - padX * 2);
+
+    let titleMaxLineW = (ev.title || '').length * titleSize * 0.55;
+    let titleLineCount = 1;
+    let fittedTitleSize = titleSize;
     if (mctx && ev.title) {
-      mctx.font = `800 ${titleSize}px ${FONT_FAM}`;
-      titleW = mctx.measureText(ev.title).width;
+      const fit = fitAndWrapText(mctx, ev.title, maxTextW, titleSize, Math.round(titleSize * 0.45), 2, '800', FONT_FAM);
+      fittedTitleSize = fit.fontSize;
+      titleLineCount = fit.lines.length;
+      titleMaxLineW = fit.maxLineWidth;
     }
+
+    let subW = (ev.subtitle || '').length * subSize * 0.58;
+    let fittedSubSize = subSize;
     if (mctx && ev.subtitle) {
-      mctx.font = `600 ${subSize}px ${FONT_FAM}`;
-      subW = mctx.measureText(ev.subtitle.toUpperCase()).width;
+      fittedSubSize = fitFontSize(mctx, ev.subtitle.toUpperCase(), maxTextW, subSize, Math.round(subSize * 0.5), '600', FONT_FAM);
+      mctx.font = `600 ${fittedSubSize}px ${FONT_FAM}`;
+      subW = Math.min(maxTextW, mctx.measureText(ev.subtitle.toUpperCase()).width);
     }
     const hasSub = !!ev.subtitle;
+    const titleLineH = Math.round(fittedTitleSize * 1.18);
+    const titleBlockH = titleLineCount * titleLineH;
+    const dividerGap = hasSub ? Math.round(fittedTitleSize * 0.45) : 0;
+    const subBlockH = hasSub ? dividerGap + fittedSubSize : 0;
 
-    w = Math.max(Math.min(cvW, cvH) * 0.45 * sc, titleW + 40 * sc, subW + 40 * sc);
-    h = hasSub ? titleSize * 2.0 : titleSize * 1.4;
+    w = Math.min(maxAllowedBoxW, Math.max(Math.min(cvW, cvH) * 0.42 * sc, Math.max(titleMaxLineW, subW) + padX * 2));
+    h = padY * 2 + titleBlockH + subBlockH;
 
-    let cx = ev.customX !== undefined ? ev.customX * cvW : cvW / 2;
-    const baseTitleY = ev.customY !== undefined ? ev.customY * cvH : (cvH / 2 - (hasSub ? titleSize * 0.35 : 0));
-    
-    const safeMargin = 8;
     const halfW = w / 2;
+    let cx = ev.customX !== undefined ? ev.customX * cvW : cvW / 2;
     cx = Math.max(halfW + safeMargin, Math.min(cvW - halfW - safeMargin, cx));
-    
+
+    let cy = ev.customY !== undefined ? ev.customY * cvH : cvH / 2;
+    cy = Math.max(h / 2 + safeMargin, Math.min(cvH - h / 2 - safeMargin, cy));
+
     x = cx - w / 2;
-    y = baseTitleY - (hasSub ? titleSize * 0.5 : titleSize * 0.7);
+    y = cy - h / 2;
   } else if (ev.type === 'iconOverlay') {
     if ((ev as any).position === 'full-screen') {
       x = 8;
@@ -3091,31 +3423,41 @@ export function getGraphicBounds(ev: GraphicEvent, cvW: number, cvH: number): { 
   } else if (ev.type === 'bulletPanel') {
     const pad = Math.round(Math.min(cvW, cvH) * 0.026 * sc);
     const titleSize = Math.round(Math.min(cvW, cvH) * 0.038 * sc);
-    const bulletSize = Math.round(Math.min(cvW, cvH) * 0.030 * sc);
-    const rowGap = Math.round(Math.min(cvW, cvH) * 0.018 * sc);
+    const bulletSize = Math.round(Math.min(cvW, cvH) * 0.028 * sc);
+    const rowGap = Math.round(Math.min(cvW, cvH) * 0.016 * sc);
     const glyphR = Math.round(bulletSize * 0.5);
 
     const marginX = Math.round(Math.min(cvW, cvH) * 0.06);
     const maxAllowedBoxW = Math.max(160, cvW - marginX * 2 - 16);
+    const maxBulletAllowedW = Math.max(60, maxAllowedBoxW - pad * 2 - glyphR * 2.6);
 
     let contentW = 0;
+    let totalBulletsH = 0;
+    const bullets = ev.bullets || [];
     if (mctx) {
-      mctx.font = `700 ${bulletSize}px ${FONT_FAM}`;
-      for (const b of ev.bullets || []) contentW = Math.max(contentW, mctx.measureText(b).width);
+      for (const b of bullets) {
+        const wb = fitAndWrapText(mctx, b, maxBulletAllowedW, bulletSize, Math.round(bulletSize * 0.62), 2, '700', FONT_FAM);
+        contentW = Math.max(contentW, wb.maxLineWidth);
+        const lineH = Math.round(wb.fontSize * 1.24);
+        totalBulletsH += Math.max(bulletSize, wb.lines.length * lineH) + rowGap;
+      }
       if (ev.title) {
         mctx.font = `800 ${titleSize}px ${FONT_FAM}`;
-        contentW = Math.max(contentW, mctx.measureText(ev.title).width);
+        contentW = Math.max(contentW, Math.min(maxAllowedBoxW - pad * 2, mctx.measureText(ev.title).width));
       }
     } else {
-      for (const b of ev.bullets || []) contentW = Math.max(contentW, b.length * bulletSize * 0.55);
+      for (const b of bullets) {
+        contentW = Math.max(contentW, b.length * bulletSize * 0.55);
+        totalBulletsH += bulletSize + rowGap;
+      }
     }
+    if (bullets.length > 0) totalBulletsH -= rowGap * 0.3;
 
     const minPanelW = Math.min(maxAllowedBoxW, Math.min(cvW, cvH) * 0.45 * sc);
     const neededBoxW = pad * 2 + glyphR * 2.6 + contentW;
     w = Math.min(maxAllowedBoxW, Math.max(minPanelW, neededBoxW));
-    const rowH = bulletSize + rowGap;
     const titleBlockH = ev.title ? titleSize + Math.round(Math.min(cvW, cvH) * 0.02) : 0;
-    h = pad * 2 + titleBlockH + (ev.bullets || []).length * rowH - ((ev.bullets || []).length ? rowGap * 0.3 : 0);
+    h = pad * 2 + titleBlockH + totalBulletsH;
 
     let baseX = marginX;
     if (ev.position === 'center') baseX = (cvW - w) / 2;
@@ -3157,13 +3499,14 @@ export function getGraphicBounds(ev: GraphicEvent, cvW: number, cvH: number): { 
       }
     }
     const trendExtra = ev.trend && ev.trend !== 'none' ? Math.round(Math.min(cvW, cvH) * 0.12 * sc) : 0;
-    w = Math.max(Math.min(cvW, cvH) * 0.38 * sc, sampleW + trendExtra + Math.round(Math.min(cvW, cvH) * 0.08 * sc), titleW + Math.round(Math.min(cvW, cvH) * 0.08 * sc));
+    w = Math.min(cvW - 16, Math.max(Math.min(cvW, cvH) * 0.38 * sc, sampleW + trendExtra + Math.round(Math.min(cvW, cvH) * 0.08 * sc), titleW + Math.round(Math.min(cvW, cvH) * 0.08 * sc)));
     h = Math.round(Math.min(cvW, cvH) * 0.22 * sc);
 
-    const cx = ev.customX !== undefined ? ev.customX * cvW : Math.min(cvW, cvH) * 0.1;
-    const cy = ev.customY !== undefined ? ev.customY * cvH : cvH * 0.65;
-    x = cx;
-    y = cy;
+    const defaultY = Math.min(cvH * 0.65, getBottomSubtitleSafeY(cvW, cvH) - h);
+    x = ev.customX !== undefined ? ev.customX * cvW : Math.min(cvW, cvH) * 0.08;
+    y = ev.customY !== undefined ? ev.customY * cvH : defaultY;
+    x = Math.max(8, Math.min(cvW - w - 8, x));
+    y = Math.max(8, Math.min(cvH - h - 8, y));
   } else if (ev.type === 'spotlightFocus') {
     const fx = (ev.focusX !== undefined ? ev.focusX : (ev.customX !== undefined ? ev.customX : 0.5)) * cvW;
     const fy = (ev.focusY !== undefined ? ev.focusY : (ev.customY !== undefined ? ev.customY : 0.5)) * cvH;
@@ -3174,28 +3517,32 @@ export function getGraphicBounds(ev: GraphicEvent, cvW: number, cvH: number): { 
     x = fx - rx;
     y = fy - ry;
   } else if (ev.type === 'socialBadge') {
-    w = Math.round(Math.min(cvW, cvH) * 0.44 * sc);
+    w = Math.min(cvW - 16, Math.round(Math.min(cvW, cvH) * 0.44 * sc));
     h = Math.round(Math.min(cvW, cvH) * 0.11 * sc);
-    const cx = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
-    const cy = ev.customY !== undefined ? ev.customY * cvH : getBottomSubtitleSafeY(cvW, cvH) - h;
-    x = cx;
-    y = cy;
+    x = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
+    y = ev.customY !== undefined ? ev.customY * cvH : getBottomSubtitleSafeY(cvW, cvH) - h;
+    x = Math.max(8, Math.min(cvW - w - 8, x));
+    y = Math.max(8, Math.min(cvH - h - 8, y));
   } else if (ev.type === 'versusCard') {
-    w = Math.round(Math.min(cvW, cvH) * 0.78 * sc);
-    h = Math.round(Math.min(cvW, cvH) * 0.48 * sc);
-    const cx = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
-    const cy = ev.customY !== undefined ? ev.customY * cvH : (cvH - h) / 2;
-    x = cx;
-    y = cy;
+    const hasCustomHeader = Boolean(
+      (ev.title && ev.title.trim() && ev.title.trim().toLowerCase() !== 'comparison') ||
+      (ev.subtitle && ev.subtitle.trim())
+    );
+    w = Math.min(cvW - 16, Math.round(Math.min(cvW, cvH) * 0.80 * sc));
+    h = Math.min(cvH - 16, Math.round(Math.min(cvW, cvH) * (hasCustomHeader ? 0.55 : 0.48) * sc));
+    x = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
+    y = ev.customY !== undefined ? ev.customY * cvH : Math.min((cvH - h) / 2, getBottomSubtitleSafeY(cvW, cvH) - h);
+    x = Math.max(8, Math.min(cvW - w - 8, x));
+    y = Math.max(8, Math.min(cvH - h - 8, y));
   } else if (ev.type === 'donutChart') {
     const isBreakdown = ev.chartMode === 'breakdown' && ev.segments && ev.segments.length > 0;
     const showLegend = ev.showLegend !== false && isBreakdown;
-    w = Math.round((showLegend ? Math.min(cvW, cvH) * 0.52 : Math.min(cvW, cvH) * 0.36) * sc);
-    h = Math.round(Math.min(cvW, cvH) * 0.34 * sc);
-    const cx = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
-    const cy = ev.customY !== undefined ? ev.customY * cvH : cvH * 0.60;
-    x = cx;
-    y = cy;
+    w = Math.min(cvW - 16, Math.round((showLegend ? Math.min(cvW, cvH) * 0.52 : Math.min(cvW, cvH) * 0.36) * sc));
+    h = Math.min(cvH - 16, Math.round(Math.min(cvW, cvH) * 0.34 * sc));
+    x = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
+    y = ev.customY !== undefined ? ev.customY * cvH : Math.min(cvH * 0.58, getBottomSubtitleSafeY(cvW, cvH) - h);
+    x = Math.max(8, Math.min(cvW - w - 8, x));
+    y = Math.max(8, Math.min(cvH - h - 8, y));
   } else if (ev.type === 'hyperFrame') {
     const isVertical = cvW < cvH;
     const baseW = isVertical ? cvW * 0.88 : cvW * 0.52;

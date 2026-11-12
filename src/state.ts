@@ -96,12 +96,12 @@ export const state = {
     snowCount: 0.5,               // density/count of snowfall flakes (0.1 to 2.0)
     dustMotesSize: 0.5,           // scale of 2D/post dust motes (0.1 to 2.0)
     dustMotesCount: 0.5,          // density/count of 2D/post dust motes (0.1 to 2.0)
-    parallaxDepthBlur: false,     // Depth blur / DoF off by default for crisp 3D effect
+    parallaxDepthBlur: true,      // Depth blur / DoF on by default matching checked UI toggle
     parallaxHaze: true,
     parallaxHazeAmount: 0.6,
     parallaxStrength: 1.0,        // 0 = flat, 1 = default, up to 3 = exaggerated
     parallaxOrbit: 0.35,          // virtual-camera sway so pure zooms still show depth (0..1)
-    parallaxBlurStrength: 0.0,    // depth-of-field gain (0..2, default 0.0 = off)
+    parallaxBlurStrength: 0.05,   // depth-of-field gain (0..2, default 0.05 matching UI)
     parallaxRackFocus: false,     // animate the focus plane over each clip
     parallaxDepthSource: 'auto' as 'auto' | 'server' | 'browser' | 'procedural',
     enableBackgroundBlur: false,

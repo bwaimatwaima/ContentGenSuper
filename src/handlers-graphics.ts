@@ -107,11 +107,21 @@ export function handleNudgePosition(dx: number | 'center', dy: number | 'center'
     let curX = parseInt(dom.gePosX?.value || '50', 10);
     let curY = parseInt(dom.gePosY?.value || '50', 10);
 
-    if (dx === 'center') curX = 50;
-    else curX = Math.max(0, Math.min(100, curX + dx));
+    const ev = currentEditingGraphicId ? (timelineState.graphics || []).find(g => g.id === currentEditingGraphicId) : undefined;
+    const isCenterAnchored = !ev || ev.type === 'hyperFrame' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
+    const bounds = ev && !isCenterAnchored ? getGraphicBounds({ ...ev, customX: undefined, customY: undefined }, 100, 100) : null;
 
-    if (dy === 'center') curY = 50;
-    else curY = Math.max(0, Math.min(100, curY + dy));
+    if (dx === 'center') {
+        curX = bounds ? Math.max(0, Math.min(100, Math.round(50 - bounds.w / 2))) : 50;
+    } else {
+        curX = Math.max(0, Math.min(100, curX + dx));
+    }
+
+    if (dy === 'center') {
+        curY = bounds ? Math.max(0, Math.min(100, Math.round(50 - bounds.h / 2))) : 50;
+    } else {
+        curY = Math.max(0, Math.min(100, curY + dy));
+    }
 
     if (dom.gePosX) dom.gePosX.value = curX.toString();
     if (dom.gePosY) dom.gePosY.value = curY.toString();

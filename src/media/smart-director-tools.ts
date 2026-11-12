@@ -182,6 +182,119 @@ export async function autoReframeVideoToKeyframes(
   }
 }
 
+export function autoReframeImageToKeyframes(
+  imageSource: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+  targetAspectRatio: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' = '9:16'
+): { keyframes: CameraKeyframesConfig; focalPoint: { x: number; y: number } } {
+  const w = RF_W * 2;
+  const h = RF_H * 2;
+  const scratch =
+    typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(w, h)
+      : Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const g = scratch.getContext('2d', { willReadFrequently: true }) as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D;
+
+  g.drawImage(imageSource, 0, 0, w, h);
+  const rgba = g.getImageData(0, 0, w, h).data;
+
+  const overall = attentionCenter(rgba, w, h, null);
+
+  // Locate highest-density focal region via 3x3 sliding window over saliency map
+  const sal = new Float32Array(w * h);
+  const luma = overall.luma;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const gx = luma[i + 1] - luma[i - 1];
+      const gy = luma[i + w] - luma[i - w];
+      const edge = Math.sqrt(gx * gx + gy * gy);
+      const r = rgba[i * 4] / 255;
+      const gr = rgba[i * 4 + 1] / 255;
+      const b = rgba[i * 4 + 2] / 255;
+      const mx = Math.max(r, gr, b);
+      const sat = mx > 0 ? (mx - Math.min(r, gr, b)) / mx : 0;
+      const skin =
+        r > 0.35 && r > gr && gr > b && sat > 0.15 && sat < 0.65 && r - b > 0.12 ? 1 : 0;
+      const cx = x / (w - 1) - 0.5;
+      const cy = y / (h - 1) - 0.5;
+      const center = Math.exp(-(cx * cx + cy * cy) * 2.2);
+      sal[i] = (edge * 2.2 + sat * 0.35 + skin * 1.1) * (0.4 + 0.6 * center);
+    }
+  }
+
+  const winW = Math.max(8, Math.floor(w / 3));
+  const winH = Math.max(6, Math.floor(h / 3));
+  let bestScore = -1;
+  let peakX = overall.x;
+  let peakY = overall.y;
+
+  for (let wy = 1; wy <= h - winH - 1; wy += 2) {
+    for (let wx = 1; wx <= w - winW - 1; wx += 2) {
+      let sum = 0;
+      let cxSum = 0;
+      let cySum = 0;
+      for (let y = wy; y < wy + winH; y++) {
+        for (let x = wx; x < wx + winW; x++) {
+          const s = sal[y * w + x];
+          sum += s;
+          cxSum += x * s;
+          cySum += y * s;
+        }
+      }
+      if (sum > bestScore && sum > 1e-5) {
+        bestScore = sum;
+        peakX = cxSum / sum / (w - 1);
+        peakY = cySum / sum / (h - 1);
+      }
+    }
+  }
+
+  const clampCoord = (v: number) => Math.max(0.12, Math.min(0.88, v));
+  const targetX = clampCoord(0.35 * overall.x + 0.65 * peakX);
+  const targetY = clampCoord(0.35 * overall.y + 0.65 * peakY);
+  const startX = clampCoord(0.65 * overall.x + 0.35 * targetX);
+  const startY = clampCoord(0.65 * overall.y + 0.35 * targetY);
+
+  const srcAR = (srcW || 16) / (srcH || 9);
+  const dstARMap: Record<string, number> = {
+    '16:9': 16 / 9,
+    '9:16': 9 / 16,
+    '1:1': 1,
+    '4:3': 4 / 3,
+    '3:4': 3 / 4,
+  };
+  const dstAR = dstARMap[targetAspectRatio] || 9 / 16;
+  const baseScale = Math.min(1.55, Math.max(1.04, coverScaleForAspect(srcAR, dstAR, 1.02)));
+  const endScale = Math.min(1.85, baseScale * 1.1);
+
+  return {
+    keyframes: {
+      start: {
+        x: Number(startX.toFixed(3)),
+        y: Number(startY.toFixed(3)),
+        scale: Number(baseScale.toFixed(2)),
+        rotation: 0,
+      },
+      end: {
+        x: Number(targetX.toFixed(3)),
+        y: Number(targetY.toFixed(3)),
+        scale: Number(endScale.toFixed(2)),
+        rotation: 0,
+      },
+      easing: 'easeInOut',
+    },
+    focalPoint: {
+      x: Number(targetX.toFixed(3)),
+      y: Number(targetY.toFixed(3)),
+    },
+  };
+}
+
+
 export const SIG_W = 16;
 export const SIG_H = 9;
 const HUE_BINS = 12;

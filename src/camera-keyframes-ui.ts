@@ -13,11 +13,13 @@
 import { state } from './state';
 import { timelineState } from './state-timeline';
 import * as ui from './ui';
+import * as utils from './utils';
 import { drawVideoFrame, videoRenderContext } from './videoRenderer';
 import { assetStorage } from './assetStorage';
-import { autoReframeVideoToKeyframes } from './media/smart-director-tools';
+import { autoReframeVideoToKeyframes, autoReframeImageToKeyframes } from './media/smart-director-tools';
 import { projectHistory, type HistoryMark } from './history-manager';
 import { saveVersion } from './handlers-project';
+import type { CameraKeyframesConfig } from '../remotion/src/types';
 
 type Kf = { x: number; y: number; scale: number; rotation: number };
 type Easing = 'linear' | 'easeInOut' | 'easeIn' | 'easeOut' | 'whip';
@@ -33,11 +35,71 @@ let _targetClip: any = null;
 let _dragMark: HistoryMark | null = null;
 let _isReframing = false;
 
-const DEFAULT_KF = (): CkfConfig => ({
-  start: { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 },
-  end: { x: 0.5, y: 0.5, scale: 1.06, rotation: 0 },
-  easing: 'easeInOut',
-});
+const DEFAULT_KF = (clip?: any): CkfConfig => {
+  if (clip?.cameraMovement && clip.cameraMovement !== 'custom_keyframes') {
+    const presetKf = utils.presetToKeyframes(clip.cameraMovement, clip.focalPoint);
+    return {
+      start: {
+        x: presetKf.start.x ?? 0.5,
+        y: presetKf.start.y ?? 0.5,
+        scale: Math.max(1.0, presetKf.start.scale ?? 1.0),
+        rotation: presetKf.start.rotation ?? 0,
+      },
+      end: {
+        x: presetKf.end.x ?? 0.5,
+        y: presetKf.end.y ?? 0.5,
+        scale: Math.max(1.0, presetKf.end.scale ?? 1.06),
+        rotation: presetKf.end.rotation ?? 0,
+      },
+      easing: (presetKf.easing as Easing) || 'easeInOut',
+    };
+  }
+  return {
+    start: { x: 0.5, y: 0.5, scale: 1.0, rotation: 0 },
+    end: { x: 0.5, y: 0.5, scale: 1.08, rotation: 0 },
+    easing: 'easeInOut',
+  };
+};
+
+function findMatchingSceneShot(clipOrId: any): any | null {
+  if (!state.currentScenes || !clipOrId) return null;
+  const targetId = typeof clipOrId === 'string' ? clipOrId : clipOrId.id;
+  for (const scene of state.currentScenes) {
+    if (scene.shot_number !== undefined) {
+      if (scene.id === targetId || String(scene.id) === String(targetId)) return scene;
+    } else if (Array.isArray(scene.lines)) {
+      for (const line of scene.lines) {
+        if (
+          line.id === targetId ||
+          String(line.id) === String(targetId) ||
+          `s${line.__sceneIndex}_l${line.__lineIndex}` === targetId
+        ) {
+          return line;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function syncClipKeyframesToScene(clip: any) {
+  if (!clip) return;
+  const shot = findMatchingSceneShot(clip);
+  if (shot) {
+    shot.cameraKeyframes = clip.cameraKeyframes
+      ? JSON.parse(JSON.stringify(clip.cameraKeyframes))
+      : undefined;
+    if (clip.cameraKeyframes) {
+      shot.camera_movement = 'custom_keyframes';
+    } else if (clip.cameraMovement && clip.cameraMovement !== 'custom_keyframes') {
+      shot.camera_movement = clip.cameraMovement;
+    }
+    if (clip.focalPoint) {
+      shot.focalPoint = { ...clip.focalPoint };
+    }
+  }
+  window.dispatchEvent(new CustomEvent('magic-camera-applied'));
+}
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -89,8 +151,8 @@ const FIELDS: {
 }[] = [
   { key: 'x', label: 'X center', min: 0, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
   { key: 'y', label: 'Y center', min: 0, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
-  { key: 'scale', label: 'Scale', min: 0.4, max: 2.5, step: 0.01, fmt: (v) => v.toFixed(2) },
-  { key: 'rotation', label: 'Rotation °', min: -45, max: 45, step: 0.5, fmt: (v) => v.toFixed(1) },
+  { key: 'scale', label: 'Scale (Zoom)', min: 1.0, max: 2.5, step: 0.01, fmt: (v) => `${v.toFixed(2)}x` },
+  { key: 'rotation', label: 'Rotation °', min: -15, max: 15, step: 0.5, fmt: (v) => `${v.toFixed(1)}°` },
 ];
 
 function fieldHTML(side: 'start' | 'end'): string {
@@ -147,10 +209,11 @@ const PANEL_HTML = `
 
 function readClipIntoControls() {
   if (!_targetClip) return;
-  const kf = (_targetClip.cameraKeyframes || DEFAULT_KF()) as CkfConfig;
+  const kf = (_targetClip.cameraKeyframes || DEFAULT_KF(_targetClip)) as CkfConfig;
   for (const side of ['start', 'end'] as const) {
     for (const f of FIELDS) {
-      const v = kf[side][f.key];
+      const rawVal = kf[side][f.key];
+      const v = f.key === 'scale' ? Math.max(1.0, rawVal || 1.0) : (rawVal ?? 0);
       const input = document.getElementById(`ckf-${side}-${f.key}`) as HTMLInputElement | null;
       const val = document.getElementById(`ckf-${side}-${f.key}-val`) as HTMLSpanElement | null;
       if (input) input.value = String(v);
@@ -158,17 +221,34 @@ function readClipIntoControls() {
     }
   }
   const easing = document.getElementById('ckf-easing') as HTMLSelectElement | null;
-  if (easing) easing.value = kf.easing;
+  if (easing) {
+    const normEasing =
+      kf.easing === ('ease-in-out' as any)
+        ? 'easeInOut'
+        : kf.easing === ('ease-in' as any)
+        ? 'easeIn'
+        : kf.easing === ('ease-out' as any)
+        ? 'easeOut'
+        : kf.easing || 'easeInOut';
+    easing.value = normEasing;
+  }
 }
 
 function writeControlsIntoClip(notify: boolean) {
   if (!_targetClip) return;
-  const kf = (_targetClip.cameraKeyframes || DEFAULT_KF()) as CkfConfig;
+  const base = (_targetClip.cameraKeyframes || DEFAULT_KF(_targetClip)) as CkfConfig;
+  const kf: CkfConfig = {
+    start: { ...base.start },
+    end: { ...base.end },
+    easing: base.easing || 'easeInOut',
+  };
   for (const side of ['start', 'end'] as const) {
     for (const f of FIELDS) {
       const input = document.getElementById(`ckf-${side}-${f.key}`) as HTMLInputElement | null;
       const v = input ? parseFloat(input.value) : kf[side][f.key];
-      if (Number.isFinite(v)) (kf[side] as any)[f.key] = v;
+      if (Number.isFinite(v)) {
+        (kf[side] as any)[f.key] = f.key === 'scale' ? Math.max(1.0, v) : v;
+      }
       const val = document.getElementById(`ckf-${side}-${f.key}-val`) as HTMLSpanElement | null;
       if (val && input) val.textContent = f.fmt(parseFloat(input.value));
     }
@@ -178,13 +258,138 @@ function writeControlsIntoClip(notify: boolean) {
     kf.easing = easing.value as Easing;
   }
   _targetClip.cameraKeyframes = kf;
-  if (notify) timelineState.setClips([...timelineState.clips]);
+  _targetClip.cameraMovement = 'custom_keyframes';
+  if (notify) {
+    syncClipKeyframesToScene(_targetClip);
+    timelineState.setClips([...timelineState.clips]);
+  }
   // Live preview scrub — cheap, only repaints the current frame.
   if (videoRenderContext) drawVideoFrame(state.videoPauseTime || 0);
 }
 
 function redrawPreview() {
   if (videoRenderContext) drawVideoFrame(state.videoPauseTime || 0);
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image for saliency analysis'));
+    img.src = src;
+  });
+}
+
+/**
+ * Unified Auto-Reframe pipeline supporting both video clips (via WebCodecs/mediabunny)
+ * and still storyboard images / decoded frames (via multi-region visual saliency).
+ */
+export async function autoReframeClipOrShot(
+  targetClipOrShot: any,
+  onProgress?: (p: number) => void
+): Promise<{ keyframes: CameraKeyframesConfig; focalPoint?: { x: number; y: number } } | null> {
+  if (!targetClipOrShot) return null;
+
+  const clip =
+    (timelineState.clips || []).find(
+      (c: any) => c.id === targetClipOrShot.id || String(c.id) === String(targetClipOrShot.id)
+    ) || targetClipOrShot;
+  const shot = findMatchingSceneShot(targetClipOrShot) || targetClipOrShot;
+
+  const rawAspect = state.aspectRatio || '9:16';
+  const targetAspect = (['16:9', '9:16', '1:1', '4:3', '3:4'].includes(rawAspect)
+    ? rawAspect
+    : '9:16') as '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+
+  const videoUrl =
+    clip?.videoUrl ||
+    clip?._videoObjectURL ||
+    clip?.videoElement?.src ||
+    shot?.video_url ||
+    shot?._videoObjectURL ||
+    (clip?.mediaType === 'video' ? clip?.url : undefined);
+
+  // 1. Try video saliency tracking if this clip has video media
+  if (videoUrl || clip?.mediaType === 'video') {
+    let blob: Blob | null = null;
+    const assetId = clip?.assetId || clip?.id || shot?.id;
+    if (assetId) {
+      try {
+        blob = await assetStorage.getAsset(assetId);
+      } catch {}
+    }
+    if (!blob && videoUrl) {
+      try {
+        const resp = await fetch(videoUrl);
+        if (resp.ok) blob = await resp.blob();
+      } catch (e) {
+        console.warn('[CameraKeyframesUI] Fetching video URL for Auto-Reframe failed:', e);
+      }
+    }
+
+    if (blob && blob.type.startsWith('video/')) {
+      try {
+        const startSec = clip?.trimStart ?? clip?.videoOffset ?? 0;
+        const duration = clip?.duration ?? 5;
+        const endSec = startSec + duration;
+        const res = await autoReframeVideoToKeyframes(blob, startSec, endSec, targetAspect, {
+          fps: 3,
+          onProgress,
+        });
+        if (res?.keyframes) {
+          return {
+            keyframes: res.keyframes,
+            focalPoint: { x: res.keyframes.end.x, y: res.keyframes.end.y },
+          };
+        }
+      } catch (videoErr) {
+        console.warn('[CameraKeyframesUI] Video decoder fallback to frame saliency:', videoErr);
+      }
+    }
+
+    // Fallback: analyze current decoded HTMLVideoElement frame if available
+    const vidEl: HTMLVideoElement | null = clip?.videoElement || shot?.videoElement || null;
+    if (vidEl && vidEl.readyState >= 2 && vidEl.videoWidth > 0 && vidEl.videoHeight > 0) {
+      onProgress?.(1.0);
+      return autoReframeImageToKeyframes(vidEl, vidEl.videoWidth, vidEl.videoHeight, targetAspect);
+    }
+  }
+
+  // 2. Analyze still image (loaded HTMLImageElement or URL)
+  let imgEl: HTMLImageElement | null = null;
+  if (
+    clip?.image instanceof HTMLImageElement &&
+    clip.image.complete &&
+    clip.image.naturalWidth > 0
+  ) {
+    imgEl = clip.image;
+  } else if (
+    shot?.image instanceof HTMLImageElement &&
+    shot.image.complete &&
+    shot.image.naturalWidth > 0
+  ) {
+    imgEl = shot.image;
+  } else {
+    const imgUrl =
+      clip?.imageUrl ||
+      clip?.image_url ||
+      clip?._imageObjectURL ||
+      shot?.imageUrl ||
+      shot?.image_url ||
+      shot?._imageObjectURL ||
+      clip?.url;
+    if (imgUrl) {
+      imgEl = await loadImageElement(imgUrl);
+    }
+  }
+
+  if (imgEl && imgEl.naturalWidth > 0 && imgEl.naturalHeight > 0) {
+    onProgress?.(1.0);
+    return autoReframeImageToKeyframes(imgEl, imgEl.naturalWidth, imgEl.naturalHeight, targetAspect);
+  }
+
+  throw new Error('No image or video media loaded on this shot yet.');
 }
 
 async function handleAutoReframe() {
@@ -200,53 +405,25 @@ async function handleAutoReframe() {
       statusEl.textContent = 'Analyzing visual saliency...';
     }
 
-    // Resolve media blob from indexedDB assetStorage or fetch url
-    let blob: Blob | null = null;
-    const assetId = _targetClip.assetId || _targetClip.id;
-    if (assetId) {
-      blob = await assetStorage.getAsset(assetId);
-    }
-    if (!blob && _targetClip.url) {
-      try {
-        const resp = await fetch(_targetClip.url);
-        blob = await resp.blob();
-      } catch (e) {
-        console.warn('[CameraKeyframesUI] Fetching video URL failed:', e);
-      }
-    }
-
-    if (!blob) {
-      ui.showStatus('Unable to access video data for Auto-Reframe.', true, 3000);
-      return;
-    }
-
-    const startSec = _targetClip.startTime ?? 0;
-    const duration = _targetClip.duration ?? 5;
-    const endSec = startSec + duration;
-
-    // Detect target aspect ratio from state
-    const rawAspect = state.aspectRatio || '9:16';
-    const targetAspect = (['16:9', '9:16', '1:1', '4:3', '3:4'].includes(rawAspect)
-      ? rawAspect
-      : '9:16') as '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
-
-    const result = await autoReframeVideoToKeyframes(blob, startSec, endSec, targetAspect, {
-      fps: 3,
-      onProgress: (p) => {
-        if (statusEl) statusEl.textContent = `Analyzing saliency: ${Math.round(p * 100)}%`;
-      },
+    const result = await autoReframeClipOrShot(_targetClip, (p) => {
+      if (statusEl) statusEl.textContent = `Analyzing saliency: ${Math.round(p * 100)}%`;
     });
 
     if (result && result.keyframes) {
       const mark = projectHistory.mark();
       _targetClip.cameraKeyframes = result.keyframes;
-      _targetClip.cameraMovement = 'static';
+      _targetClip.cameraMovement = 'custom_keyframes';
+      if (result.focalPoint) {
+        _targetClip.focalPoint = result.focalPoint;
+      }
+      syncClipKeyframesToScene(_targetClip);
       readClipIntoControls();
       timelineState.setClips([...timelineState.clips]);
       redrawPreview();
       projectHistory.fold(mark, 'Auto-Reframe Subject');
       void saveVersion(false);
-      ui.showStatus(`Auto-Reframe applied (${targetAspect})`, false, 2500);
+      const rawAspect = state.aspectRatio || '9:16';
+      ui.showStatus(`Auto-Reframe applied (${rawAspect})`, false, 2500);
     }
   } catch (err: any) {
     console.error('[CameraKeyframesUI] Auto-Reframe failed:', err);
@@ -258,8 +435,8 @@ async function handleAutoReframe() {
   }
 }
 
-export function openCameraKeyframesPanel() {
-  const clip = resolveTargetClip();
+export function openCameraKeyframesPanel(explicitClip?: any) {
+  const clip = explicitClip || resolveTargetClip();
   if (!clip) {
     ui.showStatus('No clip selected. Choose a clip in the timeline first.', true, 3000);
     return;
@@ -281,6 +458,17 @@ export function toggleCameraKeyframesPanel() {
   else openCameraKeyframesPanel();
 }
 
+export function refreshCameraKeyframesPanelIfOpen(explicitClip?: any) {
+  if (!_panel || _panel.classList.contains('hidden')) return;
+  const nextClip = explicitClip || resolveTargetClip();
+  if (nextClip) {
+    _targetClip = nextClip;
+    const title = document.getElementById('ckf-target');
+    if (title) title.textContent = `Editing: ${getClipLabel(nextClip)}`;
+    readClipIntoControls();
+  }
+}
+
 export function initCameraKeyframesUI() {
   if (document.getElementById('ckf-panel')) return; // already injected
 
@@ -298,7 +486,16 @@ export function initCameraKeyframesUI() {
     if (camBtn) {
       e.preventDefault();
       toggleCameraKeyframesPanel();
+      return;
     }
+    // If panel is open and user clicks a timeline clip, refresh target clip
+    if (_panel && !_panel.classList.contains('hidden') && target.closest('#timeline-tracks-container, .timeline-clip')) {
+      setTimeout(() => refreshCameraKeyframesPanelIfOpen(), 20);
+    }
+  });
+
+  window.addEventListener('magic-camera-applied', () => {
+    refreshCameraKeyframesPanelIfOpen(_targetClip);
   });
 
   // Open: Ctrl/Cmd+Shift+K
@@ -360,16 +557,6 @@ export function initCameraKeyframesUI() {
       if (!_targetClip) return;
       const mark = projectHistory.mark();
       writeControlsIntoClip(true);
-      // Keyframes own the motion — anchor movement to "static" so preset
-      // moves / parallax don't stack on top of the keyframe path.
-      if (
-        _targetClip.cameraMovement &&
-        _targetClip.cameraMovement !== 'static' &&
-        _targetClip.cameraMovement !== 'none'
-      ) {
-        _targetClip.cameraMovement = 'static';
-        timelineState.setClips([...timelineState.clips]);
-      }
       projectHistory.fold(mark, 'Apply Camera Keyframes');
       ui.showStatus('Camera keyframes applied.', false, 1500);
       void saveVersion(false);
@@ -387,6 +574,10 @@ export function initCameraKeyframesUI() {
       } catch (e) {
         _targetClip.cameraKeyframes = undefined;
       }
+      if (_targetClip.cameraMovement === 'custom_keyframes') {
+        _targetClip.cameraMovement = 'pan_slow';
+      }
+      syncClipKeyframesToScene(_targetClip);
       timelineState.setClips([...timelineState.clips]);
       readClipIntoControls();
       redrawPreview();

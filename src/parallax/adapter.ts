@@ -79,7 +79,15 @@ export function drawWebGLParallax(
   const depth = getDepthSync(image, focalPoint);
   if (!state.isExporting && depth.source !== 'model' && !requested.has(image) && state.parallaxDepthSource !== 'procedural') {
     requested.add(image);
-    void ensureDepth(image, { focal: focalPoint, source: state.parallaxDepthSource });
+    void ensureDepth(image, { focal: focalPoint, source: state.parallaxDepthSource })
+      .then((res) => {
+        if (res.source !== 'model') {
+          requested.delete(image);
+        }
+      })
+      .catch(() => {
+        requested.delete(image);
+      });
   }
 
   // --- camera rects (normalized) ----------------------------------------------------
@@ -90,7 +98,8 @@ export function drawWebGLParallax(
   const sourceFocus = depth.focusDepth;
   let focus = sourceFocus;
   const seed = hashSeed(extras.clipId);
-  if (state.parallaxRackFocus) {
+  const isRackFocusMove = movement === 'rack_focus';
+  if (state.parallaxRackFocus || isRackFocusMove) {
     const target = Math.min(0.9, Math.max(0.15, sourceFocus + (seed > 0.5 ? -0.3 : 0.2)));
     focus = rackFocus(sourceFocus, target, t);
   }
@@ -101,8 +110,12 @@ export function drawWebGLParallax(
   const safe = safeStrengthScale(fgN, bgN, orbit, strengthSetting, sourceFocus);
   const strength = strengthSetting * safe;
 
-  // Depth blur / DoF is controlled by state.parallaxDepthBlur (off by default for crisp 3D parallax)
-  const dofOn = Boolean(state.parallaxDepthBlur) && (state.parallaxBlurStrength ?? 0) > 0;
+  // Depth blur / DoF is controlled by state.parallaxDepthBlur (with rack_focus camera move pulsing optical DoF onto the subject)
+  const baseBlurStrength = (state.parallaxBlurStrength ?? 0) > 0 ? state.parallaxBlurStrength! : 0.05;
+  const effectiveBlurStrength = isRackFocusMove
+    ? Math.max(baseBlurStrength, baseBlurStrength + Math.sin(t * Math.PI) * 0.35)
+    : baseBlurStrength;
+  const dofOn = Boolean(state.parallaxDepthBlur);
 
   const params: ParallaxParams = {
     fg: fgN,
@@ -113,7 +126,7 @@ export function drawWebGLParallax(
     dofFocus: focus,
     multi: state.parallaxMode !== 'single_plate',
     roll: cameraRoll,
-    blur: dofOn ? DOF_GAIN * Math.max(0, state.parallaxBlurStrength ?? 1) : 0,
+    blur: dofOn ? DOF_GAIN * effectiveBlurStrength : 0,
     fill: disocclusionFill(fgN, bgN, strength),
     haze: state.parallaxHaze !== false ? Math.max(0, state.parallaxHazeAmount ?? 0.6) : 0,
     hazeColor: depth.hazeColor ?? [0.75, 0.8, 0.88],

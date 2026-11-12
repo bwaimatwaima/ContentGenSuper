@@ -1783,7 +1783,7 @@ export const MODAL_TEMPLATES = `
                                                 <span id="parallax-orbit-range-value">0.35</span></label>
                                               <input id="parallax-orbit-range" type="range" class="w-full accent-indigo-500">
                                               <label class="flex items-center justify-between text-[10px] text-gray-400 font-mono">Depth blur
-                                                <span id="parallax-blur-range-value">1.00</span></label>
+                                                <span id="parallax-blur-range-value">0.05</span></label>
                                               <input id="parallax-blur-range" type="range" class="w-full accent-indigo-500">
                                               <label class="flex items-center justify-between text-[10px] text-gray-400 font-mono">Haze
                                                 <span id="parallax-haze-range-value">0.60</span></label>
@@ -2883,18 +2883,59 @@ export const MODAL_TEMPLATES = `
 
       <div class="insp-row">
         <label class="field-label" for="inspector-camera-movement-select">Camera Move</label>
-        <div class="insp-row-control">
-          <select id="inspector-camera-movement-select" class="select">
-            <option value="static">Static</option>
-            <option value="slow_zoom_in">Slow Push-In</option>
-            <option value="slow_zoom_out">Slow Pull-Out</option>
-            <option value="pan_left">Pan Left</option>
-            <option value="pan_right">Pan Right</option>
-            <option value="tilt_up">Tilt Up</option>
-            <option value="tilt_down">Tilt Down</option>
-            <option value="handheld">Handheld Documentary</option>
-            <option value="drone_flyover">Dynamic Orbit / Drone</option>
+        <div class="insp-row-control" style="display: flex; gap: 4px; align-items: center;">
+          <select id="inspector-camera-movement-select" class="select" style="flex: 1;">
+            <optgroup label="Core Moves">
+              <option value="static">Static</option>
+              <option value="pan_slow">Ambient Slow Drift</option>
+              <option value="zoom_in">Zoom In (Push-In)</option>
+              <option value="zoom_out">Zoom Out (Pull-Out)</option>
+              <option value="dolly_in">Dolly In (Deep Push)</option>
+              <option value="dolly_out">Dolly Out (Wide Reveal)</option>
+            </optgroup>
+            <optgroup label="Pan, Tilt &amp; Crane">
+              <option value="pan_left">Pan Left</option>
+              <option value="pan_right">Pan Right</option>
+              <option value="pan_up">Tilt / Pan Up</option>
+              <option value="pan_down">Tilt / Pan Down</option>
+              <option value="tracking_left">Tracking Left</option>
+              <option value="tracking_right">Tracking Right</option>
+              <option value="crane_up">Crane Up Reveal</option>
+              <option value="crane_down">Crane Down Descent</option>
+            </optgroup>
+            <optgroup label="Compound &amp; Editorial">
+              <option value="zoom_in_pan_right">Zoom In + Pan Right</option>
+              <option value="zoom_in_pan_left">Zoom In + Pan Left</option>
+              <option value="zoom_out_pan_right">Zoom Out + Pan Right</option>
+              <option value="zoom_out_pan_left">Zoom Out + Pan Left</option>
+              <option value="zoom_in_hold">Zoom In → Hold</option>
+              <option value="hold_zoom_in">Hold → Late Zoom In</option>
+              <option value="zoom_in_whip_left">Zoom In → Whip Left</option>
+              <option value="zoom_in_whip_right">Zoom In → Whip Right</option>
+            </optgroup>
+            <optgroup label="Stylized &amp; Dynamic">
+              <option value="handheld">Handheld Documentary</option>
+              <option value="orbit_clockwise">Orbit Clockwise</option>
+              <option value="orbit_counterclockwise">Orbit Counter-Clockwise</option>
+              <option value="dutch_tilt">Dutch Tilt Roll</option>
+              <option value="rack_focus">Rack Focus Pulse</option>
+              <option value="whip_pan">Whip Pan</option>
+              <option value="dolly_zoom">Vertigo Dolly Zoom</option>
+            </optgroup>
+            <optgroup label="Custom Keyframes">
+              <option value="custom_keyframes">Custom Start/End Keyframes</option>
+            </optgroup>
+            <optgroup label="Legacy Aliases">
+              <option value="slow_zoom_in">Slow Push-In</option>
+              <option value="slow_zoom_out">Slow Pull-Out</option>
+              <option value="tilt_up">Tilt Up</option>
+              <option value="tilt_down">Tilt Down</option>
+              <option value="drone_flyover">Dynamic Orbit / Drone</option>
+            </optgroup>
           </select>
+          <button type="button" id="inspector-toggle-keyframes-btn" class="btn small" style="height: 26px; padding: 0 7px; font-size: 10px;" title="Show/Hide Start &amp; End Camera Keyframes">
+            Keyframes <span id="inspector-keyframes-toggle-icon">▼</span>
+          </button>
         </div>
       </div>
 
@@ -2921,11 +2962,14 @@ export const MODAL_TEMPLATES = `
 
       <!-- Collapsible Advanced Start/End Camera Keyframes -->
       <div id="inspector-keyframes-container" class="hidden" style="border-top: 1px solid var(--border); padding-top: 8px; margin-top: 6px;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 8px; flex-wrap: wrap;">
           <button type="button" id="inspector-preset-to-kf-btn" class="btn small" style="flex: 1; height: 24px; font-size: 11px;">
             Convert Move → Keyframes
           </button>
-          <button type="button" id="inspector-reverse-kf-btn" class="btn small" style="height: 24px; font-size: 11px;" title="Swap Start & End">
+          <button type="button" id="inspector-auto-reframe-kf-btn" class="btn small" style="height: 24px; font-size: 11px; color: #c4b5fd; border-color: rgba(139,92,246,0.4);" title="Auto-detect subject &amp; generate keyframes">
+            ✨ Auto-Reframe
+          </button>
+          <button type="button" id="inspector-reverse-kf-btn" class="btn small" style="height: 24px; font-size: 11px;" title="Swap Start &amp; End">
             ⇄ Reverse
           </button>
         </div>
@@ -2934,34 +2978,34 @@ export const MODAL_TEMPLATES = `
         <div style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 6px;">
           <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; margin-bottom: 6px;">
             <span style="color: var(--accent-text);">Start Keyframe</span>
-            <span id="inspector-kf-start-summary" class="num-readout">1.00x · (0.5, 0.5)</span>
+            <span id="inspector-kf-start-summary" class="num-readout">1.00x (50%, 50%)</span>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-start-scale">Scale</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-start-scale" min="0.5" max="2.5" step="0.01" value="1" />
+              <input type="range" id="inspector-kf-start-scale" min="1.0" max="2.5" step="0.01" value="1.0" />
               <span id="inspector-kf-start-scale-val" class="num-readout">1.00x</span>
             </div>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-start-rot">Rotation</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-start-rot" min="-45" max="45" step="0.5" value="0" />
-              <span id="inspector-kf-start-rot-val" class="num-readout">0.0°</span>
+              <input type="range" id="inspector-kf-start-rot" min="-15" max="15" step="0.5" value="0" />
+              <span id="inspector-kf-start-rot-val" class="num-readout">0°</span>
             </div>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-start-x">Center X</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-start-x" min="0" max="1" step="0.01" value="0.5" />
-              <span id="inspector-kf-start-x-val" class="num-readout">0.50</span>
+              <input type="range" id="inspector-kf-start-x" min="0" max="100" step="1" value="50" />
+              <span id="inspector-kf-start-x-val" class="num-readout">50%</span>
             </div>
           </div>
           <div class="insp-row" style="margin-bottom: 0;">
             <label class="field-label" for="inspector-kf-start-y">Center Y</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-start-y" min="0" max="1" step="0.01" value="0.5" />
-              <span id="inspector-kf-start-y-val" class="num-readout">0.50</span>
+              <input type="range" id="inspector-kf-start-y" min="0" max="100" step="1" value="50" />
+              <span id="inspector-kf-start-y-val" class="num-readout">50%</span>
             </div>
           </div>
         </div>
@@ -2970,34 +3014,34 @@ export const MODAL_TEMPLATES = `
         <div style="padding: 6px 8px; border-radius: var(--radius-xs); background: var(--bg-input); border: 1px solid var(--border); margin-bottom: 6px;">
           <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; margin-bottom: 6px;">
             <span style="color: var(--warning);">End Keyframe</span>
-            <span id="inspector-kf-end-summary" class="num-readout">1.10x · (0.5, 0.5)</span>
+            <span id="inspector-kf-end-summary" class="num-readout">1.10x (50%, 50%)</span>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-end-scale">Scale</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-end-scale" min="0.5" max="2.5" step="0.01" value="1.1" />
+              <input type="range" id="inspector-kf-end-scale" min="1.0" max="2.5" step="0.01" value="1.1" />
               <span id="inspector-kf-end-scale-val" class="num-readout">1.10x</span>
             </div>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-end-rot">Rotation</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-end-rot" min="-45" max="45" step="0.5" value="0" />
-              <span id="inspector-kf-end-rot-val" class="num-readout">0.0°</span>
+              <input type="range" id="inspector-kf-end-rot" min="-15" max="15" step="0.5" value="0" />
+              <span id="inspector-kf-end-rot-val" class="num-readout">0°</span>
             </div>
           </div>
           <div class="insp-row">
             <label class="field-label" for="inspector-kf-end-x">Center X</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-end-x" min="0" max="1" step="0.01" value="0.5" />
-              <span id="inspector-kf-end-x-val" class="num-readout">0.50</span>
+              <input type="range" id="inspector-kf-end-x" min="0" max="100" step="1" value="50" />
+              <span id="inspector-kf-end-x-val" class="num-readout">50%</span>
             </div>
           </div>
           <div class="insp-row" style="margin-bottom: 0;">
             <label class="field-label" for="inspector-kf-end-y">Center Y</label>
             <div class="insp-row-control">
-              <input type="range" id="inspector-kf-end-y" min="0" max="1" step="0.01" value="0.5" />
-              <span id="inspector-kf-end-y-val" class="num-readout">0.50</span>
+              <input type="range" id="inspector-kf-end-y" min="0" max="100" step="1" value="50" />
+              <span id="inspector-kf-end-y-val" class="num-readout">50%</span>
             </div>
           </div>
         </div>

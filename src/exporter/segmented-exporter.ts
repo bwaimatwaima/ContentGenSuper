@@ -1028,6 +1028,7 @@ export async function exportWithElectronWorker(
             clips: timelineState.clips,
             mode: timelineState.mode,
             showSubtitles: timelineState.showSubtitles,
+            smartCaptionPlacementEnabled: state.smartCaptionPlacementEnabled,
             videoSubtitleStyle: timelineState.videoSubtitleStyle,
             videoSubtitlePosition: timelineState.videoSubtitlePosition,
             videoSubtitleFont: timelineState.videoSubtitleFont,

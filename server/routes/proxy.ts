@@ -1240,7 +1240,7 @@ router.get('/pollinations', async (req, res) => {
 });
 
 router.post('/imagen/predict', async (req, res) => {
-    const { prompt, apiKey, model = 'gemini-3.1-flash-image', aspectRatio = '16:9' } = req.body;
+    const { prompt, apiKey, model = 'imagen-3.0-generate-002', aspectRatio = '16:9' } = req.body;
 
     if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
     if (!apiKey)  return res.status(400).json({ error: 'API key is required' });

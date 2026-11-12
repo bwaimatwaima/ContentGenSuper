@@ -9,6 +9,7 @@ import { OccupiedRegion, chooseSmartSubtitlePlacement, getClipLongestPhrase } fr
 import { generateContentWithFallback } from './api/core';
 import { sanitizeAndParseJson } from './utils';
 import { assetStorage } from './assetStorage';
+import { PRIMARY_MODEL } from './constants';
 
 /**
  * Extracts a base64 JPEG directly from an existing in-memory HTMLImageElement.
@@ -229,7 +230,7 @@ Output strictly a JSON array without markdown formatting or explanatory text.`
     try {
         const response = await generateContentWithFallback({
             contents: { parts: [...imageParts, textPart] },
-            model: 'gemini-3.8-flash',
+            model: PRIMARY_MODEL,
             requestId: `smart_caption_vision_${clip.id || Date.now()}`,
         });
 

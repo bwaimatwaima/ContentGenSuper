@@ -139,7 +139,8 @@ export async function exportProjectArchive(onProgress?: (percent: number, messag
                 pipAnchorX: c.pipAnchorX,
                 pipAnchorY: c.pipAnchorY,
                 pipAnimation: c.pipAnimation,
-                pipScale: c.pipScale
+                pipScale: c.pipScale,
+                subtitlePlacement: (c as any).subtitlePlacement
             }))
         };
         const cleanState = JSON.parse(safeJsonStringify(safeState));
@@ -583,7 +584,11 @@ export async function importProjectArchive(file: File) {
         }
 
         // Restore settings & UI toggles
-        if (dom.imageModelSelect && importedState.imageModel) dom.imageModelSelect.value = importedState.imageModel;
+        if (dom.imageModelSelect && importedState.imageModel) {
+            dom.imageModelSelect.value = importedState.imageModel === 'gemini-3.1-flash-image'
+                ? 'gemini-nano-banana-2.1'
+                : importedState.imageModel;
+        }
         if (dom.videoModelSelect && importedState.videoModel) {
             let vModel = importedState.videoModel;
             if (vModel.startsWith('gemini-') || vModel.includes('preview')) vModel = 'veo-3.1-lite-generate-001';
@@ -733,6 +738,7 @@ export async function importProjectArchive(file: File) {
             importedState.videoTimelineMetadata || importedState.savedVideoTimelineMetadata;
 
         await restoreVideoTimeline(videoTimelineMetadata, { silent: true });
+        import('./handlers-settings').then(m => m.updateSmartCaptionStatusUI()).catch(() => {});
 
         // Re-apply edited audio segments after restoreVideoTimeline (since setMasterAudioBuffer resets segments to default)
         if (importedState.audioSegmentsInitialized) {

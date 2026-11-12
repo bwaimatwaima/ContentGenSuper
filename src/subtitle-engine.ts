@@ -811,12 +811,13 @@ export const SubtitleEngine = {
         ctx.save();
         if (chunkEntranceProgress < 1 && styleName !== 'typewriter') {
             const ease = 1 - Math.pow(1 - chunkEntranceProgress, 3);
+            const anchorX = placement ? width * placement.x : width / 2;
             const anchorY = layout.lines[0]?.y ?? height * 0.8;
             const scale = 0.96 + 0.04 * ease;
             ctx.globalAlpha = Math.min(1, chunkEntranceProgress * 1.4);
-            ctx.translate(width / 2, anchorY);
+            ctx.translate(anchorX, anchorY);
             ctx.scale(scale, scale);
-            ctx.translate(-width / 2, -anchorY + (1 - ease) * 5);
+            ctx.translate(-anchorX, -anchorY + (1 - ease) * 5);
         }
         ctx.beginPath();
         renderer.draw(ctx, layout, progress, options);

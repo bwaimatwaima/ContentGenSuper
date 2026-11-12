@@ -27,7 +27,7 @@ export function updateDynamicCreditCosts(newCosts: Partial<typeof CREDIT_COSTS>)
     if (typeof newCosts.VIDEO_GENERATION === 'number') CREDIT_COSTS.VIDEO_GENERATION = newCosts.VIDEO_GENERATION;
 }
 
-export const PRIMARY_MODEL = "gemini-3.6-flash";
+export const PRIMARY_MODEL = "gemini-4-hydrogen";
 export const SECONDARY_MODEL = "gemini-flash-latest";
 export const TERTIARY_MODEL = "gemini-3.1-flash-lite";
 export const TRANSCRIBE_MODEL = "gemini-3.5-transcribe";
@@ -43,12 +43,11 @@ export interface GeminiModelInfo {
 }
 
 const AVAILABLE_GEMINI_MODELS: GeminiModelInfo[] = [
-    { id: 'gemini-3.6-flash', name: '⚡ Gemini 3.6 Flash (Default / Fast Multimodal)', category: 'flash', description: 'Fast and reliable multimodal intelligence across diverse tasks.', isDefault: true },
-    { id: 'gemini-3.8-flash', name: '⚡ Gemini 3.8 Flash (High Performance)', category: 'flash', description: 'Next-generation multimodal model with ultra-fast inference and high accuracy.' },
+    { id: 'gemini-4-hydrogen', name: '⚡ Gemini 4 Hydrogen (Default / Fast Multimodal)', category: 'flash', description: 'Fast and reliable next-generation multimodal intelligence across diverse tasks.', isDefault: true },
+    { id: 'gemini-4-argon', name: '🧠 Gemini 4 Argon (Pro / Advanced Reasoning & STEM)', category: 'pro', description: 'Complex reasoning, math, deep code generation, and multi-step logic.', tier: 'paid' },
+    { id: 'gemini-4-carbon', name: '🔬 Gemini 4 Carbon (Deep Reasoning & Architecture)', category: 'thinking', description: 'Maximum reasoning depth for complex debugging, architecture, and analysis.', tier: 'paid' },
     { id: 'gemini-flash-latest', name: '🔄 Gemini Flash Latest (Dynamic Production Alias)', category: 'flash', description: 'Tracks the latest official production Gemini Flash release.' },
-    { id: 'gemini-3.1-pro-preview', name: '🧠 Gemini 3.1 Pro (Advanced Reasoning & STEM)', category: 'pro', description: 'Complex reasoning, math, deep code generation, and multi-step logic.', tier: 'paid' },
     { id: 'gemini-3.1-flash-lite', name: '💨 Gemini 3.1 Flash-Lite (Ultra-Fast & Lightweight)', category: 'flash', description: 'Cost-effective, rapid turnaround for high-volume text and summarization.' },
-    { id: 'gemini-3-flash-preview', name: '⚡ Gemini 3 Flash (Base)', category: 'flash', description: 'Base generation 3 flash model.' },
     { id: 'gemini-3.5-transcribe', name: '🎙️ Gemini 3.5 Transcribe (Speech-to-Text)', category: 'flash', description: 'Dedicated low-latency speech-to-text model with word-level timestamps.' }
 ];
 export const DEFAULT_IMAGE_STYLE = 'Cinematic digital painting with a focus on atmospheric lighting and expressive character performance. Stylized semi-realism inspired by modern high-end animation. Rich textures on fabrics and surfaces, nuanced color palettes with sophisticated grading. Dramatic composition using depth of field and volumetric light. Hand-painted aesthetic with deliberate brushwork and organic details. Avoids generic digital polish in favor of artistic intent.';

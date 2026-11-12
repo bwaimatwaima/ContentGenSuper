@@ -203,7 +203,7 @@ export async function generateImageForShot(btn: HTMLButtonElement, isBulkCall: b
 
     // Check if the selected model is professional / premium and the user is using the shared key
     const modelForPrompt = dom.imageModelSelect.value || constants.DEFAULT_IMAGE_MODEL;
-    const isPremiumModel = ['gemini-3-pro-image', 'gemini-3.1-flash-image'].includes(modelForPrompt);
+    const isPremiumModel = ['gemini-3-pro-image', 'gemini-nano-banana-2.1', 'gemini-3.1-flash-image'].includes(modelForPrompt);
     const auth = getEffectiveGeminiAuth();
     const isAdcOrVertex = auth.provider === 'vertex' || auth.mode === 'adc';
     const isPersonalKey = isUsingPersonalKey(true);

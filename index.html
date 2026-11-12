@@ -1160,12 +1160,12 @@
                                     <label for="image-model" class="block text-sm font-semibold text-gray-300">Image Model</label>
                                     <div class="tooltip-container">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 cursor-pointer" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>
-                                        <span class="tooltip-text"><b>Gemini 3.1 Flash Lite:</b> Recommended default. Fast, free, and responsive.<br><b>Gemini 3.1 Flash:</b> 1K High-Res generation.<br><b>Gemini 3 Pro:</b> Ultra-high studio fidelity.</span>
+                                        <span class="tooltip-text"><b>Gemini 3.1 Flash Lite:</b> Recommended default. Fast and responsive.<br><b>Nano Banana 2.1:</b> 1K/2K/4K High-Res generation & editing.<br><b>Gemini 3 Pro:</b> Ultra-high studio fidelity.</span>
                                     </div>
                                 </div>
                                 <select id="image-model" class="w-full bg-gray-900 text-white border border-gray-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition duration-200">
                                     <option value="gemini-3.1-flash-lite-image" selected>⚡ Gemini 3.1 Flash Lite (Nano Banana 2 Lite - Default)</option>
-                                    <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash (Nano Banana 2 - 1K High-Res)</option>
+                                    <option value="gemini-nano-banana-2.1">✨ Gemini Nano Banana 2.1 (1K/2K/4K High-Res)</option>
                                     <option value="gemini-3-pro-image">🌟 Gemini 3 Pro (Nano Banana Pro - Studio Fidelity)</option>
                                     <option value="openai-gateway-image">OpenAI Gateway (DALL-E 3 / Gateway Image)</option>
                                 </select>
@@ -1363,12 +1363,11 @@
                                         <label for="gemini-text-model" class="block text-sm font-medium text-indigo-300">Default AI Model</label>
                                     </div>
                                     <select id="gemini-text-model" class="w-full bg-gray-900 text-white border border-indigo-700/50 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                                        <option value="gemini-3.6-flash" selected>⚡ Gemini 3.6 Flash (Default / Fast Multimodal)</option>
-                                        <option value="gemini-3.8-flash">⚡ Gemini 3.8 Flash (High Performance)</option>
+                                        <option value="gemini-4-hydrogen" selected>⚡ Gemini 4 Hydrogen (Default / Fast Multimodal)</option>
+                                        <option value="gemini-4-argon">🧠 Gemini 4 Argon (Pro / Advanced Reasoning & STEM)</option>
+                                        <option value="gemini-4-carbon">🔬 Gemini 4 Carbon (Deep Reasoning & Architecture)</option>
                                         <option value="gemini-flash-latest">🔄 Gemini Flash Latest (Dynamic Production Alias)</option>
-                                        <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro (Advanced Reasoning & STEM)</option>
                                         <option value="gemini-3.1-flash-lite">💨 Gemini 3.1 Flash-Lite (Ultra-Fast & Lightweight)</option>
-                                        <option value="gemini-3-flash-preview">⚡ Gemini 3 Flash (Base)</option>
                                         <option value="gemini-3.5-transcribe">🎙️ Gemini 3.5 Transcribe (Speech-to-Text)</option>
                                     </select>
                                     <p class="text-xs text-indigo-400/80 mt-1">Select the default model to use for core logic and reasoning tasks.</p>
@@ -1576,11 +1575,11 @@
                                             </div>
                                             <input type="text" list="openai-model-list" id="openai-gateway-model-input" class="w-full bg-gray-900 text-white border border-indigo-700/50 rounded-lg p-2 text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="gpt-4o, deepseek-chat, or custom">
                                             <datalist id="openai-model-list">
-                                                <option value="gemini-3.8-flash">Gemini 3.8 Flash (Experiential Labs / Gateway)</option>
-                                                <option value="gemini-flash-latest">Gemini Flash Latest (Experiential Labs / Gateway)</option>
-                                                <option value="gemini-3.6-flash">Gemini 3.6 Flash (Experiential Labs / Gateway)</option>
-                                                <option value="google/gemini-3.8-flash">Google Gemini 3.8 Flash (OpenRouter)</option>
-                                                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Gateway)</option>
+                                                <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Default / Fast Multimodal)</option>
+                                                <option value="gemini-4-argon">Gemini 4 Argon (Pro / Complex Reasoning)</option>
+                                                <option value="gemini-4-carbon">Gemini 4 Carbon (Deep Reasoning)</option>
+                                                <option value="google/gemini-4-hydrogen">Google Gemini 4 Hydrogen (OpenRouter)</option>
+                                                <option value="gemini-flash-latest">Gemini Flash Latest (Gateway)</option>
                                                 <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Gateway)</option>
                                                 <option value="gpt-4o">OpenAI GPT-4o</option>
                                                 <option value="gpt-4o-mini">OpenAI GPT-4o-mini</option>
@@ -5305,7 +5304,7 @@
                             <label for="studio-model-select" class="block font-medium text-gray-300 mb-1">AI Image Model</label>
                             <select id="studio-model-select" class="w-full bg-gray-800 text-white border border-gray-700 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <option value="gemini-3.1-flash-lite-image" selected>⚡ Gemini 3.1 Flash-Lite (Nano Banana 2 Lite - Default)</option>
-                                <option value="gemini-3.1-flash-image">✨ Gemini 3.1 Flash (Nano Banana 2 - 1K High-Res)</option>
+                                <option value="gemini-nano-banana-2.1">✨ Gemini Nano Banana 2.1 (1K/2K/4K High-Res)</option>
                                 <option value="gemini-3-pro-image">🌟 Gemini 3 Pro (Nano Banana Pro - Studio Fidelity)</option>
                             </select>
                         </div>
@@ -6359,7 +6358,7 @@
                         </h3>
                         <p>To produce cinematic imagery, videos, scripts, and synthesized speech, ContentGen AI sends request payloads to authorized AI model endpoints based on your selected settings:</p>
                         <ul class="list-disc pl-5 space-y-1 text-gray-400">
-                            <li><strong class="text-gray-200">Google Gemini & Vertex AI:</strong> Story expansion, character generation, scene decomposition, and image generation (Gemini 3.x, 2.5, Nano Banana, Veo 3.1). Data sent through Google APIs is governed by Google Cloud / Google AI Studio privacy policies.</li>
+                            <li><strong class="text-gray-200">Google Gemini & Vertex AI:</strong> Story expansion, character generation, scene decomposition, and image generation (Gemini 4, 3.x, Nano Banana 2.1, Veo 3.1). Data sent through Google APIs is governed by Google Cloud / Google AI Studio privacy policies.</li>
                             <li><strong class="text-gray-200">Deepgram:</strong> High-precision speech-to-text audio alignment and word timestamp extraction.</li>
                             <li><strong class="text-gray-200">ElevenLabs & Gradio WebAudio:</strong> Text-to-speech voice synthesis.</li>
                             <li><strong class="text-gray-200">Stability AI & Pollinations:</strong> Image generation fallback pipelines.</li>

@@ -255,7 +255,7 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       endTime,
       duration,
       text: c.text || '',
-      subtitlePlacement: c.subtitlePlacement ? structuredClone(c.subtitlePlacement) : undefined,
+      subtitlePlacement: (p.smartCaptionPlacementEnabled !== false && c.subtitlePlacement) ? structuredClone(c.subtitlePlacement) : undefined,
       imageUrl,
       videoUrl,
       overlayImageUrl,

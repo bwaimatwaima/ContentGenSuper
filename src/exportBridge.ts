@@ -188,6 +188,7 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
     timelineState.setVideoSubtitleSizeScale(payload.videoSubtitleFontSize / 54);
   }
   state.videoSubtitleColors = (payload.videoSubtitleColors && typeof payload.videoSubtitleColors === 'object') ? payload.videoSubtitleColors : {};
+  state.smartCaptionPlacementEnabled = Boolean(payload.clips?.some((c) => c.subtitlePlacement));
   timelineState.setVideoTransitionStyle(payload.videoTransitionStyle || 'narrative_guided');
   timelineState.setVideoEffects(payload.videoEffects || {});
   timelineState.setGlobalSilences(payload.globalSilences || null);
@@ -249,6 +250,7 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
         transitionToNext: c.transitionToNext || 'cut',
         _transitionDuration: c.transitionDuration,
         text: c.text || '',
+        subtitlePlacement: c.subtitlePlacement,
         wordTimestamps: c.wordTimestamps as any,
         wordRange: c.wordRange,
         talkingHeadMode: c.talkingHeadMode || 'none',

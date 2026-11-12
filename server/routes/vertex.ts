@@ -9,15 +9,26 @@ const router = express.Router();
 
 export function toVertexModel(model?: string): string {
     const raw = (model || '').trim().replace(/[^a-zA-Z0-9._-]/g, "");
-    if (!raw) return 'gemini-3.6-flash';
-    if (raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' || raw === 'gemini-3.7' || raw === 'gemini-3.5') {
-        return 'gemini-3.6-flash';
+    if (!raw) return 'gemini-4-hydrogen';
+    if (
+        raw === 'gemini-3.8-flash' || raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' ||
+        raw === 'gemini-3.7' || raw === 'gemini-3.5' ||
+        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash'
+    ) {
+        return 'gemini-4-hydrogen';
     }
     // AI Studio models and aliases must be mapped to valid Vertex AI foundation models
-    if (raw === 'gemini-flash-latest' || raw === 'gemini-flash' || raw === 'gemini-3.8-flash' || raw === 'gemini-3.6-flash' || raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite') {
+    if (
+        raw === 'gemini-4-hydrogen' || raw === 'gemini-4-argon' || raw === 'gemini-4-carbon' ||
+        raw === 'gemini-flash-latest' || raw === 'gemini-flash' ||
+        raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite'
+    ) {
         return raw;
     }
-    if (raw.includes('pro') && (raw.includes('3.') || raw.includes('3-') || raw === 'gemini-pro')) {
+    if (raw === 'gemini-pro' || raw === 'gemini-2.5-pro') {
+        return 'gemini-4-argon';
+    }
+    if (raw.includes('pro') && (raw.includes('3.') || raw.includes('3-'))) {
         return 'gemini-3.1-pro-preview';
     }
     return raw;
@@ -33,11 +44,11 @@ export const getVertexHost = (location: string) =>
     : `${location}-aiplatform.googleapis.com`;
 
 export const VERTEX_FALLBACK_TIERS = [
-    'gemini-3.8-flash',
+    'gemini-4-hydrogen',
     'gemini-flash-latest',
-    'gemini-3.6-flash',
     'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview'
+    'gemini-4-argon',
+    'gemini-4-carbon'
 ];
 
 export function normalizeVertexContents(contents: any): any {
@@ -173,6 +184,18 @@ router.post('/generate', async (req, res) => {
             ? 'aiplatform.googleapis.com'
             : `${location}-aiplatform.googleapis.com`;
 
+        // Gemini 4 models reject deprecated sampling parameters and thinkingBudget
+        if (model.toLowerCase().startsWith('gemini-4-')) {
+            delete gc.temperature;
+            delete gc.topP;
+            delete gc.topK;
+            delete gc.candidateCount;
+            if (gc.thinkingConfig && 'thinkingBudget' in gc.thinkingConfig) {
+                delete gc.thinkingConfig.thinkingBudget;
+                if (Object.keys(gc.thinkingConfig).length === 0) delete gc.thinkingConfig;
+            }
+        }
+
         const isNoDevInstructionModel = /transcribe|tts|imagen|image|veo|lyria/i.test(rawModel || '') || /transcribe|tts|imagen|image|veo|lyria/i.test(model);
         let vertexContents: any = contents;
         if (isNoDevInstructionModel && systemInstruction) {
@@ -271,13 +294,13 @@ router.post('/generate-image', async (req, res) => {
 
         let rawModel = (inputModel || '').trim();
         if (rawModel.includes('flash-lite') || rawModel === 'gemini-3.1-flash-lite-image') {
-            rawModel = 'gemini-3.1-flash-image';
+            rawModel = 'gemini-nano-banana-2.1';
         }
-        const primaryModel = rawModel || 'gemini-3.1-flash-image';
+        const primaryModel = rawModel || 'gemini-nano-banana-2.1';
 
         const candidates = [
             primaryModel,
-            'gemini-3.1-flash-image',
+            'gemini-nano-banana-2.1',
             'gemini-3-pro-image',
             'imagen-3.0-generate-002',
             'imagen-3.0-fast-generate-001'
@@ -389,7 +412,7 @@ router.post('/generate-image', async (req, res) => {
                     if (aspectRatio) {
                         config.imageConfig = { aspectRatio };
                     }
-                    if (model === 'gemini-3.1-flash-image' || model === 'gemini-3-pro-image') {
+                    if (model === 'gemini-nano-banana-2.1' || model === 'gemini-3.1-flash-image' || model === 'gemini-3-pro-image') {
                         config.imageConfig = { ...(config.imageConfig || {}), imageSize: "1K" };
                     }
 
@@ -443,7 +466,7 @@ router.post('/generate-image', async (req, res) => {
         const projName = req.body?.project || process.env.VERTEX_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || 'contentgenapp-507516';
 
         if (/not found|404|does not have access/i.test(errorMsg)) {
-            errorMsg = `Vertex AI Image model not accessible on project "${projName}". In Google Cloud Console -> Vertex AI -> Model Garden, open "gemini-3.1-flash-image" or "Imagen 3" in Vertex AI Studio to enable model access.\nEnsure the service account has "Vertex AI User" (roles/aiplatform.user).`;
+            errorMsg = `Vertex AI Image model not accessible on project "${projName}". In Google Cloud Console -> Vertex AI -> Model Garden, open "gemini-nano-banana-2.1" or "Imagen 3" in Vertex AI Studio to enable model access.\nEnsure the service account has "Vertex AI User" (roles/aiplatform.user).`;
         } else if (/PermissionDenied|PERMISSION_DENIED|403/i.test(errorMsg)) {
             errorMsg = `Vertex AI Image permission denied on project "${projName}". Ensure service account has "roles/aiplatform.user" on GCP, or provide a Google Cloud API key in Settings.`;
         }
@@ -537,7 +560,7 @@ export async function handleVertexTest(req: any, res: any) {
                 diagnostic = `Permission denied for API Key on Project "${project}". Check that your API key's API restrictions include "Vertex AI API", or verify that billing is active for this project.`;
                 code = 'PERMISSION_DENIED';
             } else if (statusCode === 404) {
-                diagnostic = `GCP Project "${project}", region "${location}", or model "${targetModel}" was not found. Vertex AI supports foundation models like gemini-3.8-flash in us-central1 and preview models in global region.`;
+                diagnostic = `GCP Project "${project}", region "${location}", or model "${targetModel}" was not found. Vertex AI supports foundation models like gemini-4-hydrogen in us-central1 and preview models in global region.`;
                 code = 'NOT_FOUND';
             }
 
@@ -596,7 +619,7 @@ export async function handleVertexTest(req: any, res: any) {
             errorMsg = `Permission 'aiplatform.endpoints.predict' denied on Google Cloud project "${projName}". In Google Cloud Console (IAM & Admin > IAM), grant the "Vertex AI User" (roles/aiplatform.user) role to your service account, or switch Vertex Auth Mode to "API Key" and supply a Google Cloud API Key with Vertex AI API enabled.`;
             code = 'PERMISSION_DENIED';
         } else if (/not found|NOT_FOUND|404|may not exist/i.test(errorMsg)) {
-            errorMsg = `Vertex AI model or endpoint not found in this region. Standard Vertex foundation models are "gemini-3.8-flash", "gemini-flash-latest", or "gemini-3.1-flash-lite".`;
+            errorMsg = `Vertex AI model or endpoint not found in this region. Standard Vertex foundation models are "gemini-4-hydrogen", "gemini-flash-latest", or "gemini-3.1-flash-lite".`;
             code = 'NOT_FOUND';
         }
 

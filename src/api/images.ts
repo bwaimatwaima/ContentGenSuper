@@ -129,7 +129,8 @@ export async function fetchImageInBrowser(
 }
 
 const IMAGE_MODEL_FALLBACKS: Record<string, string> = {
-    'gemini-3-pro-image': 'gemini-3.1-flash-image',
+    'gemini-3-pro-image': 'gemini-nano-banana-2.1',
+    'gemini-nano-banana-2.1': 'gemini-3.1-flash-lite-image',
     'gemini-3.1-flash-image': 'gemini-3.1-flash-lite-image',
     'gemini-3.1-flash-lite-image': ''
 };
@@ -182,10 +183,10 @@ async function runImageGeneration(
     const apiKey = getApiKey();
     let finalModel = model || 'gemini-3.1-flash-lite-image';
     if ((auth.provider === 'vertex' || auth.mode === 'adc') && !finalModel.startsWith('imagen-') && (finalModel.includes('flash-lite') || finalModel === 'gemini-3.1-flash-lite-image')) {
-        finalModel = 'gemini-3.1-flash-image';
+        finalModel = 'gemini-nano-banana-2.1';
     }
 
-    const isPremiumModel = ['gemini-3-pro-image', 'gemini-3.1-flash-image'].includes(finalModel);
+    const isPremiumModel = ['gemini-3-pro-image', 'gemini-nano-banana-2.1', 'gemini-3.1-flash-image'].includes(finalModel);
     if (isPremiumModel && !hasPersonalKeyOrAdc) {
         return { engine: 'google', error: 'To use this model, please set up your paid API key under Advanced Settings.' };
     }
@@ -349,7 +350,7 @@ async function runImageGeneration(
                 if (referenceImage) parts.unshift({ inlineData: referenceImage });
                 
                 const config: any = { imageConfig: { aspectRatio } };
-                if (finalModel === 'gemini-3.1-flash-image' || finalModel === 'gemini-3-pro-image') config.imageConfig.imageSize = "1K";
+                if (finalModel === 'gemini-nano-banana-2.1' || finalModel === 'gemini-3.1-flash-image' || finalModel === 'gemini-3-pro-image') config.imageConfig.imageSize = "1K";
                 
                 const response = await ai.models.generateContent({ 
                     model: finalModel, 
@@ -743,7 +744,7 @@ export async function editImageWithGemini(
     let finalModel = model || 'gemini-3.1-flash-lite-image';
     const auth = getEffectiveGeminiAuth();
     if ((auth.provider === 'vertex' || auth.mode === 'adc') && !finalModel.startsWith('imagen-') && (finalModel.includes('flash-lite') || finalModel === 'gemini-3.1-flash-lite-image')) {
-        finalModel = 'gemini-3.1-flash-image';
+        finalModel = 'gemini-nano-banana-2.1';
     }
 
     const sanitizedInstruction = sanitizeImagePrompt(editInstruction);
@@ -758,7 +759,7 @@ export async function editImageWithGemini(
         ];
 
         const config: any = { imageConfig: { aspectRatio } };
-        if (finalModel === 'gemini-3.1-flash-image' || finalModel === 'gemini-3-pro-image') {
+        if (finalModel === 'gemini-nano-banana-2.1' || finalModel === 'gemini-3.1-flash-image' || finalModel === 'gemini-3-pro-image') {
             config.imageConfig.imageSize = "1K";
         }
 

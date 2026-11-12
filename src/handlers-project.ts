@@ -320,7 +320,8 @@ async function performSaveVersion(isAutoSave = true, forceCheckpoint = false): P
             pipAnimation: c.pipAnimation,
             pipScale: c.pipScale,
             colorFilter: c.colorFilter,
-            colorFilterIntensity: c.colorFilterIntensity
+            colorFilterIntensity: c.colorFilterIntensity,
+            subtitlePlacement: (c as any).subtitlePlacement
         })),
         meta: { savedAt: new Date().toISOString() }
     };
@@ -646,7 +647,11 @@ export async function loadProject() {
             state.customVoiceIds = projectData.customVoiceIds || [];
 
             // Restore settings with existence checks
-            if (dom.imageModelSelect) dom.imageModelSelect.value = projectData.imageModel || constants.DEFAULT_IMAGE_MODEL;
+            if (dom.imageModelSelect) {
+                let imgModel = projectData.imageModel || constants.DEFAULT_IMAGE_MODEL;
+                if (imgModel === 'gemini-3.1-flash-image') imgModel = 'gemini-nano-banana-2.1';
+                dom.imageModelSelect.value = imgModel;
+            }
             if (dom.videoModelSelect) {
                 let vModel = projectData.videoModel || 'veo-3.1-lite-generate-001';
                 if (vModel.startsWith('gemini-') || vModel.includes('preview')) vModel = 'veo-3.1-lite-generate-001';
@@ -931,6 +936,7 @@ export async function loadProject() {
 
             // Timeline restoration
             await restoreVideoTimeline(projectData.videoTimelineMetadata, { silent: true });
+            import('./handlers-settings').then(m => m.updateSmartCaptionStatusUI()).catch(() => {});
 
             // Re-apply edited audio segments after restoreVideoTimeline (since setMasterAudioBuffer resets segments to default)
             if (projectData.audioSegmentsInitialized) {

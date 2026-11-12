@@ -808,6 +808,9 @@ export async function handleCloudRenderExport() {
                         endTime,
                         duration,
                         text: c.text || '',
+                        subtitlePlacement: state.smartCaptionPlacementEnabled && (c as any).subtitlePlacement
+                            ? structuredClone((c as any).subtitlePlacement)
+                            : undefined,
                         imageUrl,
                         videoUrl,
                         audioUrl,

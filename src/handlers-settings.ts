@@ -379,9 +379,10 @@ function applyKeyDataToStateAndUI(data: Record<string, any>) {
         if (dom.openaiGatewayImageModelInput) dom.openaiGatewayImageModelInput.value = data.openaiGatewayImageModel;
     }
     if (data.geminiTextModel) {
-        state.currentTextModel = data.geminiTextModel;
-        localStorage.setItem('geminiTextModel', data.geminiTextModel);
-        if (dom.geminiTextModelSelect) dom.geminiTextModelSelect.value = data.geminiTextModel;
+        const syncedModel = upgradeLegacyGeminiTextModel(data.geminiTextModel);
+        state.currentTextModel = syncedModel;
+        localStorage.setItem('geminiTextModel', syncedModel);
+        if (dom.geminiTextModelSelect) dom.geminiTextModelSelect.value = syncedModel;
     }
     if (data.ai33ApiKey && !state.ai33ApiKey) {
         state.ai33ApiKey = data.ai33ApiKey;
@@ -435,11 +436,28 @@ function applyKeyDataToStateAndUI(data: Record<string, any>) {
 
 // --- API Key Management ---
 
+function upgradeLegacyGeminiTextModel(model: string | null | undefined): string {
+    if (!model) return constants.PRIMARY_MODEL;
+    if (
+        model === 'gemini-3.8-flash' || model === 'gemini-3.7-flash' || model === 'gemini-3.5-flash' ||
+        model === 'gemini-3.7' || model === 'gemini-3.5' ||
+        model === 'gemini-3.6-flash' || model === 'gemini-2.5-flash' ||
+        model === 'gemini-3-flash-preview'
+    ) {
+        return constants.PRIMARY_MODEL;
+    }
+    if (model === 'gemini-3.1-pro-preview' || model === 'gemini-2.5-pro') {
+        return 'gemini-4-argon';
+    }
+    return model;
+}
+
 export function loadGeminiTextModel() {
     let model = localStorage.getItem('geminiTextModel');
-    // Upgrade existing stored defaults from deprecated 3.7 and 3.5 models to 3.8
-    if (!model || model === 'gemini-3.7-flash' || model === 'gemini-3.5-flash' || model === 'gemini-3.7' || model === 'gemini-3.5') {
-        model = constants.PRIMARY_MODEL;
+    // Upgrade existing stored defaults from legacy 2.5 / 3.x models to latest Gemini 4 equivalents
+    const upgraded = upgradeLegacyGeminiTextModel(model);
+    if (!model || upgraded !== model) {
+        model = upgraded;
         localStorage.setItem('geminiTextModel', model);
     }
 
@@ -1249,17 +1267,22 @@ export function clearUserGeminiApiKey() {
 export function saveOpenaiGatewayConfig() {
     let baseUrl = dom.openaiGatewayBaseUrlInput?.value.trim() || '';
     const apiKey = dom.openaiGatewayApiKeyInput?.value.trim() || '';
-    let model = dom.openaiGatewayModelInput?.value.trim() || 'gemini-3.8-flash';
+    let model = dom.openaiGatewayModelInput?.value.trim() || constants.PRIMARY_MODEL;
     const imageModel = dom.openaiGatewayImageModelInput?.value.trim() || '';
 
     if (/experientiallabs\.ai/i.test(baseUrl)) {
         baseUrl = 'https://api.experientiallabs.ai/v1';
         if (dom.openaiGatewayBaseUrlInput) dom.openaiGatewayBaseUrlInput.value = baseUrl;
-        // If Experiential Labs, normalize deprecated Gemini 3.7 and 3.5 aliases to 3.8
+        // If Experiential Labs, normalize legacy Gemini flash aliases to gemini-4-hydrogen
         const lower = model.toLowerCase();
-        if (lower === 'gemini-3.7' || lower === 'gemini 3.7' || lower === 'google/gemini-3.7-flash' || lower === 'gemini 3.7 flash' || lower === 'gemini-3.7-flash' ||
-            lower === 'gemini-3.5' || lower === 'gemini 3.5' || lower === 'google/gemini-3.5-flash' || lower === 'gemini 3.5 flash' || lower === 'gemini-3.5-flash') {
-            model = 'gemini-3.8-flash';
+        if (
+            lower === 'gemini-3.8' || lower === 'gemini 3.8' || lower === 'google/gemini-3.8-flash' || lower === 'gemini 3.8 flash' || lower === 'gemini-3.8-flash' ||
+            lower === 'gemini-3.7' || lower === 'gemini 3.7' || lower === 'google/gemini-3.7-flash' || lower === 'gemini 3.7 flash' || lower === 'gemini-3.7-flash' ||
+            lower === 'gemini-3.5' || lower === 'gemini 3.5' || lower === 'google/gemini-3.5-flash' || lower === 'gemini 3.5 flash' || lower === 'gemini-3.5-flash' ||
+            lower === 'gemini-3.6' || lower === 'gemini 3.6' || lower === 'google/gemini-3.6-flash' || lower === 'gemini 3.6 flash' || lower === 'gemini-3.6-flash' ||
+            lower === 'gemini-4' || lower === 'gemini 4' || lower === 'gemini-4-flash' || lower === 'gemini 4 flash' || lower === 'gemini-hydrogen' || lower === 'gemini 4 hydrogen'
+        ) {
+            model = constants.PRIMARY_MODEL;
             if (dom.openaiGatewayModelInput) dom.openaiGatewayModelInput.value = model;
         }
     }
@@ -1573,7 +1596,7 @@ export function applyOpenaiGatewayPreset(preset: 'openrouter' | 'openai' | 'deep
     const presets: Record<string, { baseUrl: string; model: string; imageModel?: string; placeholderKey: string }> = {
         experientiallabs: {
             baseUrl: 'https://api.experientiallabs.ai/v1',
-            model: 'gemini-3.8-flash',
+            model: constants.PRIMARY_MODEL,
             imageModel: 'dall-e-3',
             placeholderKey: 'xpl_...'
         },
@@ -3358,6 +3381,7 @@ export async function runSmartCaptionAnalysisForTimeline() {
     const isLetterboxed = Boolean((state as any).enableLetterbox || (timelineState as any).cinematicLetterbox);
 
     try {
+        const allShots = (state.currentScenes || []).flatMap((s: any) => s.lines || [s]);
         for (let i = 0; i < clips.length; i++) {
             const clip = clips[i];
             const phrase = getClipLongestPhrase(clip.text, clip.subtitles);
@@ -3371,6 +3395,10 @@ export async function runSmartCaptionAnalysisForTimeline() {
             );
 
             clip.subtitlePlacement = placement;
+            const matchedShot = allShots.find((s: any) => s.id && s.id === clip.id);
+            if (matchedShot) {
+                (matchedShot as any).subtitlePlacement = placement;
+            }
             previousPlacement = placement;
             analyzedCount++;
 
@@ -3384,6 +3412,7 @@ export async function runSmartCaptionAnalysisForTimeline() {
         SubtitleEngine.clearBitmapCache();
         updateSmartCaptionStatusUI();
         if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+        saveVersion();
 
         ui.showStatus(`🎯 Smart Placement applied to ${analyzedCount} clips in negative space!`, false, 4000);
     } catch (err) {
@@ -3402,11 +3431,16 @@ export function resetSmartCaptionPlacements() {
     clips.forEach(c => {
         delete c.subtitlePlacement;
     });
+    const allShots = (state.currentScenes || []).flatMap((s: any) => s.lines || [s]);
+    allShots.forEach((s: any) => {
+        if (s) delete s.subtitlePlacement;
+    });
     state.smartCaptionPlacementEnabled = false;
     if (dom.videoSmartCaptionToggle) dom.videoSmartCaptionToggle.checked = false;
     SubtitleEngine.clearBitmapCache();
     updateSmartCaptionStatusUI();
     if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+    saveVersion();
     ui.showStatus('Reset subtitles to manual center position.', false, 2500);
 }
 
@@ -3450,6 +3484,7 @@ export function initSmartCaptionListeners() {
             updateSmartCaptionStatusUI();
             SubtitleEngine.clearBitmapCache();
             if (!state.isVideoPlaying) drawVideoFrame(state.videoPauseTime || 0);
+            saveVersion();
         });
     }
 

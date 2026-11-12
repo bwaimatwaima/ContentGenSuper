@@ -36,25 +36,36 @@ export function normalizeModelForGateway(model: string, baseUrl: string): string
     let m = (model || 'gpt-4o').trim();
     if (/experientiallabs\.ai/i.test(baseUrl)) {
         const lower = m.toLowerCase().trim();
-        if (lower === 'gemini-3.7' || lower === 'gemini 3.7' || lower === 'google/gemini-3.7-flash' || lower === 'gemini-3.7-flash' || lower === 'gemini 3.7 flash' ||
-            lower === 'gemini-3.5' || lower === 'gemini 3.5' || lower === 'google/gemini-3.5-flash' || lower === 'gemini-3.5-flash' || lower === 'gemini 3.5 flash') {
-            return 'gemini-3.8-flash';
-        }
-        if (lower === 'gemini-3.6' || lower === 'gemini 3.6' || lower === 'google/gemini-3.6-flash' || lower === 'gemini-3.6-flash' || lower === 'gemini 3.6 flash') {
-            return 'gemini-3.6-flash';
-        }
-        if (lower === 'gemini-3.8' || lower === 'gemini 3.8' || lower === 'google/gemini-3.8-flash' || lower === 'gemini-3.8-flash' || lower === 'gemini 3.8 flash' ||
+        if (
+            lower === 'gemini-4' || lower === 'gemini 4' || lower === 'gemini-4-flash' || lower === 'gemini 4 flash' ||
+            lower === 'gemini-hydrogen' || lower === 'gemini 4 hydrogen' || lower === 'gemini-4-hydrogen' || lower === 'google/gemini-4-hydrogen' ||
+            lower === 'gemini-3.8' || lower === 'gemini 3.8' || lower === 'google/gemini-3.8-flash' || lower === 'gemini-3.8-flash' || lower === 'gemini 3.8 flash' ||
+            lower === 'gemini-3.7' || lower === 'gemini 3.7' || lower === 'google/gemini-3.7-flash' || lower === 'gemini-3.7-flash' || lower === 'gemini 3.7 flash' ||
+            lower === 'gemini-3.6' || lower === 'gemini 3.6' || lower === 'google/gemini-3.6-flash' || lower === 'gemini-3.6-flash' || lower === 'gemini 3.6 flash' ||
+            lower === 'gemini-3.5' || lower === 'gemini 3.5' || lower === 'google/gemini-3.5-flash' || lower === 'gemini-3.5-flash' || lower === 'gemini 3.5 flash' ||
             lower === 'gemini-2.5-flash' || lower === 'google/gemini-2.5-flash' || lower === 'gemini 2.5 flash' ||
-            lower === 'gemini-3.1-flash' || lower === 'google/gemini-3.1-flash' || lower === 'gemini 3.1 flash') {
-            return 'gemini-3.8-flash';
+            lower === 'gemini-3.1-flash' || lower === 'google/gemini-3.1-flash' || lower === 'gemini 3.1 flash'
+        ) {
+            return 'gemini-4-hydrogen';
         }
-        if (lower === 'gemini-2.5-pro' || lower === 'google/gemini-2.5-pro' || lower === 'gemini 2.5 pro' ||
-            lower === 'gemini-3.1-pro' || lower === 'gemini-3.1-pro-preview' || lower === 'google/gemini-3.1-pro-preview') {
-            return 'gemini-3.1-pro-preview';
+        if (
+            lower === 'gemini-argon' || lower === 'gemini 4 argon' || lower === 'gemini-4-argon' || lower === 'google/gemini-4-argon' ||
+            lower === 'gemini-pro' || lower === 'gemini 4 pro' ||
+            lower === 'gemini-2.5-pro' || lower === 'google/gemini-2.5-pro' || lower === 'gemini 2.5 pro' ||
+            lower === 'gemini-3.1-pro' || lower === 'gemini-3.1-pro-preview' || lower === 'google/gemini-3.1-pro-preview'
+        ) {
+            return 'gemini-4-argon';
         }
-        if (lower === 'gemini-3.1-flash-lite' || lower === 'google/gemini-3.1-flash-lite' ||
+        if (
+            lower === 'gemini-carbon' || lower === 'gemini 4 carbon' || lower === 'gemini-4-carbon' || lower === 'google/gemini-4-carbon'
+        ) {
+            return 'gemini-4-carbon';
+        }
+        if (
+            lower === 'gemini-3.1-flash-lite' || lower === 'google/gemini-3.1-flash-lite' ||
             lower === 'gemini-2.5-flash-lite' || lower === 'google/gemini-2.5-flash-lite' ||
-            lower === 'gemini-3.5-flash-lite' || lower === 'google/gemini-3.5-flash-lite') {
+            lower === 'gemini-3.5-flash-lite' || lower === 'google/gemini-3.5-flash-lite'
+        ) {
             return 'gemini-3.1-flash-lite';
         }
         if (lower.startsWith('google/')) {

@@ -105,7 +105,18 @@ export const proxyVertex = onCall({
 
     const gc = { ...(request.data?.generationConfig || {}) };
     gc.maxOutputTokens = Math.min(Number(gc.maxOutputTokens) || 8192, 32768);
-    if (gc.temperature !== undefined) gc.temperature = Math.max(0, Math.min(Number(gc.temperature), 1.5));
+    if (model.toLowerCase().startsWith('gemini-4-')) {
+        delete gc.temperature;
+        delete gc.topP;
+        delete gc.topK;
+        delete gc.candidateCount;
+        if (gc.thinkingConfig && 'thinkingBudget' in gc.thinkingConfig) {
+            delete gc.thinkingConfig.thinkingBudget;
+            if (Object.keys(gc.thinkingConfig).length === 0) delete gc.thinkingConfig;
+        }
+    } else if (gc.temperature !== undefined) {
+        gc.temperature = Math.max(0, Math.min(Number(gc.temperature), 1.5));
+    }
 
     // deduct credits for system-funded ADC call
     const estCredits = /imagen-/.test(model) ? 300 : /veo-/.test(model) ? 2500
@@ -164,7 +175,7 @@ export const testVertex = onCall({
     if (!/^[a-z0-9-]+$/.test(location)) {
         throw new HttpsError('invalid-argument', 'Invalid GCP location region format.');
     }
-    const model = inputModel || 'gemini-3.8-flash';
+    const model = inputModel || 'gemini-4-hydrogen';
     const isGlobalOnly = (m: string) => /preview|exp/i.test(m);
     const pickLocation = (m: string, configured: string) =>
       isGlobalOnly(m) ? 'global' : (configured || 'us-central1');

@@ -508,13 +508,24 @@ export async function callGeminiWithRetries(
 export function toVertexModelName(modelName?: string): string {
     const raw = (modelName || '').trim().replace(/[^a-zA-Z0-9._-]/g, "");
     if (!raw) return PRIMARY_MODEL;
-    if (raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' || raw === 'gemini-3.7' || raw === 'gemini-3.5') {
+    if (
+        raw === 'gemini-3.8-flash' || raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' ||
+        raw === 'gemini-3.7' || raw === 'gemini-3.5' ||
+        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash'
+    ) {
         return PRIMARY_MODEL;
     }
-    if (raw === 'gemini-flash-latest' || raw === 'gemini-flash' || raw === 'gemini-3.8-flash' || raw === 'gemini-3.6-flash' || raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite') {
+    if (
+        raw === 'gemini-4-hydrogen' || raw === 'gemini-4-argon' || raw === 'gemini-4-carbon' ||
+        raw === 'gemini-flash-latest' || raw === 'gemini-flash' ||
+        raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite'
+    ) {
         return raw;
     }
-    if (raw.includes('pro') && (raw.includes('3.') || raw.includes('3-') || raw === 'gemini-pro')) {
+    if (raw === 'gemini-pro' || raw === 'gemini-2.5-pro') {
+        return 'gemini-4-argon';
+    }
+    if (raw.includes('pro') && (raw.includes('3.') || raw.includes('3-'))) {
         return 'gemini-3.1-pro-preview';
     }
     return raw;
@@ -604,7 +615,7 @@ function parseVertexResponse(rawResult: any): GenerateContentResponse {
 /**
  * Determines whether a given model supports developer/system instructions.
  * Dedicated speech-to-text models (e.g. gemini-3.5-transcribe), text-to-speech models
- * (gemini-3.1-flash-tts-preview), image generation models, and video/music models
+ * (gemini-3.8-flash-lite-tts, gemini-3.8-flash-tts), image generation models, and video/music models
  * return 400 "Developer instruction is not enabled for this model" when systemInstruction is passed.
  */
 export function supportsDeveloperInstruction(modelName?: string): boolean {
@@ -708,7 +719,8 @@ export async function generateContentWithFallback(params: {
             ];
         }
 
-        if (params.thinkingBudget !== undefined && (modelName.includes('-pro') || modelName.includes('-thinking'))) {
+        const isGemini4 = modelName.toLowerCase().startsWith('gemini-4-');
+        if (!isGemini4 && params.thinkingBudget !== undefined && (modelName.includes('-pro') || modelName.includes('-thinking'))) {
             config.thinkingConfig = { thinkingBudget: params.thinkingBudget };
             const requestedMax = params.maxOutputTokens || 65536;
             config.maxOutputTokens = requestedMax;
@@ -1158,12 +1170,14 @@ export async function generateContentWithFallback(params: {
     };
 
     // Strictly descending text model fallback hierarchy:
-    // Pro (50) -> 3.8 Flash (40) -> 3.6 Flash (35) -> Flash Latest (30) -> 3.1 Flash Lite (20)
+    // Carbon (60) -> Argon/Pro (50) -> 4 Hydrogen (45) -> Flash Latest (30) -> 3.1 Flash Lite (20)
     const getModelRank = (modelName: string): number => {
         const name = (modelName || '').toLowerCase();
-        if (name.includes('3.1-pro') || name.includes('-pro')) return 50;
+        if (name.includes('4-carbon')) return 60;
+        if (name.includes('4-argon') || name.includes('3.1-pro') || name.includes('-pro')) return 50;
+        if (name.includes('4-hydrogen') || name === PRIMARY_MODEL.toLowerCase()) return 45;
         if (name.includes('3.8-flash') || name.includes('3.8')) return 40;
-        if (name.includes('3.6-flash') || name.includes('3.6') || name === PRIMARY_MODEL.toLowerCase()) return 35;
+        if (name.includes('3.6-flash') || name.includes('3.6')) return 35;
         if (name === SECONDARY_MODEL.toLowerCase() || name.includes('flash-latest')) return 30;
         if (name.includes('transcribe') || name === TRANSCRIBE_MODEL.toLowerCase()) return 28;
         if (name.includes('3.1-flash-lite') || name === TERTIARY_MODEL.toLowerCase() || name.includes('flash-lite')) return 20;
@@ -1172,12 +1186,11 @@ export async function generateContentWithFallback(params: {
     };
 
     const TEXT_MODEL_FALLBACK_CHAIN = [
-        PRIMARY_MODEL,       // "gemini-3.6-flash"
-        'gemini-3.8-flash',
+        PRIMARY_MODEL,       // "gemini-4-hydrogen"
         SECONDARY_MODEL,     // "gemini-flash-latest"
         TERTIARY_MODEL,      // "gemini-3.1-flash-lite"
-        'gemini-3-flash-preview',
-        'gemini-3.1-pro-preview'
+        'gemini-4-argon',
+        'gemini-4-carbon'
     ];
 
     // Priority: User's explicitly chosen model in UI/Settings (state.currentTextModel) takes precedence

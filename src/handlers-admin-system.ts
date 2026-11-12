@@ -579,7 +579,7 @@ export function setupAdminSystemTabHandlers() {
             const presets: Record<string, { baseUrl: string; model: string; imageModel?: string; placeholderKey: string }> = {
                 experientiallabs: {
                     baseUrl: 'https://api.experientiallabs.ai/v1',
-                    model: 'gemini-3.8-flash',
+                    model: 'gemini-4-hydrogen',
                     imageModel: 'dall-e-3',
                     placeholderKey: 'xpl_...'
                 },
@@ -732,7 +732,7 @@ export function setupAdminSystemTabHandlers() {
         try {
             const endpoint = provider === 'vertex' ? '/api/vertex/test' : '/api/gemini/test';
             const payload = provider === 'vertex'
-                ? { authMode, apiKey, project, location, model: 'gemini-3.8-flash' }
+                ? { authMode, apiKey, project, location, model: 'gemini-4-hydrogen' }
                 : { apiKey, provider, project, location, authMode };
 
             const res = await fetch(endpoint, {

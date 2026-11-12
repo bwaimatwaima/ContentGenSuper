@@ -13,7 +13,10 @@ const previewExpModels = [
 ];
 
 const standardModels = [
-    'gemini-3.8-flash',
+    'gemini-4-hydrogen',
+    'gemini-4-argon',
+    'gemini-4-carbon',
+    'gemini-3.8-flash-lite-tts',
     'gemini-flash-latest',
     'gemini-3.1-flash-lite',
     'imagen-3.0-generate-002',
@@ -34,9 +37,12 @@ for (const fn of [serverPickLocation, clientPickLocation]) {
     assert.strictEqual(fn('gemini-3.1-pro-preview', 'us-central1'), 'global');
     assert.strictEqual(fn('gemini-3.1-pro-preview', 'europe-west1'), 'global');
     assert.strictEqual(fn('gemini-2.0-flash-exp', 'asia-east1'), 'global');
-    assert.strictEqual(fn('gemini-3.8-flash', 'us-central1'), 'us-central1');
-    assert.strictEqual(fn('gemini-3.8-flash', 'europe-west1'), 'europe-west1');
-    assert.strictEqual(fn('gemini-3.8-flash', ''), 'us-central1');
+    assert.strictEqual(fn('gemini-4-hydrogen', 'us-central1'), 'us-central1');
+    assert.strictEqual(fn('gemini-4-argon', 'europe-west1'), 'europe-west1');
+    assert.strictEqual(fn('gemini-4-carbon', ''), 'us-central1');
+    assert.strictEqual(fn('gemini-3.1-flash-lite', 'us-central1'), 'us-central1');
+    assert.strictEqual(fn('gemini-3.1-flash-lite', 'europe-west1'), 'europe-west1');
+    assert.strictEqual(fn('gemini-3.1-flash-lite', ''), 'us-central1');
 }
 
 // Test getVertexHost

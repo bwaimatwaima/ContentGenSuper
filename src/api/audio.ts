@@ -720,7 +720,7 @@ export async function generateSpeech(
     await checkCredits(1, 'audio'); // Estimated cost for Gemini TTS
     
     const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
+        model: "gemini-3.8-flash-lite-tts",
         contents: [{ parts: [{ text: textForAudio }] }],
         config: {
             responseModalities: ['AUDIO'],
@@ -735,11 +735,30 @@ export async function generateSpeech(
     const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
     if (!audioPart?.inlineData?.data) throw new Error("Empty audio response from TTS.");
 
-    const buffer = await utils.decodeAudioData(utils.decode(audioPart!.inlineData!.data), utils.getAudioContext(), 24000, 1);
+    const buffer = await decodeTtsAudioPart(audioPart.inlineData, utils.getAudioContext());
     const textToAlign = originalTextForAlignment || textForAudio;
     const words = await alignAudioWithWhisper(buffer, textToAlign, signal, onProgress);
     
     return { buffer, words };
+}
+
+async function decodeTtsAudioPart(inlineData: { data?: string; mimeType?: string }, ctx: AudioContext): Promise<AudioBuffer> {
+    if (!inlineData.data) throw new Error("Empty audio response from TTS.");
+    const rawBytes = utils.decode(inlineData.data);
+    const mime = (inlineData.mimeType || '').toLowerCase();
+    const hasRiffHeader = rawBytes.length >= 12 &&
+        rawBytes[0] === 0x52 && rawBytes[1] === 0x49 && rawBytes[2] === 0x46 && rawBytes[3] === 0x46; // "RIFF"
+    if (hasRiffHeader || (mime && !mime.includes('l16') && !mime.includes('pcm'))) {
+        try {
+            const copy = rawBytes.buffer.slice(rawBytes.byteOffset, rawBytes.byteOffset + rawBytes.byteLength);
+            return await utils.safeDecode(ctx, copy);
+        } catch {
+            if (hasRiffHeader && rawBytes.length > 44) {
+                return await utils.decodeAudioData(rawBytes.subarray(44), ctx, 24000, 1);
+            }
+        }
+    }
+    return await utils.decodeAudioData(rawBytes, ctx, 24000, 1);
 }
 
 export async function generateSpeechEdgeTTS(
@@ -958,7 +977,7 @@ export async function generateSfx(
         const apiKey = getApiKey();
         const ai = createGoogleGenAIClient(apiKey);
         const response = await ai.models.generateContent({
-            model: "gemini-3.1-flash-tts-preview",
+            model: "gemini-3.8-flash-lite-tts",
             contents: [{ parts: [{ text: `[Sound effect: ${prompt}]` }] }],
             config: {
                 responseModalities: ['AUDIO'],
@@ -972,6 +991,6 @@ export async function generateSfx(
         
         const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
         if (!audioPart?.inlineData?.data) throw new Error("Empty audio response from TTS.");
-        return await utils.decodeAudioData(utils.decode(audioPart!.inlineData!.data), utils.getAudioContext(), 24000, 1);
+        return await decodeTtsAudioPart(audioPart.inlineData, utils.getAudioContext());
     }
 }

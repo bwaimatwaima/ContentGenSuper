@@ -42,7 +42,7 @@
     "@deepgram/sdk": "^5.2.0",
     "@google-cloud/storage": "^8.1.0",
     "@google-cloud/vertexai": "^1.12.0",
-    "@google/genai": "^1.23.0",
+    "@google/genai": "^3.2.0",
     "@gradio/client": "^0.20.1",
     "@remotion/bundler": "4.0.527",
     "@remotion/cloudrun": "4.0.527",

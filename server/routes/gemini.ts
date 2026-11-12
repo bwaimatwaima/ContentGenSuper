@@ -63,10 +63,10 @@ router.post(['/test', '/gemini/test'], async (req, res) => {
     const aiClient = new GoogleGenAI({ apiKey: keyToUse });
 
     let respText = '';
-    let modelUsed = 'gemini-2.5-flash';
+    let modelUsed = 'gemini-4-hydrogen';
     try {
       const result = await aiClient.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-4-hydrogen',
         contents: 'Respond with OK',
       });
       respText = result.text || '';
@@ -157,7 +157,7 @@ For every scene:
   * Climax / Pattern-Interrupt Beat: 2.0 to 3.0 seconds — punchy cut on high energy.
   * Final Scene (Resolution / Call-to-Action): 4.0 to 5.0 seconds — hold for emotional landing.`;
 
-    const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+    const modelName = process.env.GEMINI_MODEL || 'gemini-4-hydrogen';
     let response: any;
     try {
       response = await ai.models.generateContent({

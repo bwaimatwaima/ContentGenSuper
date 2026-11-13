@@ -9,6 +9,7 @@ import {
 import { buildVertexTargetPath } from '../server/routes/gemini';
 import { buildCanonicalExportPayload } from '../src/exporter/canonical-payload';
 import { buildBridgePayload } from '../server/cloudCanvasWorker';
+import { precomputeLayout, STYLE_TYPOGRAPHY } from '../remotion/src/subtitleCanvas';
 
 // 1. Default provider must be AI Studio ('aistudio') so published origins do not force regional Vertex
 assert.strictEqual(state.geminiProvider, 'aistudio', 'Default geminiProvider must be aistudio');
@@ -120,5 +121,18 @@ assert.strictEqual('audioUrl' in bridgePayload, false, 'Headless bridge must str
 assert.strictEqual('backgroundMusicUrl' in bridgePayload, false, 'Headless bridge must strip backgroundMusicUrl');
 assert.strictEqual(bridgePayload.cinematicLetterbox, true, 'Headless bridge must preserve cinematicLetterbox');
 assert.strictEqual(bridgePayload.clips[0].colorFilter, 'noir_grain');
+
+// 6. Remotion subtitleCanvas custom sizeScale parity
+const mockCtx = {
+  font: '',
+  letterSpacing: 'normal',
+  measureText: (txt: string) => ({ width: txt.length * 14 }),
+};
+const baseLayout = precomputeLayout(mockCtx, 'HELLO WORLD', 1920, 1080, 2, 'bottom', false, 'Montserrat', undefined, STYLE_TYPOGRAPHY.hormozi);
+const scaledLayout = precomputeLayout(mockCtx, 'HELLO WORLD', 1920, 1080, 2, 'bottom', false, 'Montserrat', undefined, {
+  ...STYLE_TYPOGRAPHY.hormozi,
+  sizeScale: (STYLE_TYPOGRAPHY.hormozi.sizeScale ?? 1.0) * 1.5,
+});
+assert.ok(scaledLayout.fontSize > baseLayout.fontSize, 'Scaled subtitle layout must increase fontSize proportionally');
 
 console.log('All model routing & cloud render parity tests passed!');

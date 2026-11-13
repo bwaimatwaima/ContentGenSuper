@@ -1,5 +1,5 @@
-import React, { useMemo, useContext } from 'react';
-import { AbsoluteFill, Img, Audio, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
+import React, { useMemo, useContext, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { AbsoluteFill, Img, Audio, useCurrentFrame, useVideoConfig, interpolate, delayRender, continueRender } from 'remotion';
 import { Video } from '@remotion/media';
 import { TimelineClipProp, SubtitleStyleConfig, VideoEffectsConfig } from './types';
 import { CameraPanZoom } from './CameraPanZoom';
@@ -10,6 +10,7 @@ import { MapShot } from './MapShot';
 import { customStudioPostEffects } from './effects/customStudioEffects';
 import { computePipCard } from '../../src/pip-layout';
 import { LetterboxContext } from './LetterboxBars';
+import { drawElementBuild, elementImageCache } from '../../src/graphics-engine';
 
 interface ClipRendererProps {
   clip: TimelineClipProp;
@@ -19,7 +20,102 @@ interface ClipRendererProps {
   videoEffects?: VideoEffectsConfig;
   timelineFrameOffset?: number;
   mediaStartOffsetFrames?: number;
+  enableBackgroundBlur?: boolean;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
 }
+
+const ElementBuildCanvas: React.FC<{
+  clip: TimelineClipProp;
+  timeInClipSec: number;
+}> = ({ clip, timeInClipSec }) => {
+  const { width, height } = useVideoConfig();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [ready, setReady] = useState(false);
+
+  const normalizedElements = useMemo(() => {
+    const rawEls = Array.isArray(clip.elements) ? clip.elements : [];
+    const words = Array.isArray(clip.subtitles) ? clip.subtitles : [];
+    const clipStart = typeof clip.startTime === 'number' ? clip.startTime : 0;
+
+    return rawEls.map((el: any) => {
+      if (typeof el?.enterTime === 'number' && el.enterTime > 0) return el;
+      const labelNorm = String(el?.label || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!labelNorm) return { ...el, enterTime: el?.enterTime ?? 0 };
+      const matched = words.find((w: any) => {
+        const wNorm = String(w?.text || w?.word || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return wNorm === labelNorm || (wNorm.length >= 3 && labelNorm.includes(wNorm)) || (labelNorm.length >= 3 && wNorm.includes(labelNorm));
+      });
+      if (matched) {
+        const rel = matched.start > clipStart ? matched.start - clipStart : matched.start;
+        return { ...el, enterTime: Math.max(0, rel) };
+      }
+      return { ...el, enterTime: el?.enterTime ?? 0 };
+    });
+  }, [clip.elements, clip.subtitles, clip.startTime]);
+
+  useEffect(() => {
+    if (normalizedElements.length === 0 || typeof window === 'undefined') {
+      setReady(true);
+      return;
+    }
+    const handle = delayRender('preload-element-build-images', { timeoutInMilliseconds: 30000 });
+    let cancelled = false;
+    const loads = normalizedElements.map((el: any) => {
+      const url = el?.imageUrl;
+      if (!url || typeof url !== 'string') return Promise.resolve();
+      const cached = elementImageCache.get(url);
+      if (cached && cached.complete && cached.naturalWidth > 0) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          elementImageCache.set(url, img);
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = url;
+      });
+    });
+
+    Promise.all(loads).finally(() => {
+      if (!cancelled) setReady(true);
+      continueRender(handle);
+    });
+
+    return () => {
+      cancelled = true;
+      continueRender(handle);
+    };
+  }, [normalizedElements]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, width, height);
+    if (!ready || normalizedElements.length === 0) return;
+    drawElementBuild(ctx, timeInClipSec, { startTime: 0, elements: normalizedElements as any }, width, height);
+  }, [ready, normalizedElements, timeInClipSec, width, height]);
+
+  if (normalizedElements.length === 0) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 20,
+      }}
+    />
+  );
+};
 
 function getCssFilter(filterName?: string, intensity: number = 1.0): string | undefined {
   if (!filterName || filterName === 'none') return undefined;
@@ -71,6 +167,9 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   videoEffects,
   timelineFrameOffset = 0,
   mediaStartOffsetFrames = 0,
+  enableBackgroundBlur = true,
+  cameraShakeHandheld = false,
+  cameraMotionIntensity = 1.0,
 }) => {
   const localFrame = useCurrentFrame();
   const timelineFrame = localFrame + timelineFrameOffset;
@@ -78,8 +177,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   const effectiveVideoUrl = clip.talkingHeadMode === 'full'
     ? (talkingHeadVideoUrl || clip.videoUrl)
     : (clip.videoUrl || (clip.talkingHeadMode === 'none' || !clip.talkingHeadMode ? talkingHeadVideoUrl : undefined));
+  const primaryImageUrl = (clip.elements?.length && clip.backgroundPlateUrl)
+    ? clip.backgroundPlateUrl
+    : (clip.imageUrl || clip.backgroundPlateUrl);
   const hasVideo = Boolean(effectiveVideoUrl || clip.hasVideo);
-  const hasImage = Boolean(clip.imageUrl);
+  const hasImage = Boolean(primaryImageUrl);
 
   // Compute active effect parameters
   const grain = videoEffects?.grain ?? 0;
@@ -275,6 +377,101 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   const hasVideoBackground = Boolean(isFullTalkingHead || (hasVideo && !isPipOverlay && thMode === 'none'));
   const parallaxOn = !!clip.parallax?.enabled && hasImage && !hasVideoBackground;
   const isVerticalCanvas = vh >= vw;
+  const showBgBlur = enableBackgroundBlur !== false && (videoEffects as any)?.enableBackgroundBlur !== false;
+
+  const motionMult =
+    typeof cameraMotionIntensity === 'number' && Number.isFinite(cameraMotionIntensity)
+      ? Math.max(0, cameraMotionIntensity)
+      : 1.0;
+  const videoShakeStyle: React.CSSProperties | undefined = cameraShakeHandheld
+    ? (() => {
+        const driftX = (Math.sin(timeInClip * 1.35) * 0.7 + Math.sin(timeInClip * 2.7) * 0.3) * 0.35 * motionMult;
+        const driftY = (Math.cos(timeInClip * 1.15) * 0.7 + Math.cos(timeInClip * 2.1) * 0.3) * 0.35 * motionMult;
+        const driftRotDeg = Math.sin(timeInClip * 0.85) * 0.002 * (180 / Math.PI) * motionMult;
+        return {
+          width: '100%',
+          height: '100%',
+          transform: `scale(1.02) translate3d(${driftX.toFixed(3)}%, ${driftY.toFixed(3)}%, 0) rotate(${driftRotDeg.toFixed(3)}deg)`,
+          transformOrigin: 'center center',
+        };
+      })()
+    : { width: '100%', height: '100%' };
+
+  const renderFullscreenVideo = (srcUrl: string) => (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#000000' }}>
+      {showBgBlur && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: '-8%',
+            width: '116%',
+            height: '116%',
+            filter: `blur(24px) brightness(0.65)${cssFilter ? ` ${cssFilter}` : ''}`,
+            pointerEvents: 'none',
+          }}
+        >
+          <Video
+            src={srcUrl}
+            style={{ width: '100%', height: '100%' }}
+            objectFit="cover"
+            trimBefore={effectiveTrimBefore}
+            muted
+            playbackRate={clip.playbackRate ?? 1}
+            loop
+          />
+        </div>
+      )}
+      <div style={videoShakeStyle}>
+        <div style={rotStyle}>
+          <Video
+            src={srcUrl}
+            style={{
+              width: '100%',
+              height: '100%',
+              filter: cssFilter || undefined,
+            }}
+            objectFit="contain"
+            trimBefore={effectiveTrimBefore}
+            muted={!clip.useOriginalAudio}
+            playbackRate={clip.playbackRate ?? 1}
+            loop
+            volume={clip.volume !== undefined ? clip.volume : 1.0}
+            effects={customEffects}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFullscreenImage = (srcUrl: string) => (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', backgroundColor: '#000000' }}>
+      {showBgBlur && (
+        <Img
+          src={srcUrl}
+          style={{
+            position: 'absolute',
+            inset: '-8%',
+            width: '116%',
+            height: '116%',
+            objectFit: 'cover',
+            filter: `blur(24px) brightness(0.65)${cssFilter ? ` ${cssFilter}` : ''}`,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      <Img
+        src={srcUrl}
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          objectFit: 'contain',
+          filter: cssFilter || undefined,
+        }}
+        effects={customEffects}
+      />
+    </div>
+  );
 
   return (
     <AbsoluteFill
@@ -324,7 +521,7 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
             </div>
           ) : hasImage ? (
             <Img
-              src={clip.imageUrl!}
+              src={primaryImageUrl!}
               style={{
                 width: '100%',
                 height: '100%',
@@ -405,8 +602,8 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
                 ? (clip.secondaryVideoUrl || talkingHeadVideoUrl)
                 : (talkingHeadVideoUrl || clip.secondaryVideoUrl || clip.videoUrl);
               const slotAImg = clip.talkingHeadRole === 'secondary'
-                ? (clip.secondaryImageUrl || clip.imageUrl)
-                : (clip.secondaryImageUrl || clip.imageUrl);
+                ? (clip.secondaryImageUrl || primaryImageUrl)
+                : (clip.secondaryImageUrl || primaryImageUrl);
               if (slotAVideo) {
                 return (
                   <Video
@@ -455,9 +652,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
                 cameraKeyframes={clip.cameraKeyframes}
                 durationInFrames={durationInFrames}
                 frameOffsetFrames={timelineFrameOffset}
+                cameraShakeHandheld={cameraShakeHandheld}
+                cameraMotionIntensity={cameraMotionIntensity}
               >
                 <Img
-                  src={clip.imageUrl!}
+                  src={primaryImageUrl!}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', filter: cssFilter || undefined }}
                   effects={customEffects}
                 />
@@ -479,7 +678,7 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
         </div>
       ) : parallaxOn ? (
         <ParallaxImage
-          src={clip.imageUrl!}
+          src={primaryImageUrl!}
           depthUrl={clip.depthUrl}
           cameraMovement={clip.camera_movement}
           cameraKeyframes={clip.cameraKeyframes}
@@ -498,28 +697,12 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
           focusDepthOverride={clip.parallax?.focusDepth}
           hazeColorOverride={clip.parallax?.hazeColor}
           filter={cssFilter || undefined}
+          cameraShakeHandheld={cameraShakeHandheld}
+          cameraMotionIntensity={cameraMotionIntensity}
         />
       ) : hasVideo && effectiveVideoUrl && (!clip.cameraKeyframes || isFullTalkingHead) ? (
         /* Fullscreen Visual Canvas Layer for Video / Full Talking Head */
-        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-          <div style={rotStyle}>
-            <Video
-              src={effectiveVideoUrl}
-              style={{
-                width: '100%',
-                height: '100%',
-                filter: cssFilter || undefined,
-              }}
-              objectFit="cover"
-              trimBefore={effectiveTrimBefore}
-              muted={!clip.useOriginalAudio}
-              playbackRate={clip.playbackRate ?? 1}
-              loop
-              volume={clip.volume !== undefined ? clip.volume : 1.0}
-              effects={customEffects}
-            />
-          </div>
-        </div>
+        renderFullscreenVideo(effectiveVideoUrl)
       ) : (
         /* Fullscreen Visual Canvas Layer with Pan/Zoom */
         <CameraPanZoom
@@ -527,40 +710,15 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
           cameraKeyframes={clip.cameraKeyframes}
           durationInFrames={durationInFrames}
           frameOffsetFrames={timelineFrameOffset}
+          cameraShakeHandheld={cameraShakeHandheld}
+          cameraMotionIntensity={cameraMotionIntensity}
         >
           {clip.mapConfig ? (
             <MapShot config={clip.mapConfig} />
           ) : hasVideo && effectiveVideoUrl ? (
-            <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-              <div style={rotStyle}>
-                <Video
-                  src={effectiveVideoUrl}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    filter: cssFilter || undefined,
-                  }}
-                  objectFit="cover"
-                  trimBefore={effectiveTrimBefore}
-                  muted={!clip.useOriginalAudio}
-                  playbackRate={clip.playbackRate ?? 1}
-                  loop
-                  volume={clip.volume !== undefined ? clip.volume : 1.0}
-                  effects={customEffects}
-                />
-              </div>
-            </div>
+            renderFullscreenVideo(effectiveVideoUrl)
           ) : hasImage ? (
-            <Img
-              src={clip.imageUrl!}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                filter: cssFilter || undefined,
-              }}
-              effects={customEffects}
-            />
+            renderFullscreenImage(primaryImageUrl!)
           ) : (
             <div
               style={{
@@ -583,6 +741,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
             </div>
           )}
         </CameraPanZoom>
+      )}
+
+      {/* Element-Build Scene Overlay (matching drawElementBuild in videoRenderer.ts:3006-3011) */}
+      {!isPipOverlay && Array.isArray(clip.elements) && clip.elements.length > 0 && (
+        <ElementBuildCanvas clip={clip} timeInClipSec={timeInClip} />
       )}
 
       {/* Local vignette overlay if specified on clip effects */}

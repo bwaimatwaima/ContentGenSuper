@@ -330,6 +330,9 @@ export interface DrawSubtitleArgs {
   /** state.videoSubtitleColors: either { [styleName]: {...} } or a flat colour object. */
   userColors?: Record<string, any> | null;
   requestedFont?: string;
+  /** User subtitle font size in px (54px = 1.0x scale) or explicit size scale multiplier. */
+  fontSize?: number;
+  userSizeScale?: number;
   placement?: SubtitlePlacement | null;
 }
 
@@ -347,7 +350,17 @@ export function drawSubtitleChunk(ctx: CanvasRenderingContext2D, a: DrawSubtitle
     displayText = displayText.toUpperCase();
   }
 
-  const typography = STYLE_TYPOGRAPHY[style];
+  const baseTypography = STYLE_TYPOGRAPHY[style];
+  const userScale =
+    typeof a.userSizeScale === 'number' && a.userSizeScale > 0
+      ? Math.max(0.5, Math.min(2.0, a.userSizeScale))
+      : typeof a.fontSize === 'number' && a.fontSize > 0
+      ? Math.max(0.5, Math.min(2.0, a.fontSize / 54))
+      : 1.0;
+  const typography: StyleTypography =
+    userScale !== 1.0
+      ? { ...baseTypography, sizeScale: (baseTypography.sizeScale ?? 1.0) * userScale }
+      : baseTypography;
   let styleCustom: any = a.userColors || {};
   if (a.userColors && typeof a.userColors === 'object' && style in a.userColors && typeof (a.userColors as any)[style] === 'object' && (a.userColors as any)[style] !== null) {
     styleCustom = (a.userColors as any)[style];

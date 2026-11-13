@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
 import { CameraKeyframesConfig } from './types';
 
 interface CameraPanZoomProps {
@@ -8,6 +7,8 @@ interface CameraPanZoomProps {
   cameraKeyframes?: CameraKeyframesConfig;
   durationInFrames: number;
   frameOffsetFrames?: number;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
   children: React.ReactNode;
 }
 
@@ -43,11 +44,19 @@ export const CameraPanZoom: React.FC<CameraPanZoomProps> = ({
   cameraKeyframes,
   durationInFrames,
   frameOffsetFrames = 0,
+  cameraShakeHandheld = false,
+  cameraMotionIntensity = 1.0,
   children,
 }) => {
   const frame = useCurrentFrame() + frameOffsetFrames;
+  const { fps } = useVideoConfig();
   const safeDuration = Math.max(1, durationInFrames);
   const rawProgress = Math.min(1, Math.max(0, frame / safeDuration));
+  const timeSec = frame / Math.max(1, fps);
+  const motionMult =
+    typeof cameraMotionIntensity === 'number' && Number.isFinite(cameraMotionIntensity)
+      ? Math.max(0, cameraMotionIntensity)
+      : 1.0;
 
   const mov = (cameraMovement || '').toLowerCase().trim();
   const isHandheld = mov === 'handheld' || mov.includes('handheld');
@@ -63,26 +72,24 @@ export const CameraPanZoom: React.FC<CameraPanZoomProps> = ({
 
   if (cameraKeyframes) {
     const { start, end } = cameraKeyframes;
-    scale = interpolate(progress, [0, 1], [start.scale, end.scale], {
+    const rawScale = interpolate(progress, [0, 1], [start.scale, end.scale], {
       extrapolateRight: 'clamp',
     });
-    const xPct = interpolate(progress, [0, 1], [start.x, end.x], {
-      extrapolateRight: 'clamp',
-    });
-    const yPct = interpolate(progress, [0, 1], [start.y, end.y], {
-      extrapolateRight: 'clamp',
-    });
+    scale = Math.max(1.0, start.scale + (rawScale - start.scale) * motionMult);
+    const xPct = start.x + (end.x - start.x) * progress * motionMult;
+    const yPct = start.y + (end.y - start.y) * progress * motionMult;
     translateX = (0.5 - xPct) * 100;
     translateY = (0.5 - yPct) * 100;
     if (start.rotation !== undefined || end.rotation !== undefined) {
-      rotation = interpolate(progress, [0, 1], [start.rotation || 0, end.rotation || 0], {
-        extrapolateRight: 'clamp',
-      });
+      const startRot = start.rotation || 0;
+      const endRot = end.rotation || 0;
+      rotation = startRot + (endRot - startRot) * progress * motionMult;
     }
   } else if (mov === 'static' || mov === 'none') {
     scale = 1.0;
   } else if (mov.includes('zoom_out') || mov.includes('zoomout') || mov.includes('slow_zoom_out')) {
-    scale = interpolate(progress, [0, 1], [1.14, 1.02], { extrapolateRight: 'clamp' });
+    const baseScale = interpolate(progress, [0, 1], [1.14, 1.02], { extrapolateRight: 'clamp' });
+    scale = 1.0 + (baseScale - 1.0) * motionMult;
   } else if (
     mov.includes('zoom_in') ||
     mov.includes('zoomin') ||
@@ -90,33 +97,47 @@ export const CameraPanZoom: React.FC<CameraPanZoomProps> = ({
     mov.includes('ken_burns') ||
     mov.includes('zoom')
   ) {
-    scale = interpolate(progress, [0, 1], [1.01, 1.14], { extrapolateRight: 'clamp' });
+    const baseScale = interpolate(progress, [0, 1], [1.01, 1.14], { extrapolateRight: 'clamp' });
+    scale = 1.0 + (baseScale - 1.0) * motionMult;
   } else if (mov.includes('pan_left') || mov.includes('panleft') || mov.includes('left')) {
-    scale = 1.12; // Extra overscan prevents edge clipping during handheld jitter
-    translateX = interpolate(progress, [0, 1], [3.8, -3.8], { extrapolateRight: 'clamp' });
+    scale = 1.0 + 0.12 * motionMult; // Extra overscan prevents edge clipping during handheld jitter
+    translateX = interpolate(progress, [0, 1], [3.8, -3.8], { extrapolateRight: 'clamp' }) * motionMult;
   } else if (mov.includes('pan_right') || mov.includes('panright') || mov.includes('right')) {
-    scale = 1.12;
-    translateX = interpolate(progress, [0, 1], [-3.8, 3.8], { extrapolateRight: 'clamp' });
+    scale = 1.0 + 0.12 * motionMult;
+    translateX = interpolate(progress, [0, 1], [-3.8, 3.8], { extrapolateRight: 'clamp' }) * motionMult;
   } else if (mov.includes('pan_up') || mov.includes('tilt_up') || mov.includes('up')) {
-    scale = 1.12;
-    translateY = interpolate(progress, [0, 1], [3.2, -3.2], { extrapolateRight: 'clamp' });
+    scale = 1.0 + 0.12 * motionMult;
+    translateY = interpolate(progress, [0, 1], [3.2, -3.2], { extrapolateRight: 'clamp' }) * motionMult;
   } else if (mov.includes('pan_down') || mov.includes('tilt_down') || mov.includes('down')) {
-    scale = 1.12;
-    translateY = interpolate(progress, [0, 1], [-3.2, 3.2], { extrapolateRight: 'clamp' });
+    scale = 1.0 + 0.12 * motionMult;
+    translateY = interpolate(progress, [0, 1], [-3.2, 3.2], { extrapolateRight: 'clamp' }) * motionMult;
   } else if (mov.includes('drone') || mov.includes('flyover') || mov.includes('dynamic') || mov.includes('orbit')) {
-    scale = interpolate(progress, [0, 1], [1.03, 1.15], { extrapolateRight: 'clamp' });
-    translateY = interpolate(progress, [0, 1], [2, -2], { extrapolateRight: 'clamp' });
-    rotation = interpolate(progress, [0, 1], [-0.8, 0.8], { extrapolateRight: 'clamp' });
+    const baseScale = interpolate(progress, [0, 1], [1.03, 1.15], { extrapolateRight: 'clamp' });
+    scale = 1.0 + (baseScale - 1.0) * motionMult;
+    translateY = interpolate(progress, [0, 1], [2, -2], { extrapolateRight: 'clamp' }) * motionMult;
+    rotation = interpolate(progress, [0, 1], [-0.8, 0.8], { extrapolateRight: 'clamp' }) * motionMult;
   } else {
-    scale = interpolate(progress, [0, 1], [1.01, 1.09], { extrapolateRight: 'clamp' });
-    translateY = interpolate(progress, [0, 1], [0.5, -0.5], { extrapolateRight: 'clamp' });
+    const baseScale = interpolate(progress, [0, 1], [1.01, 1.09], { extrapolateRight: 'clamp' });
+    scale = 1.0 + (baseScale - 1.0) * motionMult;
+    translateY = interpolate(progress, [0, 1], [0.5, -0.5], { extrapolateRight: 'clamp' }) * motionMult;
   }
 
   if (isHandheld) {
-    const jitterAmp = 0.55;
+    const jitterAmp = 0.55 * motionMult;
     scale = Math.max(scale, 1.06); // Guarantee overscan for handheld shake
     translateX += handheldJitter(rawProgress, jitterAmp);
     translateY += handheldJitter(rawProgress + 0.3, jitterAmp * 0.6);
+  }
+
+  if (cameraShakeHandheld) {
+    // Matches videoRenderer.ts:2495-2502 & 2539-2546 continuous handheld drift
+    const driftX = (Math.sin(timeSec * 1.35) * 0.7 + Math.sin(timeSec * 2.7) * 0.3) * 0.35 * motionMult;
+    const driftY = (Math.cos(timeSec * 1.15) * 0.7 + Math.cos(timeSec * 2.1) * 0.3) * 0.35 * motionMult;
+    const driftRotDeg = Math.sin(timeSec * 0.85) * 0.002 * (180 / Math.PI) * motionMult;
+    scale = Math.max(scale, 1.02);
+    translateX += driftX;
+    translateY += driftY;
+    rotation += driftRotDeg;
   }
 
   return (

@@ -70,10 +70,16 @@ const OverlappedIncomingClip: React.FC<{
   };
   subtitleStyle?: any;
   videoEffects?: any;
+  enableBackgroundBlur?: boolean;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
 }> = ({
   item,
   subtitleStyle,
   videoEffects,
+  enableBackgroundBlur = true,
+  cameraShakeHandheld = false,
+  cameraMotionIntensity = 1.0,
 }) => {
   const { clip, baseDuration, d, type } = item;
 
@@ -86,6 +92,9 @@ const OverlappedIncomingClip: React.FC<{
           subtitleStyle={subtitleStyle}
           durationInFrames={baseDuration}
           videoEffects={videoEffects}
+          enableBackgroundBlur={enableBackgroundBlur}
+          cameraShakeHandheld={cameraShakeHandheld}
+          cameraMotionIntensity={cameraMotionIntensity}
         />
       </Sequence>
     );
@@ -110,6 +119,9 @@ const OverlappedIncomingClip: React.FC<{
             videoEffects={videoEffects}
             timelineFrameOffset={0}
             mediaStartOffsetFrames={0}
+            enableBackgroundBlur={enableBackgroundBlur}
+            cameraShakeHandheld={cameraShakeHandheld}
+            cameraMotionIntensity={cameraMotionIntensity}
           />
         </TransitionIn>
       </Sequence>
@@ -124,6 +136,9 @@ const OverlappedIncomingClip: React.FC<{
           videoEffects={videoEffects}
           timelineFrameOffset={d}
           mediaStartOffsetFrames={d}
+          enableBackgroundBlur={enableBackgroundBlur}
+          cameraShakeHandheld={cameraShakeHandheld}
+          cameraMotionIntensity={cameraMotionIntensity}
         />
       </Sequence>
     </AbsoluteFill>
@@ -146,6 +161,9 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
   videoEffects,
   timelineHasAudioMixdown = false,
   cinematicLetterbox = false,
+  enableBackgroundBlur = true,
+  cameraShakeHandheld = false,
+  cameraMotionIntensity = 1.0,
   audioReactive,
 }) => {
   const { fps } = useVideoConfig();
@@ -245,6 +263,9 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
               item={item}
               subtitleStyle={subtitleStyle}
               videoEffects={videoEffects}
+              enableBackgroundBlur={enableBackgroundBlur}
+              cameraShakeHandheld={cameraShakeHandheld}
+              cameraMotionIntensity={cameraMotionIntensity}
             />
           </Sequence>
         );
@@ -273,6 +294,9 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
                 subtitleStyle={subtitleStyle}
                 durationInFrames={item.baseDuration}
                 videoEffects={videoEffects}
+                enableBackgroundBlur={enableBackgroundBlur}
+                cameraShakeHandheld={cameraShakeHandheld}
+                cameraMotionIntensity={cameraMotionIntensity}
               />
             </TransitionOut>
           </Sequence>
@@ -292,6 +316,9 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
             subtitleStyle={subtitleStyle}
             durationInFrames={item.baseDuration}
             videoEffects={videoEffects}
+            enableBackgroundBlur={enableBackgroundBlur}
+            cameraShakeHandheld={cameraShakeHandheld}
+            cameraMotionIntensity={cameraMotionIntensity}
           />
         </Sequence>
       ))}

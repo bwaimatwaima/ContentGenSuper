@@ -172,6 +172,8 @@ export interface StoryboardVideoProps {
   timelineHasAudioMixdown?: boolean;
   cinematicLetterbox?: boolean;
   enableBackgroundBlur?: boolean;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
   talkingHeadBorderColor?: string;
   talkingHeadBorderWidth?: number;
   talkingHeadShadow?: boolean;

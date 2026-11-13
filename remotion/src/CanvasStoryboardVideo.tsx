@@ -92,6 +92,8 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
       talkingHeadBorderWidth: typeof c.talkingHeadBorderWidth === 'number' ? c.talkingHeadBorderWidth : raw?.talkingHeadBorderWidth,
       talkingHeadShadow: typeof c.talkingHeadShadow === 'boolean' ? c.talkingHeadShadow : raw?.talkingHeadShadow,
       isVillainShot: Boolean(c.isVillainShot || isVillainFoilClip(c)),
+      elements: Array.isArray(c.elements) ? c.elements : undefined,
+      deviceTag: c.deviceTag,
     };
   });
 
@@ -182,6 +184,8 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
     timelineHasAudioMixdown: isPreMixedAudio,
     cinematicLetterbox: Boolean(raw?.cinematicLetterbox),
     enableBackgroundBlur: raw?.enableBackgroundBlur !== false,
+    cameraShakeHandheld: Boolean(raw?.cameraShakeHandheld),
+    cameraMotionIntensity: typeof raw?.cameraMotionIntensity === 'number' ? raw.cameraMotionIntensity : 1.0,
     talkingHeadBorderColor: raw?.talkingHeadBorderColor,
     talkingHeadBorderWidth: raw?.talkingHeadBorderWidth,
     talkingHeadShadow: raw?.talkingHeadShadow,

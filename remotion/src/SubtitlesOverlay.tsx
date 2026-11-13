@@ -92,6 +92,7 @@ const CanvasSubtitle: React.FC<{
       clipTime: currentTimeSec,
       userColors: styleConfig.colors || null,
       requestedFont: styleConfig.fontFamily,
+      fontSize: styleConfig.fontSize,
     });
     ctx.restore();
   });

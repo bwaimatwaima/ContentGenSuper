@@ -41,6 +41,8 @@ interface ParallaxImageProps {
   focusDepthOverride?: number;
   hazeColorOverride?: [number, number, number];
   filter?: string;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
 }
 
 function easeInOutCubic(t: number): number {
@@ -67,6 +69,8 @@ export const ParallaxImage: React.FC<ParallaxImageProps> = ({
   focusDepthOverride,
   hazeColorOverride,
   filter,
+  cameraShakeHandheld = false,
+  cameraMotionIntensity = 1.0,
 }) => {
   const frame = useCurrentFrame() + (frameOffsetFrames || 0);
   const { width: targetW, height: targetH, fps } = useVideoConfig();
@@ -270,15 +274,21 @@ export const ParallaxImage: React.FC<ParallaxImageProps> = ({
     let rotation = 0;
 
     const bgProgress = progress * 0.95;
+    const motionMult =
+      typeof cameraMotionIntensity === 'number' && Number.isFinite(cameraMotionIntensity)
+        ? Math.max(0, cameraMotionIntensity)
+        : 1.0;
 
     if (cameraKeyframes) {
       const { start, end } = cameraKeyframes;
-      fgScale = interpolate(progress, [0, 1], [start.scale, end.scale], { extrapolateRight: 'clamp' });
-      bgScale = interpolate(bgProgress, [0, 1], [start.scale, end.scale], { extrapolateRight: 'clamp' });
-      const xPctFg = interpolate(progress, [0, 1], [start.x, end.x], { extrapolateRight: 'clamp' });
-      const xPctBg = interpolate(bgProgress, [0, 1], [start.x, end.x], { extrapolateRight: 'clamp' });
-      const yPctFg = interpolate(progress, [0, 1], [start.y, end.y], { extrapolateRight: 'clamp' });
-      const yPctBg = interpolate(bgProgress, [0, 1], [start.y, end.y], { extrapolateRight: 'clamp' });
+      const rawFgScale = interpolate(progress, [0, 1], [start.scale, end.scale], { extrapolateRight: 'clamp' });
+      const rawBgScale = interpolate(bgProgress, [0, 1], [start.scale, end.scale], { extrapolateRight: 'clamp' });
+      fgScale = Math.max(1.0, start.scale + (rawFgScale - start.scale) * motionMult);
+      bgScale = Math.max(1.0, start.scale + (rawBgScale - start.scale) * motionMult);
+      const xPctFg = start.x + (end.x - start.x) * progress * motionMult;
+      const xPctBg = start.x + (end.x - start.x) * bgProgress * motionMult;
+      const yPctFg = start.y + (end.y - start.y) * progress * motionMult;
+      const yPctBg = start.y + (end.y - start.y) * bgProgress * motionMult;
 
       fgTransX = (0.5 - xPctFg);
       bgTransX = (0.5 - xPctBg);
@@ -286,28 +296,44 @@ export const ParallaxImage: React.FC<ParallaxImageProps> = ({
       bgTransY = (0.5 - yPctBg);
 
       if (start.rotation !== undefined || end.rotation !== undefined) {
-        rotation = interpolate(progress, [0, 1], [start.rotation || 0, end.rotation || 0], { extrapolateRight: 'clamp' });
+        const sRot = start.rotation || 0;
+        const eRot = end.rotation || 0;
+        rotation = sRot + (eRot - sRot) * progress * motionMult;
       }
     } else {
       const mov = (cameraMovement || '').toLowerCase().trim();
       if (mov.includes('zoom_out') || mov.includes('zoomout')) {
-        fgScale = interpolate(progress, [0, 1], [1.15, 1.0], { extrapolateRight: 'clamp' });
-        bgScale = interpolate(bgProgress, [0, 1], [1.15, 1.0], { extrapolateRight: 'clamp' });
+        fgScale = 1.0 + (interpolate(progress, [0, 1], [1.15, 1.0], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
+        bgScale = 1.0 + (interpolate(bgProgress, [0, 1], [1.15, 1.0], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
       } else if (mov.includes('zoom_in') || mov.includes('zoomin') || mov.includes('slow_zoom_in') || mov.includes('ken_burns') || mov.includes('zoom')) {
-        fgScale = interpolate(progress, [0, 1], [1.0, 1.15], { extrapolateRight: 'clamp' });
-        bgScale = interpolate(bgProgress, [0, 1], [1.0, 1.15], { extrapolateRight: 'clamp' });
+        fgScale = 1.0 + (interpolate(progress, [0, 1], [1.0, 1.15], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
+        bgScale = 1.0 + (interpolate(bgProgress, [0, 1], [1.0, 1.15], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
       } else if (mov.includes('pan_left') || mov.includes('left')) {
-        fgScale = 1.08; bgScale = 1.08;
-        fgTransX = interpolate(progress, [0, 1], [0.04, -0.04], { extrapolateRight: 'clamp' });
-        bgTransX = interpolate(bgProgress, [0, 1], [0.04, -0.04], { extrapolateRight: 'clamp' });
+        fgScale = 1.0 + 0.08 * motionMult; bgScale = 1.0 + 0.08 * motionMult;
+        fgTransX = interpolate(progress, [0, 1], [0.04, -0.04], { extrapolateRight: 'clamp' }) * motionMult;
+        bgTransX = interpolate(bgProgress, [0, 1], [0.04, -0.04], { extrapolateRight: 'clamp' }) * motionMult;
       } else if (mov.includes('pan_right') || mov.includes('right')) {
-        fgScale = 1.08; bgScale = 1.08;
-        fgTransX = interpolate(progress, [0, 1], [-0.04, 0.04], { extrapolateRight: 'clamp' });
-        bgTransX = interpolate(bgProgress, [0, 1], [-0.04, 0.04], { extrapolateRight: 'clamp' });
+        fgScale = 1.0 + 0.08 * motionMult; bgScale = 1.0 + 0.08 * motionMult;
+        fgTransX = interpolate(progress, [0, 1], [-0.04, 0.04], { extrapolateRight: 'clamp' }) * motionMult;
+        bgTransX = interpolate(bgProgress, [0, 1], [-0.04, 0.04], { extrapolateRight: 'clamp' }) * motionMult;
       } else {
-        fgScale = interpolate(progress, [0, 1], [1.0, 1.08], { extrapolateRight: 'clamp' });
-        bgScale = interpolate(bgProgress, [0, 1], [1.0, 1.08], { extrapolateRight: 'clamp' });
+        fgScale = 1.0 + (interpolate(progress, [0, 1], [1.0, 1.08], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
+        bgScale = 1.0 + (interpolate(bgProgress, [0, 1], [1.0, 1.08], { extrapolateRight: 'clamp' }) - 1.0) * motionMult;
       }
+    }
+
+    if (cameraShakeHandheld) {
+      const timeSec = frame / Math.max(1, fps);
+      const driftX = (Math.sin(timeSec * 1.35) * 0.7 + Math.sin(timeSec * 2.7) * 0.3) * 0.0035 * motionMult;
+      const driftY = (Math.cos(timeSec * 1.15) * 0.7 + Math.cos(timeSec * 2.1) * 0.3) * 0.0035 * motionMult;
+      const driftRotDeg = Math.sin(timeSec * 0.85) * 0.002 * (180 / Math.PI) * motionMult;
+      fgScale = Math.max(fgScale, 1.02);
+      bgScale = Math.max(bgScale, 1.02);
+      fgTransX += driftX;
+      bgTransX += driftX * 0.85;
+      fgTransY += driftY;
+      bgTransY += driftY * 0.85;
+      rotation += driftRotDeg;
     }
 
     const fgN = {

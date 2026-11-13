@@ -269,6 +269,42 @@ export async function prepareTimelineAudioMix(
                 console.warn(`[AudioMixer] Failed to extract clip.audioUrl for clip ${clip.id || i}:`, clipAudioErr);
             }
         }
+
+        // Also check if clip has standalone sfxUrl (sound effect attachment) when not already baked into mixdown
+        if (clip.sfxUrl && !inputProps.timelineHasAudioMixdown) {
+            try {
+                const localClipSfxPath = await resolveAudioToLocalFile(
+                    toLoopback(clip.sfxUrl, appBaseUrl), `clip_sfx_${i}`
+                );
+                if (localClipSfxPath && fs.existsSync(localClipSfxPath) && (await hasAudioStream(localClipSfxPath))) {
+                    const startSec = Math.max(0, Number(clip.startTime) || 0);
+                    const durSec = Math.max(0.1, Number(clip.duration) || 5);
+                    const sfxVol = typeof clip.sfxVolume === 'number' ? clip.sfxVolume : 0.8;
+                    const sfxWav = path.join(os.tmpdir(), `clip_sfx_direct_${i}_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`);
+                    cleanupPaths.push(sfxWav);
+
+                    const filterParts = ['asetpts=PTS-STARTPTS', `volume=${sfxVol}`];
+                    const delayMs = Math.round(startSec * 1000);
+                    if (delayMs > 0) filterParts.push(`adelay=${delayMs}|${delayMs}`);
+                    filterParts.push(`atrim=0:${(startSec + durSec).toFixed(3)}`);
+
+                    await execFileAsync('ffmpeg', [
+                        '-y',
+                        '-t', String(durSec),
+                        '-i', localClipSfxPath,
+                        '-filter_complex', filterParts.join(','),
+                        '-c:a', 'pcm_s16le',
+                        sfxWav
+                    ], { timeout: 60000 });
+
+                    if (fs.existsSync(sfxWav) && fs.statSync(sfxWav).size > 100) {
+                        audioTrackPaths.push(sfxWav);
+                    }
+                }
+            } catch (clipSfxErr) {
+                console.warn(`[AudioMixer] Failed to extract clip.sfxUrl for clip ${clip.id || i}:`, clipSfxErr);
+            }
+        }
     }
 
     if (audioTrackPaths.length === 0) {

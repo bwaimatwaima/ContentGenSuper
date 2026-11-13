@@ -19,6 +19,7 @@ export interface SubtitleCue {
 }
 
 import type { SubtitlePlacement } from '../../src/smart-caption-placement';
+export type { SubtitlePlacement };
 
 export interface TimelineClipProp {
   id: string;
@@ -34,10 +35,23 @@ export interface TimelineClipProp {
   hasImage?: boolean;
   imageUrl?: string;
   videoUrl?: string;
+  talkingHeadVideoUrl?: string;
+  secondaryImageUrl?: string;
+  secondaryVideoUrl?: string;
+  backgroundPlateUrl?: string;
+  elements?: any[];
+  deviceTag?: any;
   audioUrl?: string;
   sfxUrl?: string;
+  colorFilter?: string;
+  colorFilterIntensity?: number;
+  talkingHeadRole?: 'primary' | 'secondary';
   talkingHeadMode?: 'full' | 'pip-br' | 'pip-bl' | 'pip-tr' | 'pip-tl' | 'split' | 'none';
   talkingHeadShape?: 'circle' | 'rounded' | 'square';
+  talkingHeadSize?: 'small' | 'medium' | 'large';
+  talkingHeadBorderColor?: string;
+  talkingHeadBorderWidth?: number;
+  talkingHeadShadow?: boolean;
   displayMode?: 'fullscreen' | 'pip_overlay';
   pipPosition?: 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center_left' | 'center_right' | 'custom' | string;
   pipX?: number;
@@ -157,5 +171,9 @@ export interface StoryboardVideoProps {
   patternInterrupts?: any[];
   timelineHasAudioMixdown?: boolean;
   cinematicLetterbox?: boolean;
+  enableBackgroundBlur?: boolean;
+  talkingHeadBorderColor?: string;
+  talkingHeadBorderWidth?: number;
+  talkingHeadShadow?: boolean;
   audioReactive?: any;
 }

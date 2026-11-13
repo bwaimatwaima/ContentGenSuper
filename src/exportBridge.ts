@@ -171,6 +171,22 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
   state.aspectRatio = payload.aspectRatio as any;
   state.activeFilterName = payload.activeFilterName || 'none';
   state.cinematicVignette = Boolean(payload.cinematicVignette);
+  state.cinematicLetterbox = Boolean(payload.cinematicLetterbox);
+  state.enableBackgroundBlur = payload.enableBackgroundBlur !== false;
+  state.enableParallaxEffect = payload.enableParallaxEffect !== false;
+  state.cameraShakeHandheld = Boolean(payload.cameraShakeHandheld);
+  if (typeof payload.cameraMotionIntensity === 'number') {
+    state.cameraMotionIntensity = payload.cameraMotionIntensity;
+  }
+  if (payload.talkingHeadBorderColor) {
+    state.talkingHeadBorderColor = payload.talkingHeadBorderColor;
+  }
+  if (typeof payload.talkingHeadBorderWidth === 'number') {
+    state.talkingHeadBorderWidth = payload.talkingHeadBorderWidth;
+  }
+  if (typeof payload.talkingHeadShadow === 'boolean') {
+    state.talkingHeadShadow = payload.talkingHeadShadow;
+  }
   state.uiTextOverlays = Array.isArray(payload.uiTextOverlays) ? payload.uiTextOverlays : [];
   state.motionGraphicsEnabled = Boolean(payload.motionGraphicsEnabled);
   state.overlayIntensity = (payload.overlayIntensity as any) || 'medium';
@@ -188,7 +204,9 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
     timelineState.setVideoSubtitleSizeScale(payload.videoSubtitleFontSize / 54);
   }
   state.videoSubtitleColors = (payload.videoSubtitleColors && typeof payload.videoSubtitleColors === 'object') ? payload.videoSubtitleColors : {};
-  state.smartCaptionPlacementEnabled = Boolean(payload.clips?.some((c) => c.subtitlePlacement));
+  state.smartCaptionPlacementEnabled = typeof payload.smartCaptionPlacementEnabled === 'boolean'
+    ? payload.smartCaptionPlacementEnabled
+    : Boolean(payload.clips?.some((c) => c.subtitlePlacement));
   timelineState.setVideoTransitionStyle(payload.videoTransitionStyle || 'narrative_guided');
   timelineState.setVideoEffects(payload.videoEffects || {});
   timelineState.setGlobalSilences(payload.globalSilences || null);
@@ -273,6 +291,12 @@ async function init(rawPayload: any): Promise<{ width: number; height: number }>
         fadeIn: c.fadeIn,
         fadeOut: c.fadeOut,
         useOriginalAudio: c.useOriginalAudio,
+        soloAudio: Boolean(c.soloAudio),
+        muteNarration: Boolean(c.muteNarration),
+        hideSubtitles: Boolean(c.hideSubtitles),
+        colorFilter: c.colorFilter,
+        colorFilterIntensity: c.colorFilterIntensity,
+        isVillainShot: c.isVillainShot,
         rotate: c.rotate,
         focalPoint: c.focalPoint,
         playbackRate: c.playbackRate ?? 1,

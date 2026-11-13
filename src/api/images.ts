@@ -132,6 +132,7 @@ const IMAGE_MODEL_FALLBACKS: Record<string, string> = {
     'gemini-3-pro-image': 'gemini-nano-banana-2.1',
     'gemini-nano-banana-2.1': 'gemini-3.1-flash-lite-image',
     'gemini-3.1-flash-image': 'gemini-3.1-flash-lite-image',
+    'gemini-3-flash-image': 'gemini-3.1-flash-lite-image',
     'gemini-3.1-flash-lite-image': ''
 };
 
@@ -181,7 +182,7 @@ async function runImageGeneration(
     }
 
     const apiKey = getApiKey();
-    let finalModel = model || 'gemini-3.1-flash-lite-image';
+    let finalModel = (model || 'gemini-3.1-flash-lite-image').trim().replace(/^models\//i, '');
     if ((auth.provider === 'vertex' || auth.mode === 'adc') && !finalModel.startsWith('imagen-') && (finalModel.includes('flash-lite') || finalModel === 'gemini-3.1-flash-lite-image')) {
         finalModel = 'gemini-nano-banana-2.1';
     }
@@ -427,6 +428,10 @@ async function runImageGeneration(
                 }
             }
             
+            if (/404|not found|not_found|does not have access/i.test(errorMsg)) {
+                return { engine: 'google', error: errorMsg };
+            }
+
             if (error.message?.includes('api key not valid') ||
                 error.message?.includes('unauthorized') ||
                 error.message?.includes('forbidden') ||
@@ -607,7 +612,7 @@ export async function generateImageWithFallback(
     referenceImage?: { data: string, mimeType: string },
     maxRetries: number = 3
 ): Promise<{ base64?: string, mimeType?: string, engine: string, error?: any }> {
-    const finalModel = model || 'gemini-3.1-flash-lite-image';
+    const finalModel = (model || 'gemini-3.1-flash-lite-image').trim().replace(/^models\//i, '');
     const result = await runImageGeneration(prompt, aspectRatio, finalModel, referenceImage, maxRetries);
 
     if (result.error && !result.base64) {

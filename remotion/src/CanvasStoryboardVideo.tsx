@@ -52,6 +52,10 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
       url: c.imageUrl || c.videoUrl || c.url || '',
       imageUrl: c.imageUrl || (c.type === 'image' ? c.url : undefined),
       videoUrl: c.videoUrl || (c.type === 'video' ? c.url : undefined),
+      talkingHeadVideoUrl: c.talkingHeadVideoUrl,
+      secondaryImageUrl: c.secondaryImageUrl,
+      secondaryVideoUrl: c.secondaryVideoUrl,
+      backgroundPlateUrl: c.backgroundPlateUrl,
       hasVideo: Boolean(c.videoUrl || c.hasVideo || c.type === 'video'),
       hasImage: Boolean(c.imageUrl || c.hasImage || c.type === 'image'),
       type: c.type || (c.videoUrl ? 'video' : 'image'),
@@ -80,6 +84,13 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
       cornerCalloutCoords: c.cornerCalloutCoords,
       isPreMixedAudio: Boolean(c.isPreMixedAudio ?? isPreMixedAudio),
       hideSubtitles: Boolean(c.hideSubtitles),
+      colorFilter: c.colorFilter,
+      colorFilterIntensity: typeof c.colorFilterIntensity === 'number' ? c.colorFilterIntensity : undefined,
+      talkingHeadRole: c.talkingHeadRole,
+      talkingHeadSize: c.talkingHeadSize || raw?.talkingHeadSize,
+      talkingHeadBorderColor: c.talkingHeadBorderColor || raw?.talkingHeadBorderColor,
+      talkingHeadBorderWidth: typeof c.talkingHeadBorderWidth === 'number' ? c.talkingHeadBorderWidth : raw?.talkingHeadBorderWidth,
+      talkingHeadShadow: typeof c.talkingHeadShadow === 'boolean' ? c.talkingHeadShadow : raw?.talkingHeadShadow,
       isVillainShot: Boolean(c.isVillainShot || isVillainFoilClip(c)),
     };
   });
@@ -170,6 +181,10 @@ export const CanvasStoryboardVideo: React.FC<CanvasStoryboardVideoProps> = (prop
     patternInterrupts: Array.isArray(raw?.patternInterrupts) ? raw.patternInterrupts : [],
     timelineHasAudioMixdown: isPreMixedAudio,
     cinematicLetterbox: Boolean(raw?.cinematicLetterbox),
+    enableBackgroundBlur: raw?.enableBackgroundBlur !== false,
+    talkingHeadBorderColor: raw?.talkingHeadBorderColor,
+    talkingHeadBorderWidth: raw?.talkingHeadBorderWidth,
+    talkingHeadShadow: raw?.talkingHeadShadow,
     audioReactive: raw?.audioReactive,
   };
 

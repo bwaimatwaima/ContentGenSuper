@@ -166,10 +166,12 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
   }, [fontHandle, subtitleStyle, uiTextOverlays, clips, graphics]);
 
   const grain = videoEffects?.grain ?? 0;
-  const dust = videoEffects?.dustAndScratches ?? (videoEffects?.dustParticles ?? 0);
+  const dust = videoEffects?.dustAndScratches ?? 0;
+  const dustParticles = videoEffects?.dustParticles ?? 0;
   const dustSize = videoEffects?.dustParticlesSize ?? 0.5;
   const dustCount = videoEffects?.dustParticlesCount ?? 0.5;
   const vignette = videoEffects?.vignette ?? (videoEffects?.cinematicVignette ? 0.6 : 0);
+  const lightLeaks = videoEffects?.lightLeaks ?? 0;
   const sparkles = videoEffects?.sparkles ?? 0;
   const sparklesSize = videoEffects?.sparklesSize ?? 0.5;
   const sparklesCount = videoEffects?.sparklesCount ?? 0.5;
@@ -179,10 +181,19 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
   const snow = videoEffects?.snow ?? 0;
   const snowSize = videoEffects?.snowSize ?? 0.5;
   const snowCount = videoEffects?.snowCount ?? 0.5;
-  const hasFilmEffects = grain > 0 || dust > 0 || vignette > 0 || sparkles > 0 || rain > 0 || snow > 0;
+  const hasFilmEffects =
+    grain > 0 ||
+    dust > 0 ||
+    dustParticles > 0 ||
+    vignette > 0 ||
+    lightLeaks > 0 ||
+    sparkles > 0 ||
+    rain > 0 ||
+    snow > 0;
   const hasGlobalSubtitles = Boolean(subtitlesEnabled && subtitles && subtitles.length > 0);
 
-  const computedClips = clips.map((clip, idx) => {
+  const mainClipsOnly = clips.filter((c) => c.displayMode !== 'pip_overlay');
+  const computedMainClips = mainClipsOnly.map((clip, idx) => {
     const startSec = typeof clip.startTime === 'number' && Number.isFinite(clip.startTime) && clip.startTime >= 0 ? clip.startTime : 0;
     const endSec = Number.isFinite(clip.endTime) && clip.endTime > startSec
       ? clip.endTime
@@ -191,21 +202,37 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
     const fromFrame = Math.max(0, Math.round(startSec * fps));
     const toFrame = Math.max(fromFrame + 1, Math.round(endSec * fps));
     const baseDuration = Math.max(1, toFrame - fromFrame);
-    const nextClip = clips[idx + 1];
+    const nextClip = mainClipsOnly[idx + 1];
     const nextStartSec = nextClip && typeof nextClip.startTime === 'number' ? nextClip.startTime : endSec;
     const isContiguous = Boolean(nextClip && Math.abs(nextStartSec - endSec) <= 0.05);
-    const type = (idx === clips.length - 1 || !isContiguous) ? 'cut' : normalizeTransition(clip.transitionToNext);
+    const type = (idx === mainClipsOnly.length - 1 || !isContiguous) ? 'cut' : normalizeTransition(clip.transitionToNext);
     const d = type === 'cut' ? 0 : Math.min(Math.round((clip.transitionDuration || 0.35) * fps), baseDuration - 1);
     return { clip, idx, startSec, endSec, durSec, fromFrame, toFrame, baseDuration, type, d };
   });
 
+  const computedPipClips = clips
+    .filter((c) => c.displayMode === 'pip_overlay')
+    .map((clip, idx) => {
+      const startSec = typeof clip.startTime === 'number' && Number.isFinite(clip.startTime) && clip.startTime >= 0 ? clip.startTime : 0;
+      const endSec = Number.isFinite(clip.endTime) && clip.endTime > startSec
+        ? clip.endTime
+        : startSec + (typeof clip.duration === 'number' && Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration : 5);
+      const durSec = endSec - startSec;
+      const fromFrame = Math.max(0, Math.round(startSec * fps));
+      const toFrame = Math.max(fromFrame + 1, Math.round(endSec * fps));
+      const baseDuration = Math.max(1, toFrame - fromFrame);
+      return { clip, idx, startSec, endSec, durSec, fromFrame, toFrame, baseDuration, type: 'cut', d: 0 };
+    });
+
+  const computedClips = computedMainClips;
+
   return (
     <LetterboxContext.Provider value={Boolean(cinematicLetterbox)}>
       <AbsoluteFill style={{ backgroundColor: '#000000' }}>
-      {/* Overlapped incoming clips during transitions (with true moving media and continuous camera/subtitles) */}
-      {computedClips.map((item, idx) => {
+      {/* Overlapped incoming main-track clips during transitions (with true moving media and continuous camera/subtitles) */}
+      {computedMainClips.map((item, idx) => {
         if (idx === 0) return null;
-        const prev = computedClips[idx - 1];
+        const prev = computedMainClips[idx - 1];
         if (prev.type === 'cut' || prev.d <= 0) return null;
         const preRollFrom = prev.fromFrame + prev.baseDuration - prev.d;
         return (
@@ -223,9 +250,9 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
         );
       })}
 
-      {/* Main clip sequences for clips without an active incoming transition overlap */}
-      {computedClips.map((item, idx) => {
-        const previous = idx > 0 ? computedClips[idx - 1] : null;
+      {/* Main clip sequences for main-track clips without an active incoming transition overlap */}
+      {computedMainClips.map((item, idx) => {
+        const previous = idx > 0 ? computedMainClips[idx - 1] : null;
         const hasIncomingOverlap = idx > 0 && previous !== null && previous.type !== 'cut' && previous.d > 0;
 
         if (hasIncomingOverlap) {
@@ -252,7 +279,24 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
         );
       })}
 
-      {/* Cinematic Film Effects & Overlays Layer (Grain, Dust Particles, Vignette, Weather) — Under Letterbox & Subtitles */}
+      {/* Floating PiP B-Roll Card Overlay Track */}
+      {computedPipClips.map((item) => (
+        <Sequence
+          key={`pip_${item.clip.id || item.idx}_${item.idx}`}
+          from={item.fromFrame}
+          durationInFrames={item.baseDuration}
+        >
+          <ClipRenderer
+            clip={item.clip}
+            subtitlesEnabled={false}
+            subtitleStyle={subtitleStyle}
+            durationInFrames={item.baseDuration}
+            videoEffects={videoEffects}
+          />
+        </Sequence>
+      ))}
+
+      {/* Cinematic Film Effects & Overlays Layer (Grain, Dust Particles, Vignette, Light Leaks, Weather) — Under Letterbox & Subtitles */}
       {hasFilmEffects && (
         <FilmEffects
           grain={grain}
@@ -260,6 +304,7 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
           dustSize={dustSize}
           dustCount={dustCount}
           vignette={vignette}
+          lightLeaks={lightLeaks}
           sparkles={sparkles}
           sparklesSize={sparklesSize}
           sparklesCount={sparklesCount}
@@ -269,7 +314,7 @@ export const StoryboardVideo: React.FC<StoryboardVideoProps> = ({
           snow={snow}
           snowSize={snowSize}
           snowCount={snowCount}
-          dustParticles={dust}
+          dustParticles={dustParticles}
           dustParticlesSize={dustSize}
           dustParticlesCount={dustCount}
         />

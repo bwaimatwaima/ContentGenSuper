@@ -65,7 +65,11 @@ export interface CanonicalClipPayload {
   fadeOut?: number;
   useOriginalAudio?: boolean;
   soloAudio?: boolean;
+  muteNarration?: boolean;
   hideSubtitles?: boolean;
+  colorFilter?: string;
+  colorFilterIntensity?: number;
+  isVillainShot?: boolean;
   elements?: any[];
   backgroundPlateUrl?: string;
   deviceTag?: any;
@@ -107,6 +111,15 @@ export interface CanonicalExportPayload {
   videoEffects: Record<string, any>;
   activeFilterName: string;
   cinematicVignette: boolean;
+  cinematicLetterbox?: boolean;
+  smartCaptionPlacementEnabled?: boolean;
+  enableBackgroundBlur?: boolean;
+  enableParallaxEffect?: boolean;
+  cameraShakeHandheld?: boolean;
+  cameraMotionIntensity?: number;
+  talkingHeadBorderColor?: string;
+  talkingHeadBorderWidth?: number;
+  talkingHeadShadow?: boolean;
   uiTextOverlays: any[];
   globalSilences?: { start: number; end: number }[] | null;
   masterAudioUrl?: string;
@@ -303,7 +316,11 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       fadeOut: c.fadeOut,
       useOriginalAudio: Boolean(c.useOriginalAudio || c.soloAudio),
       soloAudio: Boolean(c.soloAudio),
+      muteNarration: Boolean(c.muteNarration),
       hideSubtitles: Boolean(c.hideSubtitles),
+      colorFilter: c.colorFilter,
+      colorFilterIntensity: typeof c.colorFilterIntensity === 'number' ? c.colorFilterIntensity : undefined,
+      isVillainShot: typeof c.isVillainShot === 'boolean' ? c.isVillainShot : undefined,
       elements: Array.isArray(c.elements) ? c.elements : [],
       backgroundPlateUrl,
       deviceTag: c.deviceTag,
@@ -360,6 +377,7 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
       dustAndScratches: p.videoEffects?.dustAndScratches || 0,
       vignette: p.videoEffects?.vignette || (p.cinematicVignette ? 0.6 : 0),
       colorFilter: p.videoEffects?.colorFilter || p.activeFilterName || 'none',
+      blendMode: p.videoEffects?.blendMode || 'normal',
       cinematicVignette: Boolean(p.cinematicVignette || p.videoEffects?.cinematicVignette),
       chromaticAberration: p.videoEffects?.chromaticAberration || 0,
       lightLeaks: p.videoEffects?.lightLeaks || 0,
@@ -373,6 +391,17 @@ export function buildCanonicalExportPayload(opts: BuildCanonicalPayloadOptions):
     },
     activeFilterName: p.activeFilterName || 'none',
     cinematicVignette: Boolean(p.cinematicVignette || p.videoEffects?.cinematicVignette),
+    cinematicLetterbox: Boolean(p.cinematicLetterbox),
+    smartCaptionPlacementEnabled: typeof p.smartCaptionPlacementEnabled === 'boolean'
+      ? p.smartCaptionPlacementEnabled
+      : Boolean(canonicalClips.some((c) => c.subtitlePlacement)),
+    enableBackgroundBlur: p.enableBackgroundBlur !== false,
+    enableParallaxEffect: p.enableParallaxEffect !== false,
+    cameraShakeHandheld: Boolean(p.cameraShakeHandheld),
+    cameraMotionIntensity: typeof p.cameraMotionIntensity === 'number' ? p.cameraMotionIntensity : 1.0,
+    talkingHeadBorderColor: typeof p.talkingHeadBorderColor === 'string' ? p.talkingHeadBorderColor : undefined,
+    talkingHeadBorderWidth: typeof p.talkingHeadBorderWidth === 'number' ? p.talkingHeadBorderWidth : undefined,
+    talkingHeadShadow: typeof p.talkingHeadShadow === 'boolean' ? p.talkingHeadShadow : undefined,
     uiTextOverlays: Array.isArray(p.uiTextOverlays) ? p.uiTextOverlays : (Array.isArray(p.textOverlays) ? p.textOverlays : []),
     globalSilences: Array.isArray(p.globalSilences) ? p.globalSilences : null,
     masterAudioUrl: normalizeUrl(p.masterAudioUrl || p.audioUrl, appBaseUrl),

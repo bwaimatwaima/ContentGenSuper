@@ -122,16 +122,20 @@ function toLoopback(url: string | undefined, appBaseUrl: string): string | undef
 
 /**
  * Builds the ExportProjectPayload that src/exportBridge.ts expects.
- * Normalizes asset URLs so headless Chromium requests them locally.
+ * Normalizes asset URLs so headless Chromium requests them locally, and strips
+ * audio URLs because cloudCanvasWorker muxes timeline audio via FFmpeg after
+ * Chromium finishes rendering video frames.
  */
-function buildBridgePayload(inputProps: any, width: number, height: number, fps: number, appBaseUrl: string) {
-    return buildCanonicalExportPayload({
+export function buildBridgePayload(inputProps: any, width: number, height: number, fps: number, appBaseUrl: string) {
+    const payload = buildCanonicalExportPayload({
         inputProps,
         width,
         height,
         fps,
         appBaseUrl,
     });
+    const { masterAudioUrl: _m, audioUrl: _a, backgroundMusicUrl: _b, ...videoOnlyPayload } = payload;
+    return videoOnlyPayload;
 }
 
 const MAX_CHUNKS = Math.max(1, Number(process.env.RENDER_CHUNK_COUNT) || 6);

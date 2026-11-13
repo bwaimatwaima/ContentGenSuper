@@ -716,17 +716,14 @@ export async function generateSpeech(
 
     const apiKey = getApiKey();
     const ai = createGoogleGenAIClient(apiKey);
-    
+
     await checkCredits(1, 'audio'); // Estimated cost for Gemini TTS
-    
-    const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash-lite-tts",
-        contents: [{ parts: [{ text: textForAudio }] }],
-        config: {
-            responseModalities: ['AUDIO'],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
-        }
-    });
+
+    const response = await generateTtsAudioContentWithFallback(
+        ai,
+        [{ parts: [{ text: textForAudio }] }],
+        voiceName
+    );
 
     if (response.usageMetadata && response.usageMetadata.totalTokenCount) {
         deductCredits(response.usageMetadata.totalTokenCount * CREDIT_COSTS.AUDIO_GENERATION_PER_TOKEN, 'audio').catch(console.error);
@@ -740,6 +737,43 @@ export async function generateSpeech(
     const words = await alignAudioWithWhisper(buffer, textToAlign, signal, onProgress);
     
     return { buffer, words };
+}
+
+const TTS_MODEL_FALLBACKS = [
+    'gemini-3.8-flash-lite-tts',
+    'gemini-3.8-flash-tts',
+    'gemini-2.5-flash-preview-tts',
+];
+
+async function generateTtsAudioContentWithFallback(
+    ai: ReturnType<typeof createGoogleGenAIClient>,
+    contents: any,
+    voiceName: string
+): Promise<any> {
+    let lastError: any = null;
+    for (let i = 0; i < TTS_MODEL_FALLBACKS.length; i++) {
+        const model = TTS_MODEL_FALLBACKS[i];
+        try {
+            return await ai.models.generateContent({
+                model,
+                contents,
+                config: {
+                    responseModalities: ['AUDIO'],
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+                }
+            });
+        } catch (err: any) {
+            lastError = err;
+            const msg = String(err?.message || err || '').toLowerCase();
+            const isRetryable = msg.includes('404') || msg.includes('not found') || msg.includes('not_found') ||
+                msg.includes('unavailable') || msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted');
+            if (!isRetryable || i === TTS_MODEL_FALLBACKS.length - 1) {
+                throw err;
+            }
+            console.warn(`[Gemini TTS] Model "${model}" unavailable (${msg.slice(0, 120)}). Falling back to "${TTS_MODEL_FALLBACKS[i + 1]}"...`);
+        }
+    }
+    throw lastError;
 }
 
 async function decodeTtsAudioPart(inlineData: { data?: string; mimeType?: string }, ctx: AudioContext): Promise<AudioBuffer> {
@@ -976,19 +1010,16 @@ export async function generateSfx(
         await checkCredits(1, 'audio');
         const apiKey = getApiKey();
         const ai = createGoogleGenAIClient(apiKey);
-        const response = await ai.models.generateContent({
-            model: "gemini-3.8-flash-lite-tts",
-            contents: [{ parts: [{ text: `[Sound effect: ${prompt}]` }] }],
-            config: {
-                responseModalities: ['AUDIO'],
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
-            }
-        });
-        
+        const response = await generateTtsAudioContentWithFallback(
+            ai,
+            [{ parts: [{ text: `[Sound effect: ${prompt}]` }] }],
+            'Puck'
+        );
+
         if (response.usageMetadata && response.usageMetadata.totalTokenCount) {
             deductCredits(response.usageMetadata.totalTokenCount * CREDIT_COSTS.AUDIO_GENERATION_PER_TOKEN, 'audio').catch(console.error);
         }
-        
+
         const audioPart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
         if (!audioPart?.inlineData?.data) throw new Error("Empty audio response from TTS.");
         return await decodeTtsAudioPart(audioPart.inlineData, utils.getAudioContext());

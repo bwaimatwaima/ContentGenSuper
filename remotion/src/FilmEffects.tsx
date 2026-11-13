@@ -7,6 +7,7 @@ export interface FilmEffectsProps {
   dustSize?: number;
   dustCount?: number;
   vignette?: number;
+  lightLeaks?: number;
   sparkles?: number;
   sparklesSize?: number;
   sparklesCount?: number;
@@ -27,6 +28,7 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
   dustSize = 0.5,
   dustCount = 0.5,
   vignette = 0.3,
+  lightLeaks = 0,
   sparkles = 0,
   sparklesSize = 0.5,
   sparklesCount = 0.5,
@@ -43,8 +45,10 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
   const frame = useCurrentFrame();
   const { durationInFrames, fps, width = 1920, height = 1080 } = useVideoConfig();
   const time = frame / fps;
+  const dimScale = Math.min(width, height) / 720;
+  const maxDimScale = Math.max(width, height) / 720;
 
-  // Procedural static/animated film dust specks
+  // Procedural static/animated film dust specks (celluloid dust & scratches)
   const filmDustList = useMemo(() => {
     const count = Math.max(2, Math.round(18 * (dustCount * 2)));
     const sizeMult = Math.max(0.2, dustSize * 2);
@@ -57,6 +61,43 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
       triggerFrame: Math.floor((i / count) * durationInFrames),
     }));
   }, [durationInFrames, dustCount, dustSize]);
+
+  // Atmospheric Bokeh Dust Motes (matching videoRenderer.ts:1116-1149)
+  const bokehDustList = useMemo(() => {
+    if (!dustParticles || dustParticles <= 0) return [];
+    const countMult = Math.max(0.1, dustParticlesCount) * 2;
+    const sizeMult = Math.max(0.1, dustParticlesSize) * 2;
+    const count = Math.max(4, Math.floor(60 * dustParticles * countMult));
+    return Array.from({ length: count }).map((_, i) => {
+      const seedX = Math.sin(i * 23.45 + 9.87) * 43758.54;
+      const seedY = Math.cos(i * 11.22 + 4.56) * 23421.12;
+      const x0 = seedX - Math.floor(seedX);
+      const y0 = seedY - Math.floor(seedY);
+      const riseSpeed = 0.03 + (i % 5) * 0.02;
+      const size = (3 + (i % 6) * 3) * dimScale * sizeMult;
+      const isGold = i % 2 === 0;
+      return { id: i, x0, y0, riseSpeed, size, isGold };
+    });
+  }, [dustParticles, dustParticlesCount, dustParticlesSize, dimScale]);
+
+  // Tilted Rain Streaks (matching videoRenderer.ts:1074-1114)
+  const rainList = useMemo(() => {
+    if (!rain || rain <= 0) return [];
+    const countMult = Math.max(0.1, rainCount) * 2;
+    const sizeMult = Math.max(0.1, rainSize) * 2;
+    const count = Math.max(8, Math.floor(150 * rain * countMult));
+    const dx = width * 0.08;
+    return Array.from({ length: count }).map((_, i) => {
+      const seedX = Math.sin(i * 17.11 + 3.14) * 43758.54;
+      const seedY = Math.cos(i * 9.23 + 1.23) * 23421.12;
+      const x0 = (seedX - Math.floor(seedX)) * (width + dx) - dx;
+      const y0 = seedY - Math.floor(seedY);
+      const speed = 1.6 + (i % 7) * 0.35;
+      const streakLen = (25 + (i % 10) * 6) * maxDimScale * sizeMult;
+      const strokeWidth = 1.2 * dimScale * Math.max(0.4, sizeMult * 0.8);
+      return { id: i, x0, y0, speed, streakLen, strokeWidth, sizeMult };
+    });
+  }, [rain, rainCount, rainSize, width, dimScale, maxDimScale]);
 
   // Magic sparkles particles
   const sparklesList = useMemo(() => {
@@ -95,6 +136,14 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
 
   // Non-repeating prime-stepped seed so 35mm grain never loops visibly
   const grainSeed = (Math.floor(frame) * 17 + 31) % 997;
+
+  // Anamorphic light leak wave matching videoRenderer.ts:996-1012
+  const leakSwell = lightLeaks > 0
+    ? Math.pow(Math.max(0, Math.sin(time * 0.95) * 0.65 + Math.cos(time * 0.42) * 0.35), 2.4)
+    : 0;
+  const leakAlpha = leakSwell > 0.02 ? Math.min(0.6, leakSwell * 0.28 * lightLeaks) : 0;
+  const leakXPct = 50 + 45 * Math.sin(time * 0.37);
+  const leakYPct = 50 + 40 * Math.cos(time * 0.29);
 
   return (
     <AbsoluteFill style={{ pointerEvents: 'none', zIndex: 40, overflow: 'hidden' }}>
@@ -135,6 +184,16 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
         />
       )}
 
+      {/* Anamorphic Light Leaks */}
+      {leakAlpha > 0 && (
+        <AbsoluteFill
+          style={{
+            mixBlendMode: 'screen',
+            background: `radial-gradient(circle at ${leakXPct}% ${leakYPct}%, rgba(255, 175, 75, ${leakAlpha}) 0%, rgba(255, 65, 15, ${leakAlpha * 0.55}) 45%, rgba(0, 0, 0, 0) 85%)`,
+          }}
+        />
+      )}
+
       {/* Film Dust & Scratches Layer */}
       {dust > 0 &&
         filmDustList.map((particle) => {
@@ -157,6 +216,86 @@ export const FilmEffects: React.FC<FilmEffectsProps> = ({
                 borderRadius: '50%',
                 opacity: particle.opacity * dust,
                 boxShadow: '0 0 2px rgba(255, 255, 255, 0.4)',
+              }}
+            />
+          );
+        })}
+
+      {/* Tilted Rain Streaks + Ground Splashes */}
+      {rain > 0 && rainList.length > 0 && (
+        <svg
+          width={width}
+          height={height}
+          viewBox={`0 0 ${width} ${height}`}
+          style={{ position: 'absolute', inset: 0, mixBlendMode: 'screen', pointerEvents: 'none' }}
+        >
+          {rainList.map((rn) => {
+            const dx = width * 0.08;
+            const progress = ((rn.y0 + time * rn.speed) % 1.2) - 0.1;
+            const curY = progress * height;
+            const curX = rn.x0 + progress * dx;
+            const alpha = Math.min(1, Math.max(0, (0.1 + progress * 0.8) * (1 - (progress - 0.9) * 10))) * rain * 0.65;
+            if (alpha <= 0) return null;
+            const x2 = curX - dx * (rn.streakLen / height);
+            const y2 = curY - rn.streakLen;
+            const hasSplash = progress > 0.85 && rn.id % 3 === 0;
+            const splashAlpha = hasSplash ? Math.min(1, (progress - 0.85) * 6 * alpha) : 0;
+
+            return (
+              <g key={`rn_${rn.id}`}>
+                <line
+                  x1={curX}
+                  y1={curY}
+                  x2={x2}
+                  y2={y2}
+                  stroke={`rgba(220, 240, 255, ${alpha})`}
+                  strokeWidth={rn.strokeWidth}
+                  strokeLinecap="round"
+                />
+                {hasSplash && splashAlpha > 0 && (
+                  <ellipse
+                    cx={curX}
+                    cy={curY}
+                    rx={3 * dimScale * rn.sizeMult}
+                    ry={1 * dimScale * rn.sizeMult}
+                    fill="none"
+                    stroke={`rgba(255, 255, 255, ${splashAlpha})`}
+                    strokeWidth={Math.max(0.75, rn.strokeWidth * 0.8)}
+                  />
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Golden / Cool Bokeh Dust Motes */}
+      {dustParticles > 0 &&
+        bokehDustList.map((dp) => {
+          const rawProgress = (dp.y0 - time * dp.riseSpeed) % 1.1;
+          const progress = rawProgress < 0 ? rawProgress + 1.1 : rawProgress;
+          const curY = progress * height;
+          const driftX = Math.sin(time * 0.4 + dp.id * 1.5) * 25 * dimScale;
+          const curX = ((dp.x0 * width) + driftX + width) % width;
+          const pulse = 0.5 + 0.5 * Math.sin(time * 1.5 + dp.id * 2.3);
+          const alpha = Math.min(1, (0.2 + pulse * 0.4) * dustParticles);
+          const diam = dp.size * 4;
+          const rgb = dp.isGold ? '255, 215, 130' : '230, 240, 255';
+
+          return (
+            <div
+              key={`dp_${dp.id}`}
+              style={{
+                position: 'absolute',
+                left: curX,
+                top: curY,
+                width: diam,
+                height: diam,
+                transform: 'translate(-50%, -50%)',
+                borderRadius: '50%',
+                opacity: alpha,
+                mixBlendMode: 'screen',
+                background: `radial-gradient(circle, rgba(${rgb}, 1) 0%, rgba(${rgb}, 0.4) 50%, rgba(${rgb}, 0) 100%)`,
               }}
             />
           );

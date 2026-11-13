@@ -19,6 +19,7 @@ import { ensureDepth, depthToPngDataUrl } from '../parallax/depth';
 import { mediaAspectOf } from '../pip-layout';
 import { buildAudioReactivePayload } from './audio-reactive-payload';
 import { validateBeforeExport } from '../timing/timeline-timing';
+import { isVillainFoilClip } from '../constants';
 
 
 const ASSET_CACHE_STORAGE_KEY = 'contentgen_asset_upload_cache_v6';
@@ -868,6 +869,11 @@ export async function handleCloudRenderExport() {
                         videoStartOffset: typeof c.videoStartOffset === 'number' ? c.videoStartOffset : 0,
                         useOriginalAudio: Boolean(c.useOriginalAudio || (c as any).soloAudio),
                         soloAudio: Boolean((c as any).soloAudio),
+                        muteNarration: Boolean((c as any).muteNarration),
+                        hideSubtitles: Boolean(c.hideSubtitles),
+                        colorFilter: (c as any).colorFilter,
+                        colorFilterIntensity: typeof (c as any).colorFilterIntensity === 'number' ? (c as any).colorFilterIntensity : undefined,
+                        isVillainShot: Boolean((c as any).isVillainShot || isVillainFoilClip(c)),
                         isPreMixedAudio: false,
                         elements: Array.isArray(c.elements) ? c.elements : [],
                         backgroundPlateUrl,
@@ -1038,6 +1044,7 @@ export async function handleCloudRenderExport() {
                     vibrance: timelineState.videoEffects?.vibrance || 0,
                     sharpening: timelineState.videoEffects?.sharpening || 0,
                     colorFilter: timelineState.videoEffects?.colorFilter || state.activeFilterName || 'none',
+                    blendMode: timelineState.videoEffects?.blendMode || 'normal',
                     cinematicVignette: Boolean(state.cinematicVignette),
                     chromaticAberration: timelineState.videoEffects?.chromaticAberration || 0,
                     lightLeaks: timelineState.videoEffects?.lightLeaks || 0,
@@ -1053,6 +1060,14 @@ export async function handleCloudRenderExport() {
                 },
                 cinematicVignette: Boolean(state.cinematicVignette),
                 cinematicLetterbox: Boolean(state.cinematicLetterbox),
+                smartCaptionPlacementEnabled: Boolean(state.smartCaptionPlacementEnabled),
+                enableBackgroundBlur: state.enableBackgroundBlur !== false,
+                enableParallaxEffect: state.enableParallaxEffect !== false,
+                cameraShakeHandheld: Boolean(state.cameraShakeHandheld),
+                cameraMotionIntensity: state.cameraMotionIntensity ?? 1.0,
+                talkingHeadBorderColor: state.talkingHeadBorderColor,
+                talkingHeadBorderWidth: state.talkingHeadBorderWidth,
+                talkingHeadShadow: state.talkingHeadShadow,
                 audioReactive: buildAudioReactivePayload(
                     Array.isArray((timelineState as any).graphics) ? (timelineState as any).graphics : (Array.isArray((timelineState as any)._graphics) ? (timelineState as any)._graphics : []),
                     fps,

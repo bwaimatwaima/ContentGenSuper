@@ -8,19 +8,18 @@ import { GoogleGenAI } from '@google/genai';
 const router = express.Router();
 
 export function toVertexModel(model?: string): string {
-    const raw = (model || '').trim().replace(/[^a-zA-Z0-9._-]/g, "");
+    const raw = (model || '').trim().replace(/^models\//i, '').replace(/[^a-zA-Z0-9._-]/g, "");
     if (!raw) return 'gemini-4-hydrogen';
     if (
         raw === 'gemini-3.8-flash' || raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' ||
         raw === 'gemini-3.7' || raw === 'gemini-3.5' ||
-        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash'
+        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash' ||
+        raw === 'gemini-flash-latest' || raw === 'gemini-flash'
     ) {
         return 'gemini-4-hydrogen';
     }
-    // AI Studio models and aliases must be mapped to valid Vertex AI foundation models
     if (
         raw === 'gemini-4-hydrogen' || raw === 'gemini-4-argon' || raw === 'gemini-4-carbon' ||
-        raw === 'gemini-flash-latest' || raw === 'gemini-flash' ||
         raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite'
     ) {
         return raw;
@@ -45,11 +44,28 @@ export const getVertexHost = (location: string) =>
 
 export const VERTEX_FALLBACK_TIERS = [
     'gemini-4-hydrogen',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
     'gemini-4-argon',
-    'gemini-4-carbon'
+    'gemini-4-carbon',
+    'gemini-3.1-flash-lite',
+    'gemini-3-flash-preview'
 ];
+
+export function sanitizeVertexConfigForModel(model: string, config?: any): any {
+    if (!config || typeof config !== 'object') return config;
+    const copy = { ...config };
+    if (model.toLowerCase().replace(/^models\//i, '').startsWith('gemini-4-')) {
+        delete copy.temperature;
+        delete copy.topP;
+        delete copy.topK;
+        delete copy.candidateCount;
+        if (copy.thinkingConfig && 'thinkingBudget' in copy.thinkingConfig) {
+            copy.thinkingConfig = { ...copy.thinkingConfig };
+            delete copy.thinkingConfig.thinkingBudget;
+            if (Object.keys(copy.thinkingConfig).length === 0) delete copy.thinkingConfig;
+        }
+    }
+    return copy;
+}
 
 export function normalizeVertexContents(contents: any): any {
     if (typeof contents === 'string') {
@@ -88,7 +104,7 @@ export async function generateVertexContent(
 ) {
     const primaryModel = toVertexModel(requestedModel);
     const normalizedContents = normalizeVertexContents(contents);
-    
+
     const candidateModels = [
         primaryModel,
         ...VERTEX_FALLBACK_TIERS.filter(m => m !== primaryModel)
@@ -97,48 +113,57 @@ export async function generateVertexContent(
     let lastError: any = null;
     for (let i = 0; i < candidateModels.length; i++) {
         const currentModel = candidateModels[i];
-        try {
-            let ai: GoogleGenAI;
-            const project = ('project' in aiOrConfig) ? aiOrConfig.project : fallbackContext?.project;
-            const baseLocation = ('location' in aiOrConfig && aiOrConfig.location) ? aiOrConfig.location : (fallbackContext?.location || 'us-central1');
+        const sanitizedCfg = sanitizeVertexConfigForModel(currentModel, config);
+        const project = ('project' in aiOrConfig) ? aiOrConfig.project : fallbackContext?.project;
+        const baseLocation = ('location' in aiOrConfig && aiOrConfig.location) ? aiOrConfig.location : (fallbackContext?.location || 'us-central1');
+        const initialLoc = pickLocation(currentModel, baseLocation);
+        const locationsToTry = project && initialLoc !== 'global' ? [initialLoc, 'global'] : [initialLoc];
 
-            if (project) {
-                const targetLoc = pickLocation(currentModel, baseLocation);
-                ai = new GoogleGenAI({
-                    vertexai: true,
-                    project,
-                    location: targetLoc
+        for (let locIdx = 0; locIdx < locationsToTry.length; locIdx++) {
+            const targetLoc = locationsToTry[locIdx];
+            try {
+                let ai: GoogleGenAI;
+                if (project) {
+                    ai = new GoogleGenAI({
+                        vertexai: true,
+                        project,
+                        location: targetLoc
+                    });
+                } else {
+                    ai = aiOrConfig as GoogleGenAI;
+                }
+
+                return await ai.models.generateContent({
+                    model: currentModel,
+                    contents: normalizedContents,
+                    config: sanitizedCfg && Object.keys(sanitizedCfg).length > 0 ? sanitizedCfg : undefined
                 });
-            } else {
-                ai = aiOrConfig as GoogleGenAI;
-            }
+            } catch (err: any) {
+                lastError = err;
+                const msg = (err?.message || '').toLowerCase();
 
-            return await ai.models.generateContent({
-                model: currentModel,
-                contents: normalizedContents,
-                config: config && Object.keys(config).length > 0 ? config : undefined
-            });
-        } catch (err: any) {
-            lastError = err;
-            const msg = (err?.message || '').toLowerCase();
-            
-            // If the GCP Service Account lacks IAM permission 'aiplatform.endpoints.predict' on the project,
-            // trying other models will always fail with the same IAM error. Stop immediately.
-            const isIamPermissionDenied = (msg.includes('permission') && msg.includes('denied')) || msg.includes('iam_permission_denied') || msg.includes('aiplatform.endpoints.predict');
-            if (isIamPermissionDenied) {
+                const isIamPermissionDenied = (msg.includes('permission') && msg.includes('denied')) || msg.includes('iam_permission_denied') || msg.includes('aiplatform.endpoints.predict');
+                if (isIamPermissionDenied) {
+                    throw err;
+                }
+
+                const isModelNotFound = msg.includes('not found') || msg.includes('404') || msg.includes('not_found') || msg.includes('may not exist');
+                const isRetryable = isModelNotFound || msg.includes('quota') || msg.includes('429');
+
+                const hasMoreLocations = isModelNotFound && locIdx < locationsToTry.length - 1;
+                if (hasMoreLocations) {
+                    console.log(`[Vertex AI] Model "${currentModel}" not found in "${targetLoc}". Retrying in "global"...`);
+                    continue;
+                }
+
+                const isLastModel = i === candidateModels.length - 1;
+                if (!isLastModel && isRetryable) {
+                    const nextModel = candidateModels[i + 1];
+                    console.log(`[Vertex AI] Model "${currentModel}" unavailable. Cascading fallback to "${nextModel}"...`);
+                    break;
+                }
                 throw err;
             }
-
-            const isModelNotFound = msg.includes('not found') || msg.includes('404') || msg.includes('not_found') || msg.includes('may not exist');
-            const isRetryable = isModelNotFound || msg.includes('quota') || msg.includes('429');
-            
-            const isLast = i === candidateModels.length - 1;
-            if (!isLast && isRetryable) {
-                const nextModel = candidateModels[i + 1];
-                console.log(`[Vertex AI] Model "${currentModel}" unavailable. Cascading fallback to "${nextModel}"...`);
-                continue;
-            }
-            throw err;
         }
     }
     throw lastError;
@@ -212,44 +237,70 @@ router.post('/generate', async (req, res) => {
             }
         }
 
-        // If an API key is provided, invoke the Vertex AI REST endpoint with the API key
+        // If an API key is provided, invoke the Vertex AI REST endpoint with regional->global + model fallback
         if (apiKey) {
-            const endpoint = `https://${host}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-            const payload: any = { contents: vertexContents };
-            if (systemInstruction && !isNoDevInstructionModel) {
-                payload.systemInstruction = { parts: [{ text: systemInstruction }] };
-            }
-            if (Object.keys(gc).length > 0) {
-                payload.generationConfig = gc;
+            const candidateModels = [model, ...VERTEX_FALLBACK_TIERS.filter(m => m !== model)];
+            let lastStatus = 500;
+            let lastErrMessage = 'Vertex AI API request failed';
+            let lastErrCode = 'VERTEX_ERROR';
+
+            for (const candidateModel of candidateModels) {
+                const initialLoc = pickLocation(candidateModel, baseLocation);
+                const locsToTry = initialLoc === 'global' ? ['global'] : [initialLoc, 'global'];
+                const modelGc = sanitizeVertexConfigForModel(candidateModel, gc);
+
+                for (let locIdx = 0; locIdx < locsToTry.length; locIdx++) {
+                    const loc = locsToTry[locIdx];
+                    const targetHost = getVertexHost(loc);
+                    const endpoint = `https://${targetHost}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(loc)}/publishers/google/models/${encodeURIComponent(candidateModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+                    const payload: any = { contents: vertexContents };
+                    if (systemInstruction && !isNoDevInstructionModel) {
+                        payload.systemInstruction = { parts: [{ text: systemInstruction }] };
+                    }
+                    if (modelGc && Object.keys(modelGc).length > 0) {
+                        payload.generationConfig = modelGc;
+                    }
+
+                    const restRes = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-goog-api-key': apiKey
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (restRes.ok) {
+                        const data = await restRes.json();
+                        const firstPart = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                        return res.json({
+                            text: firstPart,
+                            candidates: data.candidates,
+                            usageMetadata: data.usageMetadata,
+                            promptFeedback: data.promptFeedback
+                        });
+                    }
+
+                    const errData = await restRes.json().catch(() => ({}));
+                    lastStatus = restRes.status;
+                    lastErrMessage = errData?.error?.message || restRes.statusText || 'Vertex AI API request failed';
+                    lastErrCode = errData?.error?.status || `HTTP_${restRes.status}`;
+
+                    const isRetryableRest = restRes.status === 404 || restRes.status === 429 || restRes.status === 503;
+                    if (restRes.status === 404 && locIdx < locsToTry.length - 1) {
+                        console.warn(`[Vertex REST] ${candidateModel} returned 404 in ${loc}; retrying global...`);
+                        continue;
+                    }
+                    if (!isRetryableRest) {
+                        console.error('[Vertex REST] Generation error:', restRes.status, lastErrMessage);
+                        return res.status(restRes.status).json({ error: lastErrMessage, code: lastErrCode });
+                    }
+                    break;
+                }
             }
 
-            const restRes = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': apiKey
-                },
-                body: JSON.stringify(payload)
-            });
-
-            if (!restRes.ok) {
-                const errData = await restRes.json().catch(() => ({}));
-                const errMessage = errData?.error?.message || restRes.statusText || 'Vertex AI API request failed';
-                console.error('[Vertex REST] Generation error:', restRes.status, errMessage);
-                return res.status(restRes.status).json({
-                    error: errMessage,
-                    code: errData?.error?.status || `HTTP_${restRes.status}`
-                });
-            }
-
-            const data = await restRes.json();
-            const firstPart = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-            return res.json({
-                text: firstPart,
-                candidates: data.candidates,
-                usageMetadata: data.usageMetadata,
-                promptFeedback: data.promptFeedback
-            });
+            console.error('[Vertex REST] Exhausted fallback models:', lastStatus, lastErrMessage);
+            return res.status(lastStatus).json({ error: lastErrMessage, code: lastErrCode });
         }
 
         // ADC Mode via @google/genai SDK
@@ -312,149 +363,169 @@ router.post('/generate-image', async (req, res) => {
             let lastRestError = '';
             for (const model of modelsToTry) {
                 const isGemini = model.includes('gemini');
-                const location = pickLocation(model, baseLocation);
-                const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
+                const initialLoc = pickLocation(model, baseLocation);
+                const locsToTry = initialLoc === 'global' ? ['global'] : [initialLoc, 'global'];
 
-                try {
-                    if (isGemini) {
-                        const endpoint = `https://${host}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-                        const parts: any[] = [{ text: prompt }];
-                        if (referenceImage?.data) {
-                            parts.unshift({ inlineData: referenceImage });
-                        }
-                        const restRes = await fetch(endpoint, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{ role: 'user', parts }],
-                                generationConfig: {
-                                    responseModalities: ['IMAGE', 'TEXT'],
-                                    ...(aspectRatio ? { imageConfig: { aspectRatio } } : {})
-                                }
-                            })
-                        });
+                for (let locIdx = 0; locIdx < locsToTry.length; locIdx++) {
+                    const location = locsToTry[locIdx];
+                    const host = getVertexHost(location);
 
-                        if (restRes.ok) {
-                            const data = await restRes.json();
-                            const partsList = data.candidates?.[0]?.content?.parts || [];
-                            const imgPart = partsList.find((p: any) => p.inlineData?.data);
-                            if (imgPart?.inlineData?.data) {
-                                return res.json({
-                                    base64: imgPart.inlineData.data,
-                                    mimeType: imgPart.inlineData.mimeType || 'image/jpeg',
-                                    engine: 'vertex-gemini'
-                                });
+                    try {
+                        if (isGemini) {
+                            const endpoint = `https://${host}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+                            const parts: any[] = [{ text: prompt }];
+                            if (referenceImage?.data) {
+                                parts.unshift({ inlineData: referenceImage });
                             }
-                        }
-                        const errData = await restRes.json().catch(() => ({}));
-                        lastRestError = errData?.error?.message || restRes.statusText || `Vertex Gemini Image failed on model ${model}`;
-                    } else {
-                        const endpoint = `https://${host}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(apiKey)}`;
-                        const restRes = await fetch(endpoint, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'x-goog-api-key': apiKey
-                            },
-                            body: JSON.stringify({
-                                instances: [{ prompt }],
-                                parameters: {
-                                    sampleCount: 1,
-                                    aspectRatio: aspectRatio || '1:1',
-                                    outputOptions: { mimeType: 'image/jpeg' }
-                                }
-                            })
-                        });
+                            const restRes = await fetch(endpoint, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ role: 'user', parts }],
+                                    generationConfig: {
+                                        responseModalities: ['IMAGE', 'TEXT'],
+                                        ...(aspectRatio ? { imageConfig: { aspectRatio } } : {})
+                                    }
+                                })
+                            });
 
-                        if (restRes.ok) {
-                            const data = await restRes.json();
-                            const b64 = data.predictions?.[0]?.bytesBase64Encoded;
-                            if (b64) {
-                                return res.json({
-                                    base64: b64,
-                                    mimeType: 'image/jpeg',
-                                    engine: 'vertex-imagen'
-                                });
+                            if (restRes.ok) {
+                                const data = await restRes.json();
+                                const partsList = data.candidates?.[0]?.content?.parts || [];
+                                const imgPart = partsList.find((p: any) => p.inlineData?.data);
+                                if (imgPart?.inlineData?.data) {
+                                    return res.json({
+                                        base64: imgPart.inlineData.data,
+                                        mimeType: imgPart.inlineData.mimeType || 'image/jpeg',
+                                        engine: 'vertex-gemini'
+                                    });
+                                }
                             }
+                            const errData = await restRes.json().catch(() => ({}));
+                            lastRestError = errData?.error?.message || restRes.statusText || `Vertex Gemini Image failed on model ${model}`;
+                            if (restRes.status === 404 && locIdx < locsToTry.length - 1) continue;
+                            break;
+                        } else {
+                            const endpoint = `https://${host}/v1beta1/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(model)}:predict?key=${encodeURIComponent(apiKey)}`;
+                            const restRes = await fetch(endpoint, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'x-goog-api-key': apiKey
+                                },
+                                body: JSON.stringify({
+                                    instances: [{ prompt }],
+                                    parameters: {
+                                        sampleCount: 1,
+                                        aspectRatio: aspectRatio || '1:1',
+                                        outputOptions: { mimeType: 'image/jpeg' }
+                                    }
+                                })
+                            });
+
+                            if (restRes.ok) {
+                                const data = await restRes.json();
+                                const b64 = data.predictions?.[0]?.bytesBase64Encoded;
+                                if (b64) {
+                                    return res.json({
+                                        base64: b64,
+                                        mimeType: 'image/jpeg',
+                                        engine: 'vertex-imagen'
+                                    });
+                                }
+                            }
+                            const errData = await restRes.json().catch(() => ({}));
+                            lastRestError = errData?.error?.message || restRes.statusText || `Vertex Imagen failed on model ${model}`;
+                            if (restRes.status === 404 && locIdx < locsToTry.length - 1) continue;
+                            break;
                         }
-                        const errData = await restRes.json().catch(() => ({}));
-                        lastRestError = errData?.error?.message || restRes.statusText || `Vertex Imagen failed on model ${model}`;
+                    } catch (e: any) {
+                        lastRestError = e?.message || e;
                     }
-                } catch (e: any) {
-                    lastRestError = e?.message || e;
                 }
             }
             return res.status(500).json({ error: lastRestError || 'Vertex Image API request failed' });
         }
 
-        // ADC Mode via @google/genai SDK with multi-model fallback
+        // ADC Mode via @google/genai SDK with regional->global + multi-model fallback
         let lastError: any = null;
         for (let i = 0; i < modelsToTry.length; i++) {
             const model = modelsToTry[i];
             const isGemini = model.includes('gemini');
-            const location = pickLocation(model, baseLocation);
+            const initialLoc = pickLocation(model, baseLocation);
+            const locsToTry = initialLoc === 'global' ? ['global'] : [initialLoc, 'global'];
 
-            try {
-                const ai = new GoogleGenAI({
-                    vertexai: true,
-                    project,
-                    location
-                });
-
-                if (isGemini) {
-                    const parts: any[] = [{ text: prompt }];
-                    if (referenceImage?.data) {
-                        parts.unshift({ inlineData: referenceImage });
-                    }
-                    const config: any = {
-                        responseModalities: ['IMAGE', 'TEXT']
-                    };
-                    if (aspectRatio) {
-                        config.imageConfig = { aspectRatio };
-                    }
-                    if (model === 'gemini-nano-banana-2.1' || model === 'gemini-3.1-flash-image' || model === 'gemini-3-pro-image') {
-                        config.imageConfig = { ...(config.imageConfig || {}), imageSize: "1K" };
-                    }
-
-                    const response = await ai.models.generateContent({
-                        model,
-                        contents: [{ role: 'user', parts }],
-                        config
+            for (let locIdx = 0; locIdx < locsToTry.length; locIdx++) {
+                const location = locsToTry[locIdx];
+                try {
+                    const ai = new GoogleGenAI({
+                        vertexai: true,
+                        project,
+                        location
                     });
 
-                    const candidates = response.candidates || [];
-                    const imgPart = candidates[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
-                    if (imgPart?.inlineData?.data) {
-                        return res.json({
-                            base64: imgPart.inlineData.data,
-                            mimeType: imgPart.inlineData.mimeType || 'image/jpeg',
-                            engine: 'vertex-gemini'
-                        });
-                    }
-                } else {
-                    const response = await ai.models.generateImages({
-                        model,
-                        prompt,
-                        config: {
-                            numberOfImages: 1,
-                            outputMimeType: 'image/jpeg',
-                            aspectRatio: aspectRatio || '1:1'
+                    if (isGemini) {
+                        const parts: any[] = [{ text: prompt }];
+                        if (referenceImage?.data) {
+                            parts.unshift({ inlineData: referenceImage });
                         }
-                    });
+                        const config: any = {
+                            responseModalities: ['IMAGE', 'TEXT']
+                        };
+                        if (aspectRatio) {
+                            config.imageConfig = { aspectRatio };
+                        }
+                        if (model === 'gemini-nano-banana-2.1' || model === 'gemini-3.1-flash-image' || model === 'gemini-3-pro-image') {
+                            config.imageConfig = { ...(config.imageConfig || {}), imageSize: "1K" };
+                        }
 
-                    const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-                    if (imageBytes) {
-                        return res.json({
-                            base64: imageBytes,
-                            mimeType: 'image/jpeg',
-                            engine: 'vertex-imagen'
+                        const response = await ai.models.generateContent({
+                            model,
+                            contents: [{ role: 'user', parts }],
+                            config
                         });
+
+                        const candidates = response.candidates || [];
+                        const imgPart = candidates[0]?.content?.parts?.find((p: any) => p.inlineData?.data);
+                        if (imgPart?.inlineData?.data) {
+                            return res.json({
+                                base64: imgPart.inlineData.data,
+                                mimeType: imgPart.inlineData.mimeType || 'image/jpeg',
+                                engine: 'vertex-gemini'
+                            });
+                        }
+                    } else {
+                        const response = await ai.models.generateImages({
+                            model,
+                            prompt,
+                            config: {
+                                numberOfImages: 1,
+                                outputMimeType: 'image/jpeg',
+                                aspectRatio: aspectRatio || '1:1'
+                            }
+                        });
+
+                        const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+                        if (imageBytes) {
+                            return res.json({
+                                base64: imageBytes,
+                                mimeType: 'image/jpeg',
+                                engine: 'vertex-imagen'
+                            });
+                        }
                     }
-                }
-            } catch (err: any) {
-                lastError = err;
-                if (i < modelsToTry.length - 1) {
-                    console.warn(`[Vertex Image] Model ${model} in ${location} failed, trying next candidate. Error:`, err?.message || err);
+                } catch (err: any) {
+                    lastError = err;
+                    const errMsg = String(err?.message || err || '');
+                    const isNotFound = /not found|NOT_FOUND|404/i.test(errMsg);
+                    if (isNotFound && locIdx < locsToTry.length - 1) {
+                        console.warn(`[Vertex Image] Model ${model} not found in ${location}, retrying global...`);
+                        continue;
+                    }
+                    if (i < modelsToTry.length - 1) {
+                        console.warn(`[Vertex Image] Model ${model} in ${location} failed, trying next candidate. Error:`, errMsg);
+                    }
+                    break;
                 }
             }
         }
@@ -619,7 +690,7 @@ export async function handleVertexTest(req: any, res: any) {
             errorMsg = `Permission 'aiplatform.endpoints.predict' denied on Google Cloud project "${projName}". In Google Cloud Console (IAM & Admin > IAM), grant the "Vertex AI User" (roles/aiplatform.user) role to your service account, or switch Vertex Auth Mode to "API Key" and supply a Google Cloud API Key with Vertex AI API enabled.`;
             code = 'PERMISSION_DENIED';
         } else if (/not found|NOT_FOUND|404|may not exist/i.test(errorMsg)) {
-            errorMsg = `Vertex AI model or endpoint not found in this region. Standard Vertex foundation models are "gemini-4-hydrogen", "gemini-flash-latest", or "gemini-3.1-flash-lite".`;
+            errorMsg = `Vertex AI model or endpoint not found in this region. Standard Vertex foundation models are "gemini-4-hydrogen", "gemini-4-argon", or "gemini-3.1-flash-lite".`;
             code = 'NOT_FOUND';
         }
 

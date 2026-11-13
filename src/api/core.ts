@@ -306,15 +306,16 @@ export function createGoogleGenAIClient(apiKeyOverride?: string): GoogleGenAI {
         throw new Error('No Gemini API key available.');
     }
 
-    // If configured to use Vertex AI
-    if (auth.provider === 'vertex' && auth.vertexProjectId) {
+    // If configured to use Vertex AI (with explicit project or ADC default project on server)
+    if (auth.provider === 'vertex' && (auth.vertexProjectId || auth.vertexAuthMode === 'adc')) {
         return new GoogleGenAI({
             apiKey: auth.apiKey || 'dummy_key_for_vertex_mode',
             httpOptions: {
                 baseUrl: `${window.location.origin}/api/genai`,
                 headers: {
-                    'x-vertex-project': auth.vertexProjectId,
+                    'x-vertex-project': auth.vertexProjectId || 'default',
                     'x-vertex-location': auth.vertexLocation || 'us-central1',
+                    ...(auth.vertexAuthMode === 'adc' ? { 'x-vertex-auth-mode': 'adc' } : {}),
                     ...(auth.apiKey ? { 'x-goog-api-key': auth.apiKey } : {})
                 }
             }
@@ -506,18 +507,18 @@ export async function callGeminiWithRetries(
 }
 
 export function toVertexModelName(modelName?: string): string {
-    const raw = (modelName || '').trim().replace(/[^a-zA-Z0-9._-]/g, "");
+    const raw = (modelName || '').trim().replace(/^models\//i, '').replace(/[^a-zA-Z0-9._-]/g, "");
     if (!raw) return PRIMARY_MODEL;
     if (
         raw === 'gemini-3.8-flash' || raw === 'gemini-3.7-flash' || raw === 'gemini-3.5-flash' ||
         raw === 'gemini-3.7' || raw === 'gemini-3.5' ||
-        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash'
+        raw === 'gemini-3.6-flash' || raw === 'gemini-2.5-flash' ||
+        raw === 'gemini-flash-latest' || raw === 'gemini-flash'
     ) {
         return PRIMARY_MODEL;
     }
     if (
         raw === 'gemini-4-hydrogen' || raw === 'gemini-4-argon' || raw === 'gemini-4-carbon' ||
-        raw === 'gemini-flash-latest' || raw === 'gemini-flash' ||
         raw === 'gemini-3-flash-preview' || raw === 'gemini-3.1-flash-lite'
     ) {
         return raw;
@@ -558,25 +559,27 @@ async function callVertexWithADC(params: {
         authMode: params.authMode || undefined
     };
 
-    // 1. Try local/Node backend server endpoint first (Desktop, Electron, dev server)
+    // 1. Try local/Node backend server endpoint first (Desktop, Electron, dev server, Cloud Run)
     try {
         const localResp = await fetch('/api/vertex/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        const contentType = localResp.headers.get("content-type") || "";
         if (localResp.ok) {
-            const contentType = localResp.headers.get("content-type");
-            if (contentType && contentType.includes("text/html")) {
+            if (contentType.includes("text/html")) {
                 throw new Error("Received HTML response from Vertex proxy instead of JSON. The route might be missing or blocked.");
             }
             return await localResp.json();
         }
-        if (localResp.status !== 404 && localResp.status !== 502 && localResp.status !== 503) {
-            const errText = await localResp.text().catch(() => '');
-            let errJson: any = {};
-            try { errJson = JSON.parse(errText); } catch(e) {}
-            throw new Error(errJson.error || `Vertex backend error: ${localResp.statusText} - ${errText.substring(0, 50)}`);
+        const errText = await localResp.text().catch(() => '');
+        let errJson: any = null;
+        try { errJson = JSON.parse(errText); } catch {}
+        // If our Node/Cloud Run backend responded with structured JSON error (e.g. Vertex 404 model/region not found),
+        // propagate that real error directly so the model fallback loop triggers cleanly rather than falling back to Cloud Functions.
+        if (errJson?.error || (localResp.status !== 404 && localResp.status !== 502 && localResp.status !== 503)) {
+            throw new Error(errJson?.error || `Vertex backend error: ${localResp.statusText} - ${errText.substring(0, 120)}`);
         }
     } catch (localErr: any) {
         if (localErr.message && !localErr.message.includes('Failed to fetch') && !localErr.message.includes('NetworkError')) {
@@ -719,8 +722,9 @@ export async function generateContentWithFallback(params: {
             ];
         }
 
-        const isGemini4 = modelName.toLowerCase().startsWith('gemini-4-');
-        if (!isGemini4 && params.thinkingBudget !== undefined && (modelName.includes('-pro') || modelName.includes('-thinking'))) {
+        const cleanModelId = modelName.trim().replace(/^models\//i, '').toLowerCase();
+        const isGemini4 = cleanModelId.startsWith('gemini-4-');
+        if (!isGemini4 && params.thinkingBudget !== undefined && (cleanModelId.includes('-pro') || cleanModelId.includes('-thinking'))) {
             config.thinkingConfig = { thinkingBudget: params.thinkingBudget };
             const requestedMax = params.maxOutputTokens || 65536;
             config.maxOutputTokens = requestedMax;
@@ -1172,7 +1176,7 @@ export async function generateContentWithFallback(params: {
     // Strictly descending text model fallback hierarchy:
     // Carbon (60) -> Argon/Pro (50) -> 4 Hydrogen (45) -> Flash Latest (30) -> 3.1 Flash Lite (20)
     const getModelRank = (modelName: string): number => {
-        const name = (modelName || '').toLowerCase();
+        const name = (modelName || '').trim().replace(/^models\//i, '').toLowerCase();
         if (name.includes('4-carbon')) return 60;
         if (name.includes('4-argon') || name.includes('3.1-pro') || name.includes('-pro')) return 50;
         if (name.includes('4-hydrogen') || name === PRIMARY_MODEL.toLowerCase()) return 45;
@@ -1186,11 +1190,11 @@ export async function generateContentWithFallback(params: {
     };
 
     const TEXT_MODEL_FALLBACK_CHAIN = [
+        'gemini-4-carbon',
+        'gemini-4-argon',
         PRIMARY_MODEL,       // "gemini-4-hydrogen"
         SECONDARY_MODEL,     // "gemini-flash-latest"
         TERTIARY_MODEL,      // "gemini-3.1-flash-lite"
-        'gemini-4-argon',
-        'gemini-4-carbon'
     ];
 
     // Priority: User's explicitly chosen model in UI/Settings (state.currentTextModel) takes precedence
@@ -1203,16 +1207,26 @@ export async function generateContentWithFallback(params: {
         params.model.includes('image')
     ));
 
-    const startingModel = (isSpecializedTask ? params.model : (state.currentTextModel || params.model)) || PRIMARY_MODEL;
+    const rawStartingModel = (isSpecializedTask ? params.model : (state.currentTextModel || params.model)) || PRIMARY_MODEL;
+    const startingModel = rawStartingModel.trim().replace(/^models\//i, '') || PRIMARY_MODEL;
     const startRank = getModelRank(startingModel);
 
-    // Fallback strictly to models that come AFTER the starting model in the fallback chain
+    // Fallback strictly to models that come AFTER the starting model in the descending hierarchy,
+    // plus guaranteed reliable Flash fallbacks if a specialized model (e.g. transcribe) is unavailable.
     const startIndex = TEXT_MODEL_FALLBACK_CHAIN.indexOf(startingModel);
-    const validFallbacks = startIndex >= 0 
+    const rankedFallbacks = startIndex >= 0
         ? TEXT_MODEL_FALLBACK_CHAIN.slice(startIndex + 1)
         : TEXT_MODEL_FALLBACK_CHAIN.filter(m => getModelRank(m) < startRank && m !== startingModel);
 
-    const modelsToTry = Array.from(new Set([startingModel, ...validFallbacks]));
+    const modelsToTry = currentAuth.mode === 'openaiGateway'
+        ? [startingModel]
+        : Array.from(new Set([
+            startingModel,
+            ...rankedFallbacks,
+            PRIMARY_MODEL,
+            SECONDARY_MODEL,
+            TERTIARY_MODEL,
+        ].filter((m, idx, arr) => idx === arr.indexOf(m) && (idx === 0 || getModelRank(m) <= startRank || isSpecializedTask))));
 
     let lastError: any;
     for (let i = 0; i < modelsToTry.length; i++) {

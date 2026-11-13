@@ -5,6 +5,8 @@ export interface CinematicCustomEffectsParams {
   chromaticAberration?: number;
   vignette?: number;
   filterName?: string;
+  filterIntensity?: number;
+  blendMode?: string;
   seed?: number;
   hdrBalance?: number;
   clarity?: number;
@@ -23,7 +25,7 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
   documentationLink: null,
   backend: '2d',
   calculateKey: (params) => {
-    return `fx-${params.filterName || 'none'}-${params.grain || 0}-${params.vignette || 0}-${params.chromaticAberration || 0}-${params.hdrBalance || 0}-${params.clarity || 0}-${params.vibrance || 0}-${params.sharpening || 0}-${params.seed || 0}-${params.isVillainShot ? 1 : 0}`;
+    return `fx-${params.filterName || 'none'}-${params.filterIntensity ?? 1}-${params.blendMode || 'normal'}-${params.grain || 0}-${params.vignette || 0}-${params.chromaticAberration || 0}-${params.hdrBalance || 0}-${params.clarity || 0}-${params.vibrance || 0}-${params.sharpening || 0}-${params.seed || 0}-${params.isVillainShot ? 1 : 0}`;
   },
   setup: () => null,
   apply: ({ source, target, width, height, params }) => {
@@ -39,6 +41,8 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
       chromaticAberration = 0,
       vignette = 0,
       filterName = 'none',
+      filterIntensity = 1,
+      blendMode = 'normal',
       seed = 0,
       hdrBalance = 0,
       clarity = 0,
@@ -46,6 +50,8 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
       sharpening = 0,
       isVillainShot = false,
     } = params as CinematicCustomEffectsParams & { isVillainShot?: boolean };
+
+    const normFilter = Math.max(0, Math.min(1, filterIntensity > 1 ? filterIntensity / 100 : filterIntensity));
 
     // ─── NEW: "Nostalgic Warmth" Heritage LUT vs. "Villain Foil" Grade ───
     if (filterName === 'nostalgic_warmth') {
@@ -79,6 +85,62 @@ export const customStudioPostEffects = createEffect<CinematicCustomEffectsParams
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
       }
+    } else if (filterName === 'technicolor') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'color-burn';
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.1 * normFilter})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.fillStyle = `rgba(255, 0, 0, ${0.05 * normFilter})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    } else if (filterName === 'crt') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.fillStyle = `rgba(0, 255, 120, ${0.08 * normFilter})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgba(0, 0, 0, ${0.15 * normFilter})`;
+      const scanStep = Math.max(3, Math.round(height / 160));
+      for (let sy = 0; sy < height; sy += scanStep) {
+        ctx.fillRect(0, sy, width, 1);
+      }
+      ctx.restore();
+    } else if (filterName === 'screen') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.15 * normFilter})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = 'soft-light';
+      ctx.fillStyle = `rgba(100, 200, 255, ${0.1 * normFilter})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
+    // 0. Canvas Blend Mode Overlay matching videoRenderer.ts:859-883
+    if (blendMode && blendMode !== 'normal') {
+      ctx.save();
+      ctx.globalCompositeOperation = blendMode as GlobalCompositeOperation;
+      if (blendMode === 'screen') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(0, 0, width, height);
+      } else if (blendMode === 'multiply') {
+        ctx.fillStyle = 'rgba(230, 230, 230, 0.95)';
+        ctx.fillRect(0, 0, width, height);
+      } else if (blendMode === 'overlay') {
+        ctx.fillStyle = 'rgba(128, 128, 128, 0.12)';
+        ctx.fillRect(0, 0, width, height);
+      } else if (blendMode === 'color-dodge') {
+        ctx.fillStyle = 'rgba(80, 80, 80, 0.15)';
+        ctx.fillRect(0, 0, width, height);
+      } else if (blendMode === 'soft-light') {
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.1)';
+        ctx.fillRect(0, 0, width, height);
+      } else if (blendMode === 'difference') {
+        ctx.fillStyle = 'rgba(15, 15, 15, 0.2)';
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.restore();
     }
 
     // 0a. HDR Exposure Balance

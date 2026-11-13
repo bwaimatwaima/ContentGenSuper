@@ -101,7 +101,7 @@ export async function generateVideo(
         throw new Error('System-funded video generation is currently restricted by administrator. Please provide your personal Gemini / Vertex API key in Settings.');
     }
 
-    const finalModel = model || 'veo-3.1-lite-generate-001';
+    const finalModel = (model || 'veo-3.1-lite-generate-001').trim().replace(/^models\//i, '');
     const isVeo = finalModel.startsWith('veo-');
     const isGemini = finalModel.startsWith('gemini-');
 
@@ -110,25 +110,48 @@ export async function generateVideo(
     if (isVeo) {
         const apiKey = getApiKey();
         const ai = createGoogleGenAIClient(apiKey);
-        
-        const payload: any = {
-            model: finalModel,
-            prompt: prompt,
-            config: {
-                numberOfVideos: 1,
-                resolution: '720p',
-                aspectRatio: '16:9'
-            }
-        };
+        const veoCandidates = Array.from(new Set([
+            finalModel,
+            'veo-3.1-generate-001',
+            'veo-2.0-generate-001',
+        ]));
 
-        if (imagePart) {
-            payload.image = {
-                imageBytes: imagePart.base64,
-                mimeType: imagePart.mimeType
+        let operation: any;
+        let lastVeoErr: any = null;
+        for (let i = 0; i < veoCandidates.length; i++) {
+            const candidateModel = veoCandidates[i];
+            const payload: any = {
+                model: candidateModel,
+                prompt: prompt,
+                config: {
+                    numberOfVideos: 1,
+                    resolution: '720p',
+                    aspectRatio: '16:9'
+                }
             };
+
+            if (imagePart) {
+                payload.image = {
+                    imageBytes: imagePart.base64,
+                    mimeType: imagePart.mimeType
+                };
+            }
+
+            try {
+                operation = await ai.models.generateVideos(payload);
+                lastVeoErr = null;
+                break;
+            } catch (err: any) {
+                lastVeoErr = err;
+                const msg = String(err?.message || err || '').toLowerCase();
+                const isNotFound = msg.includes('404') || msg.includes('not found') || msg.includes('not_found') || msg.includes('unavailable');
+                if (!isNotFound || i === veoCandidates.length - 1) {
+                    throw err;
+                }
+                console.warn(`[Veo] Model "${candidateModel}" unavailable, trying "${veoCandidates[i + 1]}"...`);
+            }
         }
-        
-        let operation = await ai.models.generateVideos(payload);
+        if (lastVeoErr) throw lastVeoErr;
         
         while (!operation.done) {
             await new Promise(resolve => setTimeout(resolve, 10000));
@@ -138,8 +161,6 @@ export async function generateVideo(
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) throw new Error('No video URI returned from Veo');
         
-        // Return the URI directly, we'll fetch it on the client side when needed
-        // Or we can fetch it here and return base64, but URI is better for video
         return { uri: downloadLink, engine: 'veo' };
     } else if (isGemini) {
         // Gemini doesn't natively support video generation yet in the same way as Veo,

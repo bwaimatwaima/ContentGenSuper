@@ -914,7 +914,7 @@ export function loadUserGeminiApiKey() {
     if (storedProvider) {
         state.geminiProvider = storedProvider;
     } else if (!key) {
-        state.geminiProvider = 'vertex';
+        state.geminiProvider = 'aistudio';
     }
 
     state.vertexAuthMode = vertexAuthMode;

@@ -21,27 +21,43 @@ interface ClipRendererProps {
   mediaStartOffsetFrames?: number;
 }
 
-function getCssFilter(filterName?: string): string | undefined {
+function getCssFilter(filterName?: string, intensity: number = 1.0): string | undefined {
   if (!filterName || filterName === 'none') return undefined;
+  const norm = Math.max(0, Math.min(1, intensity > 1 ? intensity / 100 : intensity));
+  if (norm <= 0) return undefined;
   switch (filterName) {
     case 'noir':
     case 'black_and_white':
-      return 'grayscale(100%) contrast(120%)';
+      return `grayscale(${Math.round(100 * norm)}%) contrast(${Math.round(100 + 40 * norm)}%) brightness(${Math.round(100 - 5 * norm)}%)`;
+    case 'noir_grain':
+      return `grayscale(${Math.round(100 * norm)}%) contrast(${Math.round(100 + 35 * norm)}%) brightness(${Math.round(100 - 8 * norm)}%)`;
     case 'sepia':
-      return 'sepia(85%) contrast(110%)';
+      return `sepia(${Math.round(85 * norm)}%) contrast(${Math.round(100 + 5 * norm)}%) brightness(${Math.round(100 - 8 * norm)}%)`;
     case 'warm_cinematic':
     case 'warm':
-      return 'sepia(25%) saturate(125%) brightness(105%)';
+      return `sepia(${Math.round(25 * norm)}%) saturate(${Math.round(100 + 45 * norm)}%) contrast(${Math.round(100 + 5 * norm)}%) brightness(${Math.round(100 + 2 * norm)}%)`;
     case 'cool':
-      return 'hue-rotate(20deg) saturate(110%) brightness(98%)';
+      return `saturate(${Math.round(100 - 10 * norm)}%) hue-rotate(${Math.round(185 * norm)}deg) contrast(${Math.round(100 + 10 * norm)}%) brightness(${Math.round(100 - 4 * norm)}%)`;
     case 'cyberpunk':
-      return 'contrast(120%) saturate(150%) hue-rotate(290deg)';
+      return `contrast(${Math.round(100 + 35 * norm)}%) saturate(${Math.round(100 + 75 * norm)}%) hue-rotate(${Math.round(295 * norm)}deg)`;
     case 'high_contrast':
-      return 'contrast(135%) saturate(115%)';
+      return `contrast(${Math.round(100 + 35 * norm)}%) saturate(${Math.round(100 + 15 * norm)}%)`;
     case 'vintage':
-      return 'sepia(45%) contrast(95%) brightness(105%)';
+      return `sepia(${Math.round(35 * norm)}%) contrast(${Math.round(100 + 10 * norm)}%) saturate(${Math.round(100 + 20 * norm)}%) brightness(${Math.round(100 - 2 * norm)}%)`;
     case 'vibrant':
-      return 'saturate(140%) contrast(110%)';
+      return `saturate(${Math.round(100 + 40 * norm)}%) contrast(${Math.round(100 + 10 * norm)}%)`;
+    case 'technicolor':
+      return `saturate(${Math.round(100 + 90 * norm)}%) contrast(${Math.round(100 + 20 * norm)}%) brightness(${Math.round(100 + 2 * norm)}%)`;
+    case 'bleach_bypass':
+      return `contrast(${Math.round(100 + 45 * norm)}%) saturate(${Math.round(100 - 60 * norm)}%) brightness(${Math.round(100 + 5 * norm)}%)`;
+    case 'moody_dark':
+      return `brightness(${Math.round(100 - 24 * norm)}%) contrast(${Math.round(100 + 35 * norm)}%) saturate(${Math.round(100 - 15 * norm)}%)`;
+    case 'emerald':
+      return `saturate(${Math.round(100 + 15 * norm)}%) hue-rotate(${Math.round(85 * norm)}deg) contrast(${Math.round(100 + 15 * norm)}%) brightness(${Math.round(100 - 4 * norm)}%)`;
+    case 'crt':
+      return `contrast(${Math.round(100 + 20 * norm)}%) saturate(${Math.round(100 + 20 * norm)}%) brightness(${Math.round(100 + 5 * norm)}%)`;
+    case 'nostalgic_warmth':
+      return `contrast(${Math.round(100 + 4 * norm)}%) saturate(${Math.round(100 + 10 * norm)}%)`;
     default:
       return undefined;
   }
@@ -58,22 +74,28 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
 }) => {
   const localFrame = useCurrentFrame();
   const timelineFrame = localFrame + timelineFrameOffset;
-  const hasVideo = Boolean(clip.videoUrl || clip.hasVideo);
+  const talkingHeadVideoUrl = clip.talkingHeadVideoUrl;
+  const effectiveVideoUrl = clip.talkingHeadMode === 'full'
+    ? (talkingHeadVideoUrl || clip.videoUrl)
+    : (clip.videoUrl || (clip.talkingHeadMode === 'none' || !clip.talkingHeadMode ? talkingHeadVideoUrl : undefined));
+  const hasVideo = Boolean(effectiveVideoUrl || clip.hasVideo);
   const hasImage = Boolean(clip.imageUrl);
 
   // Compute active effect parameters
   const grain = videoEffects?.grain ?? 0;
   const chromaticAberration = videoEffects?.chromaticAberration ?? 0;
   const vignette = videoEffects?.vignette ?? (videoEffects?.cinematicVignette ? 0.6 : 0);
-  const filterName = (clip as any)?.colorFilter && (clip as any)?.colorFilter !== 'none'
-    ? (clip as any).colorFilter
+  const filterName = clip.colorFilter && clip.colorFilter !== 'none'
+    ? clip.colorFilter
     : (videoEffects?.colorFilter ?? (videoEffects as any)?.activeFilterName ?? 'none');
+  const filterIntensity = typeof clip.colorFilterIntensity === 'number' ? clip.colorFilterIntensity : 1.0;
+  const blendMode = videoEffects?.blendMode || 'normal';
   const hdrBalance = videoEffects?.hdrBalance ?? 0;
   const clarity = videoEffects?.clarity ?? 0;
   const vibrance = videoEffects?.vibrance ?? 0;
   const sharpening = videoEffects?.sharpening ?? 0;
   const isVillainShot = Boolean(clip.isVillainShot);
-  const cssFilter = getCssFilter(filterName);
+  const cssFilter = getCssFilter(filterName, filterIntensity);
 
   const customEffects = useMemo(() => {
     return [
@@ -82,6 +104,8 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
         chromaticAberration,
         vignette,
         filterName,
+        filterIntensity,
+        blendMode,
         hdrBalance,
         clarity,
         vibrance,
@@ -90,7 +114,7 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
         isVillainShot,
       }),
     ];
-  }, [grain, chromaticAberration, vignette, filterName, hdrBalance, clarity, vibrance, sharpening, timelineFrame, isVillainShot]);
+  }, [grain, chromaticAberration, vignette, filterName, filterIntensity, blendMode, hdrBalance, clarity, vibrance, sharpening, timelineFrame, isVillainShot]);
 
   const { fps, width: vw, height: vh } = useVideoConfig();
 
@@ -136,9 +160,13 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
       }
     : { width: '100%', height: '100%' };
 
-  // Picture-in-Picture layout and animation calculations
+  // Picture-in-Picture & Talking Head mode calculations (matching videoRenderer.ts)
   const isPipOverlay = clip.displayMode === 'pip_overlay';
-  const hasTalkingHead = Boolean(clip.talkingHeadMode && clip.talkingHeadMode !== 'none' && clip.imageUrl && hasVideo);
+  const thMode = clip.talkingHeadMode || 'none';
+  const thMediaVideoUrl = talkingHeadVideoUrl || (!hasImage ? clip.videoUrl : undefined) || (clip.videoUrl && clip.imageUrl ? clip.videoUrl : undefined);
+  const isSplitTalkingHead = !isPipOverlay && thMode === 'split';
+  const isFullTalkingHead = !isPipOverlay && thMode === 'full' && Boolean(talkingHeadVideoUrl || clip.videoUrl);
+  const hasTalkingHeadPip = !isPipOverlay && (thMode === 'pip-br' || thMode === 'pip-bl' || thMode === 'pip-tr' || thMode === 'pip-tl') && Boolean(thMediaVideoUrl || clip.imageUrl);
   const letterbox = useContext(LetterboxContext);
 
   const timeInClip = timelineFrame / fps;
@@ -174,8 +202,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
   const isPipLeft = !hasCustomPipPos && rawPipPos.includes('left');
   const isPipCenter = !hasCustomPipPos && rawPipPos.includes('center');
 
-  const pipScale = typeof clip.pipScale === 'number' && clip.pipScale > 0 ? clip.pipScale : 0.28;
-  const pipBorderColor = clip.pipBorderColor || 'rgba(255, 255, 255, 0.9)';
+  const thSizeScale = clip.talkingHeadSize === 'small' ? 0.20 : clip.talkingHeadSize === 'large' ? 0.35 : 0.27;
+  const pipScale = typeof clip.pipScale === 'number' && clip.pipScale > 0 ? clip.pipScale : thSizeScale;
+  const pipBorderColor = clip.talkingHeadBorderColor || clip.pipBorderColor || '#6366f1';
+  const pipBorderWidth = typeof clip.talkingHeadBorderWidth === 'number' ? clip.talkingHeadBorderWidth : 3;
+  const pipShadow = clip.talkingHeadShadow !== false ? '0 4px 18px rgba(0,0,0,0.7)' : 'none';
   const pipAnim = clip.pipAnimation || 'pop_spring';
 
   // PiP entrance/exit spring & slide calculation
@@ -220,11 +251,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
 
   const pipContainerStyle: React.CSSProperties = {
     position: 'absolute',
-    top: hasCustomPipPos ? `${((clip as any).pipY ?? 0.5) * 100}%` : (isPipTop ? '5%' : isPipCenter ? '50%' : 'auto'),
-    bottom: hasCustomPipPos ? 'auto' : (!isPipTop && !isPipCenter ? '5%' : 'auto'),
-    left: hasCustomPipPos ? `${((clip as any).pipX ?? 0.5) * 100}%` : (isPipLeft ? `calc(5% + ${pipSlideOffset}px)` : 'auto'),
-    right: hasCustomPipPos ? 'auto' : (!isPipLeft ? `calc(5% - ${pipSlideOffset}px)` : 'auto'),
-    width: `${Math.round(pipScale * 100)}%`,
+    top: hasCustomPipPos ? `${((clip as any).pipY ?? 0.5) * 100}%` : (isPipTop ? '3.5%' : isPipCenter ? '50%' : 'auto'),
+    bottom: hasCustomPipPos ? 'auto' : (!isPipTop && !isPipCenter ? '3.5%' : 'auto'),
+    left: hasCustomPipPos ? `${((clip as any).pipX ?? 0.5) * 100}%` : (isPipLeft ? `calc(3.5% + ${pipSlideOffset}px)` : 'auto'),
+    right: hasCustomPipPos ? 'auto' : (!isPipLeft ? `calc(3.5% - ${pipSlideOffset}px)` : 'auto'),
+    width: clip.talkingHeadShape === 'circle' ? `${Math.round(Math.min(vw, vh) * thSizeScale)}px` : `${Math.round(pipScale * 100)}%`,
     transform: hasCustomPipPos
       ? `translate(-50%, -50%) translate(${pipSlideOffset}px, 0px) scale(${pipScaleMult})`
       : `${isPipCenter ? 'translateY(-50%) ' : ''}scale(${pipScaleMult})`,
@@ -233,15 +264,17 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
       : isPipTop ? (isPipLeft ? 'top left' : 'top right') : (isPipLeft ? 'bottom left' : 'bottom right'),
     opacity: pipAlpha,
     aspectRatio: clip.talkingHeadShape === 'circle' ? '1/1' : '16/9',
-    borderRadius: clip.talkingHeadShape === 'circle' ? '50%' : '14px',
+    borderRadius: clip.talkingHeadShape === 'circle' ? '50%' : (clip.talkingHeadShape === 'square' ? '0px' : '14px'),
     overflow: 'hidden',
-    boxShadow: '0 12px 36px rgba(0,0,0,0.75)',
-    border: `3px solid ${pipBorderColor}`,
+    boxShadow: pipShadow,
+    border: `${pipBorderWidth}px solid ${pipBorderColor}`,
+    backgroundColor: '#0f172a',
     zIndex: 35,
   };
 
-  const hasVideoBackground = Boolean(hasVideo && clip.displayMode !== 'pip_overlay' && clip.talkingHeadMode === 'full');
+  const hasVideoBackground = Boolean(isFullTalkingHead || (hasVideo && !isPipOverlay && thMode === 'none'));
   const parallaxOn = !!clip.parallax?.enabled && hasImage && !hasVideoBackground;
+  const isVerticalCanvas = vh >= vw;
 
   return (
     <AbsoluteFill
@@ -352,54 +385,97 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
             <span>B-ROLL</span>
           </div>
         </div>
-      ) : hasTalkingHead ? (
-        <div style={pipContainerStyle}>
-          {hasVideo ? (
-            <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-              <div style={pipRotStyle}>
-                <Video
-                  src={clip.videoUrl!}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    filter: cssFilter || undefined,
-                  }}
-                  objectFit="cover"
-                  trimBefore={effectiveTrimBefore}
-                  muted={!clip.useOriginalAudio}
-                  playbackRate={clip.playbackRate ?? 1}
-                  loop
-                  volume={clip.volume !== undefined ? clip.volume : 1.0}
+      ) : isSplitTalkingHead ? (
+        /* Split-Screen Talking Head + B-Roll (matching videoRenderer.ts:1470-1628) */
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: isVerticalCanvas ? 'column' : 'row',
+            overflow: 'hidden',
+            backgroundColor: '#000000',
+          }}
+        >
+          {/* Slot A: Talking Head / Secondary slot (Top or Left half) */}
+          <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+            {(() => {
+              const slotAVideo = clip.talkingHeadRole === 'secondary'
+                ? (clip.secondaryVideoUrl || talkingHeadVideoUrl)
+                : (talkingHeadVideoUrl || clip.secondaryVideoUrl || clip.videoUrl);
+              const slotAImg = clip.talkingHeadRole === 'secondary'
+                ? (clip.secondaryImageUrl || clip.imageUrl)
+                : (clip.secondaryImageUrl || clip.imageUrl);
+              if (slotAVideo) {
+                return (
+                  <Video
+                    src={slotAVideo}
+                    style={{ width: '100%', height: '100%', filter: cssFilter || undefined }}
+                    objectFit="cover"
+                    trimBefore={effectiveTrimBefore}
+                    muted={!clip.useOriginalAudio}
+                    playbackRate={clip.playbackRate ?? 1}
+                    loop
+                    volume={clip.volume !== undefined ? clip.volume : 1.0}
+                    effects={customEffects}
+                  />
+                );
+              }
+              if (slotAImg) {
+                return (
+                  <Img
+                    src={slotAImg}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', filter: cssFilter || undefined }}
+                    effects={customEffects}
+                  />
+                );
+              }
+              return null;
+            })()}
+          </div>
+
+          {/* Crisp Split Divider */}
+          <div
+            style={{
+              width: isVerticalCanvas ? '100%' : 3,
+              height: isVerticalCanvas ? 3 : '100%',
+              backgroundColor: 'rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 0 6px rgba(99, 102, 241, 0.7)',
+              flexShrink: 0,
+              zIndex: 5,
+            }}
+          />
+
+          {/* Slot B: Primary Scene B-Roll (Bottom or Right half) */}
+          <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+            {hasImage ? (
+              <CameraPanZoom
+                cameraMovement={clip.camera_movement}
+                cameraKeyframes={clip.cameraKeyframes}
+                durationInFrames={durationInFrames}
+                frameOffsetFrames={timelineFrameOffset}
+              >
+                <Img
+                  src={clip.imageUrl!}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', filter: cssFilter || undefined }}
                   effects={customEffects}
                 />
-              </div>
-            </div>
-          ) : hasImage ? (
-            <Img
-              src={clip.imageUrl!}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                filter: cssFilter || undefined,
-              }}
-              effects={customEffects}
-            />
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                backgroundColor: '#18181b',
-                color: '#a1a1aa',
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-              }}
-            >
-              🎬
-            </div>
-          )}
+              </CameraPanZoom>
+            ) : clip.videoUrl ? (
+              <Video
+                src={clip.videoUrl}
+                style={{ width: '100%', height: '100%', filter: cssFilter || undefined }}
+                objectFit="cover"
+                trimBefore={effectiveTrimBefore}
+                muted={!clip.useOriginalAudio}
+                playbackRate={clip.playbackRate ?? 1}
+                loop
+                volume={clip.volume !== undefined ? clip.volume : 1.0}
+                effects={customEffects}
+              />
+            ) : null}
+          </div>
         </div>
       ) : parallaxOn ? (
         <ParallaxImage
@@ -423,12 +499,12 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
           hazeColorOverride={clip.parallax?.hazeColor}
           filter={cssFilter || undefined}
         />
-      ) : hasVideo && !clip.cameraKeyframes ? (
-        /* Fullscreen Visual Canvas Layer for Video without artificial pan/zoom */
+      ) : hasVideo && effectiveVideoUrl && (!clip.cameraKeyframes || isFullTalkingHead) ? (
+        /* Fullscreen Visual Canvas Layer for Video / Full Talking Head */
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
           <div style={rotStyle}>
             <Video
-              src={clip.videoUrl!}
+              src={effectiveVideoUrl}
               style={{
                 width: '100%',
                 height: '100%',
@@ -454,11 +530,11 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
         >
           {clip.mapConfig ? (
             <MapShot config={clip.mapConfig} />
-          ) : hasVideo ? (
+          ) : hasVideo && effectiveVideoUrl ? (
             <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
               <div style={rotStyle}>
                 <Video
-                  src={clip.videoUrl!}
+                  src={effectiveVideoUrl}
                   style={{
                     width: '100%',
                     height: '100%',
@@ -520,12 +596,31 @@ export const ClipRenderer: React.FC<ClipRendererProps> = ({
       )}
 
       {/* Picture-in-Picture / Talking Head mode on fullscreen clips */}
-      {!isPipOverlay && hasTalkingHead && (
+      {hasTalkingHeadPip && (
         <div style={pipContainerStyle}>
-          <Img
-            src={clip.imageUrl!}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          {thMediaVideoUrl ? (
+            <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+              <div style={pipRotStyle}>
+                <Video
+                  src={thMediaVideoUrl}
+                  style={{ width: '100%', height: '100%', filter: cssFilter || undefined }}
+                  objectFit="cover"
+                  trimBefore={effectiveTrimBefore}
+                  muted={!clip.useOriginalAudio}
+                  playbackRate={clip.playbackRate ?? 1}
+                  loop
+                  volume={clip.volume !== undefined ? clip.volume : 1.0}
+                  effects={customEffects}
+                />
+              </div>
+            </div>
+          ) : clip.imageUrl ? (
+            <Img
+              src={clip.imageUrl}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: cssFilter || undefined }}
+              effects={customEffects}
+            />
+          ) : null}
         </div>
       )}
 

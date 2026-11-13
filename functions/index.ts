@@ -142,20 +142,62 @@ export const proxyVertex = onCall({
         }
 
         const isGlobalOnly = (m: string) => /preview|exp/i.test(m);
-        const pickLocation = (model: string, configured: string) =>
-          isGlobalOnly(model) ? 'global' : (configured || 'us-central1');
+        const pickLocation = (m: string, configured: string) =>
+          isGlobalOnly(m) ? 'global' : (configured || 'us-central1');
 
-        const vertex = new VertexAI({
-            project,
-            location: pickLocation(model, location)
-        });
-        const generativeModel = vertex.getGenerativeModel({
-            model,
-            systemInstruction: (!isNoDevInstruction && request.data?.systemInstruction) ? { role: 'system', parts: [{ text: request.data.systemInstruction }] } : undefined,
-            generationConfig: gc
-        });
-        const response = await generativeModel.generateContent({ contents: finalContents });
-        return response.response;
+        const normalizedModel = model.replace(/^models\//i, '').trim() || 'gemini-4-hydrogen';
+        const candidateModels = Array.from(new Set([
+            normalizedModel,
+            'gemini-4-hydrogen',
+            'gemini-4-argon',
+            'gemini-3.1-flash-lite',
+        ]));
+
+        let lastErr: any = null;
+        for (const candidateModel of candidateModels) {
+            const initialLoc = pickLocation(candidateModel, location);
+            const locsToTry = initialLoc === 'global' ? ['global'] : [initialLoc, 'global'];
+            const candidateGc = { ...gc };
+            if (candidateModel.toLowerCase().startsWith('gemini-4-')) {
+                delete candidateGc.temperature;
+                delete candidateGc.topP;
+                delete candidateGc.topK;
+                delete candidateGc.candidateCount;
+                if (candidateGc.thinkingConfig && 'thinkingBudget' in candidateGc.thinkingConfig) {
+                    delete candidateGc.thinkingConfig.thinkingBudget;
+                    if (Object.keys(candidateGc.thinkingConfig).length === 0) delete candidateGc.thinkingConfig;
+                }
+            }
+
+            for (let locIdx = 0; locIdx < locsToTry.length; locIdx++) {
+                const targetLoc = locsToTry[locIdx];
+                try {
+                    const vertex = new VertexAI({
+                        project,
+                        location: targetLoc
+                    });
+                    const generativeModel = vertex.getGenerativeModel({
+                        model: candidateModel,
+                        systemInstruction: (!isNoDevInstruction && request.data?.systemInstruction) ? { role: 'system', parts: [{ text: request.data.systemInstruction }] } : undefined,
+                        generationConfig: candidateGc
+                    });
+                    const response = await generativeModel.generateContent({ contents: finalContents });
+                    return response.response;
+                } catch (attemptErr: any) {
+                    lastErr = attemptErr;
+                    const errMsg = (attemptErr?.message || '').toLowerCase();
+                    const isNotFound = errMsg.includes('not found') || errMsg.includes('not_found') || errMsg.includes('404');
+                    if (isNotFound && locIdx < locsToTry.length - 1) {
+                        continue;
+                    }
+                    if (!isNotFound && !errMsg.includes('429') && !errMsg.includes('quota')) {
+                        throw attemptErr;
+                    }
+                    break;
+                }
+            }
+        }
+        throw lastErr;
     } catch (err: any) {
         console.error('[Vertex ADC Proxy Error]', err);
         throw new HttpsError('internal', err.message || 'Vertex AI ADC generation failed');
@@ -583,7 +625,7 @@ export const setUserRole = onCall(async (request) => {
 
     // Determine caller role from token claim or Firestore
     let callerRole = request.auth.token.role || "";
-    const targetDb = getFirestore(FIRESTORE_DATABASE_ID || "ai-studio-contentgenaiprov-16f9e192-3344-47c8-bcaf-5b43f11d9024");
+    const targetDb = getFirestore(FIRESTORE_DATABASE_ID);
 
     if (!callerRole && !isSuperAdmin && request.auth.uid) {
         try {

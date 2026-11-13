@@ -68,9 +68,11 @@ function stopHud() {
   hud = null;
 }
 
-window.addEventListener('keydown', e => {
-  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') setPerf(!enabled);
-});
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') setPerf(!enabled);
+  });
+}
 
 if (enabled) {
   if (typeof document !== 'undefined') {

@@ -135,4 +135,42 @@ const scaledLayout = precomputeLayout(mockCtx, 'HELLO WORLD', 1920, 1080, 2, 'bo
 });
 assert.ok(scaledLayout.fontSize > baseLayout.fontSize, 'Scaled subtitle layout must increase fontSize proportionally');
 
-console.log('All model routing & cloud render parity tests passed!');
+// 7. Media Assembler semantic visual-to-sentence matching (heuristic fallback)
+async function testMediaAssemblerMatching() {
+  const { matchVisualsToSentences } = await import('../src/media-assembler');
+  const sentences = [
+    { start: 0, end: 4, text: 'The software developer wrote code on a laptop screen.' },
+    { start: 4, end: 8, text: 'Waves crashed against the tropical ocean beach at sunset.' },
+    { start: 8, end: 12, text: 'Downtown skyscrapers lit up the city street at night.' },
+  ];
+  const assets = [
+    {
+      item: { id: 'c1', name: 'city_traffic_night.mp4', type: 'video' as const, customTags: 'urban neon', file: {} as any, objectUrl: 'blob:1' },
+      assetId: 'a1',
+      objectUrl: 'blob:1',
+      duration: 5,
+    },
+    {
+      item: { id: 'c2', name: 'coding_terminal.mp4', type: 'video' as const, customTags: 'tech developer', file: {} as any, objectUrl: 'blob:2' },
+      assetId: 'a2',
+      objectUrl: 'blob:2',
+      duration: 5,
+    },
+    {
+      item: { id: 'c3', name: 'tropical_shore.mp4', type: 'video' as const, customTags: 'ocean waves', file: {} as any, objectUrl: 'blob:3' },
+      assetId: 'a3',
+      objectUrl: 'blob:3',
+      duration: 5,
+    },
+  ];
+  const matched = await matchVisualsToSentences(sentences, assets, false);
+  assert.strictEqual(matched.length, 3);
+  assert.strictEqual(matched[0].assetId, 'a2', 'Sentence 0 (tech/coding) should match coding_terminal.mp4');
+  assert.strictEqual(matched[1].assetId, 'a3', 'Sentence 1 (ocean/beach) should match tropical_shore.mp4');
+  assert.strictEqual(matched[2].assetId, 'a1', 'Sentence 2 (city/skyscrapers) should match city_traffic_night.mp4');
+}
+
+testMediaAssemblerMatching().then(() => {
+  console.log('All model routing, cloud render parity, and media assembler tests passed!');
+});
+

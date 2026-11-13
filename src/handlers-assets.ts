@@ -191,7 +191,7 @@ ${story}`;
         filterFn: filterGenericCharacters,
         renderFn: ui.renderCharacterList,
         domList: dom.characterList,
-        tabBtn: document.getElementById('tab-characters-btn') as HTMLButtonElement | null,
+        tabBtn: (typeof document !== 'undefined' ? document.getElementById('tab-characters-btn') : null) as HTMLButtonElement | null,
         progressMessage: 'Extracting character profiles...',
         emptyMessage: 'No specific named characters found.',
         emptyHtml: `<div class="text-center text-gray-400 p-8 bg-gray-800/50 rounded-lg">No Key Characters Found</div>`
@@ -204,7 +204,7 @@ ${story}`;
         filterFn: filterGenericLocations,
         renderFn: ui.renderLocationList,
         domList: dom.locationList,
-        tabBtn: document.getElementById('tab-locations-btn') as HTMLButtonElement | null,
+        tabBtn: (typeof document !== 'undefined' ? document.getElementById('tab-locations-btn') : null) as HTMLButtonElement | null,
         progressMessage: 'Extracting location details...',
         emptyMessage: 'No specific unique locations found.',
         emptyHtml: `<div class="text-center text-gray-400 p-8 bg-gray-800/50 rounded-lg">No Specific Locations Found</div>`
@@ -217,7 +217,7 @@ ${story}`;
         filterFn: filterGenericElements,
         renderFn: ui.renderKeyElementList,
         domList: dom.keyElementList,
-        tabBtn: document.getElementById('tab-elements-btn') as HTMLButtonElement | null,
+        tabBtn: (typeof document !== 'undefined' ? document.getElementById('tab-elements-btn') : null) as HTMLButtonElement | null,
         progressMessage: 'Extracting object details...',
         emptyMessage: 'No specific key elements found.',
         emptyHtml: `<div class="text-center text-gray-400 p-8 bg-gray-800/50 rounded-lg">No Key Elements Found</div>`

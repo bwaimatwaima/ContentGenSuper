@@ -166,7 +166,9 @@ export interface StatusAction {
   id?: string;
 }
 
-(window as any).showStatusFn = showStatus;
+if (typeof window !== 'undefined') {
+  (window as any).showStatusFn = showStatus;
+}
 export function showStatus(message: string, isError = false, duration = 4000, action?: StatusAction) {
   if (currentStatusTimeout !== null) {
     window.clearTimeout(currentStatusTimeout);

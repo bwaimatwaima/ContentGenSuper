@@ -126,11 +126,31 @@ function stopAudioPreview() {
 
 let mediaAssemblerInitialized = false;
 
+function isAudioOrVideoFile(file: File): boolean {
+    if (file.type && (file.type.startsWith('audio/') || file.type.startsWith('video/'))) {
+        return true;
+    }
+    return /\.(mp3|wav|m4a|aac|ogg|flac|opus|webm|mp4|mov|mkv|m4v|avi)$/i.test(file.name || '');
+}
+
+function getVisualFileKind(file: File): 'video' | 'image' | null {
+    if (file.type) {
+        if (file.type.startsWith('video/')) return 'video';
+        if (file.type.startsWith('image/')) return 'image';
+    }
+    const name = file.name || '';
+    if (/\.(mp4|mov|webm|mkv|m4v|avi)$/i.test(name)) return 'video';
+    if (/\.(jpe?g|png|webp|gif|avif|bmp|svg)$/i.test(name)) return 'image';
+    return null;
+}
+
 export function initMediaAssembler() {
     if (mediaAssemblerInitialized) return;
-    mediaAssemblerInitialized = true;
-    // Setup modal event listeners
     const modal = document.getElementById('media-assembler-modal');
+    if (!modal) return;
+    mediaAssemblerInitialized = true;
+
+    // Setup modal event listeners
     const openBtn1 = document.getElementById('step1-open-media-assembler-btn');
     const openBtn2 = document.getElementById('manual-open-media-assembler-btn');
     const openBtn3 = document.getElementById('master-open-media-assembler-btn');
@@ -159,7 +179,8 @@ export function initMediaAssembler() {
         audioInput?.click();
     });
 
-    audioDropzone?.addEventListener('click', () => {
+    audioDropzone?.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('button, input')) return;
         audioInput?.click();
     });
 
@@ -200,7 +221,7 @@ export function initMediaAssembler() {
         audioDropzone.addEventListener('drop', async (e: DragEvent) => {
             if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
                 const file = e.dataTransfer.files[0];
-                if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
+                if (isAudioOrVideoFile(file)) {
                     await handleAudioFileSelected(file);
                 } else {
                     ui.showStatus('Please drop an audio or video file for the soundtrack.', true, 3000);
@@ -222,8 +243,8 @@ export function initMediaAssembler() {
     });
 
     visualsDropzone?.addEventListener('click', (e) => {
-        // Prevent click if clicking inner buttons
-        if ((e.target as HTMLElement).closest('button')) return;
+        // Prevent opening file dialog when clicking inner buttons, tag inputs, or clip cards
+        if ((e.target as HTMLElement).closest('button, input, [data-clip-id]')) return;
         visualsInput?.click();
     });
 
@@ -287,19 +308,22 @@ export function initMediaAssembler() {
 }
 
 export function openMediaAssemblerModal(initialMode: AssemblyMode = 'ambient_loop') {
+    initMediaAssembler();
     const modal = document.getElementById('media-assembler-modal');
     if (!modal) return;
 
-    // Check if project already has master audio linked
+    // Check if project already has master audio linked (only auto-populate if user hasn't picked a new file)
     const existingBuffer = timelineState.masterAudioBuffer || state.uploadedAudioBuffer;
-    if (existingBuffer && existingBuffer.duration > 0) {
+    if ((!activeAudioBuffer || isUsingExistingProjectAudio) && existingBuffer && existingBuffer.duration > 0) {
         activeAudioBuffer = existingBuffer;
         activeAudioDuration = existingBuffer.duration;
         activeAudioName = state.uploadedAudioFileName || 'Current Project Audio';
         isUsingExistingProjectAudio = true;
         renderAudioSection();
     } else {
-        isUsingExistingProjectAudio = false;
+        if (!activeAudioBuffer) {
+            isUsingExistingProjectAudio = false;
+        }
         renderAudioSection();
     }
 
@@ -350,6 +374,10 @@ function setAssemblyMode(mode: AssemblyMode) {
 }
 
 async function handleAudioFileSelected(file: File) {
+    if (!isAudioOrVideoFile(file)) {
+        ui.showStatus('Please select a valid audio or video file (MP3, WAV, M4A, MP4, MOV).', true, 3500);
+        return;
+    }
     ui.showStatus(`Loading & decoding audio: ${file.name}...`, false, 2500);
     try {
         const audioCtx = utils.getAudioContext();
@@ -688,16 +716,16 @@ INSTRUCTIONS:
 }
 
 async function handleVisualFilesSelected(files: File[]) {
-    const validFiles = files.filter(f => f.type.startsWith('video/') || f.type.startsWith('image/'));
+    const validFiles = files.filter(f => getVisualFileKind(f) !== null);
     if (validFiles.length === 0) {
-        ui.showStatus('Please select valid MP4, MOV, WEBM, JPG, or PNG files.', true, 3000);
+        ui.showStatus('Please select valid MP4, MOV, WEBM, MKV, JPG, PNG, or WEBP files.', true, 3000);
         return;
     }
 
     ui.showStatus(`Importing ${validFiles.length} visual asset(s)...`, false, 2000);
 
     for (const file of validFiles) {
-        const isVideo = file.type.startsWith('video/');
+        const isVideo = getVisualFileKind(file) === 'video';
         const objectUrl = URL.createObjectURL(file);
         const defaultTags = extractDefaultTagsFromFilename(file.name);
         const item: VisualClipItem = {
@@ -716,7 +744,7 @@ async function handleVisualFilesSelected(files: File[]) {
                 videoEl.crossOrigin = 'anonymous';
                 videoEl.muted = true;
                 videoEl.playsInline = true;
-                videoEl.preload = 'metadata';
+                videoEl.preload = 'auto';
 
                 await new Promise<void>((resolve) => {
                     videoEl.onloadedmetadata = () => {
@@ -933,10 +961,15 @@ async function handleExecuteAssembly() {
     // Read form settings
     const loopPaceSelect = document.getElementById('assembler-loop-pace-select') as HTMLSelectElement;
     const transitionSelect = document.getElementById('assembler-transition-select') as HTMLSelectElement;
+    const montagePaceSelect = document.getElementById('assembler-montage-pace-select') as HTMLSelectElement;
     const aspectSelect = document.getElementById('assembler-aspect-select') as HTMLSelectElement;
     const enableKenBurnsCheckbox = document.getElementById('assembler-kenburns-checkbox') as HTMLInputElement;
 
-    const transitionStyle = transitionSelect?.value || (currentAssemblyMode === 'ambient_loop' ? 'crossfade' : 'cut');
+    const transitionStyle = currentAssemblyMode === 'ambient_loop'
+        ? (transitionSelect?.value || 'crossfade')
+        : currentAssemblyMode === 'distribute_even'
+            ? (montagePaceSelect?.value || 'cut')
+            : 'cut';
     const selectedAspect = aspectSelect?.value || '16:9';
     const enableKenBurns = enableKenBurnsCheckbox ? enableKenBurnsCheckbox.checked : (currentAssemblyMode === 'ambient_loop');
 
@@ -965,15 +998,32 @@ async function handleExecuteAssembly() {
                 state.uploadedAudioBuffer = finalAudioBuffer;
                 state.uploadedAudioAssetId = assetId;
                 state.uploadedAudioFileName = activeAudioFile.name;
+                timelineState.setMasterAudioAssetId(assetId);
+                // Clear stale transcripts from any previous project audio track
+                timelineState.setGlobalWordTimestamps([]);
+                state.masterAudioTranscript = null;
                 updateMasterAudioUI(activeAudioFile.name, finalAudioBuffer.duration, '', 100);
                 loadAndShowWaveform(finalAudioBuffer, wavBlob, activeAudioFile.name);
+            } else if (isUsingExistingProjectAudio && state.uploadedAudioAssetId) {
+                timelineState.setMasterAudioAssetId(state.uploadedAudioAssetId);
             }
         } else {
             // If no audio provided, create a neutral silent buffer matching visual clips length
-            const totalVisualSec = Math.max(10, visualClips.reduce((acc, c) => acc + (c.duration || 4), 0));
+            const totalVisualSec = Math.max(4, visualClips.reduce((acc, c) => acc + (c.duration || 4), 0));
             const ctx = utils.getAudioContext();
             finalAudioBuffer = ctx.createBuffer(2, Math.ceil(totalVisualSec * ctx.sampleRate), ctx.sampleRate);
             state.uploadedAudioBuffer = finalAudioBuffer;
+            try {
+                const lightweightAudioFile = await utils.resampleAndEncodeAudio(finalAudioBuffer);
+                const wavBlob = new Blob([lightweightAudioFile], { type: 'audio/wav' });
+                const assetId = await assetStorage.storeAsset(wavBlob, 'audio');
+                state.uploadedAudioAssetId = assetId;
+                timelineState.setMasterAudioAssetId(assetId);
+            } catch (silentErr) {
+                console.warn('Could not store silent audio buffer in DB:', silentErr);
+            }
+            timelineState.setGlobalWordTimestamps([]);
+            state.masterAudioTranscript = null;
         }
 
         timelineState.setMasterAudioBuffer(finalAudioBuffer);
@@ -1013,6 +1063,20 @@ async function handleExecuteAssembly() {
         const newShots: CinematicShot[] = [];
         const newTimelineClips: any[] = [];
         let cursor = 0;
+        const assetUsageOffsets = new Map<string, number>();
+
+        const computeNextVideoOffset = (asset: typeof preparedAssets[0], cutDur: number): number => {
+            if (asset.item.type !== 'video') return 0;
+            const key = asset.item.id || asset.assetId || asset.objectUrl;
+            const prevOffset = assetUsageOffsets.get(key) || 0;
+            const rawDur = asset.duration || 0;
+            let startOffset = 0;
+            if (rawDur > cutDur + 0.5) {
+                startOffset = prevOffset % Math.max(0.5, rawDur - Math.min(rawDur * 0.5, cutDur));
+                assetUsageOffsets.set(key, prevOffset + cutDur);
+            }
+            return startOffset;
+        };
 
         if (currentAssemblyMode === 'ambient_loop') {
             // Mode 1: Ambient / Sleep Video Loop
@@ -1021,7 +1085,7 @@ async function handleExecuteAssembly() {
             const shotDuration = totalAudioDuration / targetShotCount;
 
             const pool = preparedAssets.length > 0 ? preparedAssets : [{
-                item: { type: 'video' as const, name: 'Ambient Loop' } as any,
+                item: { id: 'ambient_placeholder', type: 'video' as const, name: 'Ambient Loop' } as any,
                 assetId: '',
                 objectUrl: '',
                 duration: shotDuration
@@ -1031,6 +1095,7 @@ async function handleExecuteAssembly() {
                 const asset = pool[i % pool.length];
                 const shotId = `shot_ambient_${Date.now()}_${i}`;
                 const isVideo = asset.item.type === 'video';
+                const videoStartOffset = computeNextVideoOffset(asset, shotDuration);
 
                 let videoEl: HTMLVideoElement | undefined = undefined;
                 if (isVideo && asset.objectUrl) {
@@ -1057,7 +1122,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: !isVideo ? asset.objectUrl : undefined,
                     video_id: isVideo ? asset.assetId : null,
                     _videoObjectURL: isVideo ? asset.objectUrl : undefined,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     talkingHeadMode: 'none'
                 };
 
@@ -1071,7 +1136,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: !isVideo ? asset.objectUrl : undefined,
                     image_id: shot.image_id,
                     video_id: shot.video_id,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     duration: shotDuration,
                     startTime: cursor,
                     endTime: cursor + shotDuration,
@@ -1121,6 +1186,7 @@ async function handleExecuteAssembly() {
                 const asset = orderedAssets[i] || preparedAssets[i % preparedAssets.length];
                 const shotId = `shot_montage_${Date.now()}_${i}`;
                 const isVideo = asset ? asset.item.type === 'video' : false;
+                const videoStartOffset = asset ? computeNextVideoOffset(asset, shotDuration) : 0;
 
                 let videoEl: HTMLVideoElement | undefined = undefined;
                 if (isVideo && asset?.objectUrl) {
@@ -1144,7 +1210,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: asset && !isVideo ? asset.objectUrl : undefined,
                     video_id: asset && isVideo ? asset.assetId : null,
                     _videoObjectURL: asset && isVideo ? asset.objectUrl : undefined,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     talkingHeadMode: 'none'
                 };
 
@@ -1158,7 +1224,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: asset && !isVideo ? asset.objectUrl : undefined,
                     image_id: shot.image_id,
                     video_id: shot.video_id,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     duration: shotDuration,
                     startTime: cursor,
                     endTime: cursor + shotDuration,
@@ -1243,7 +1309,7 @@ async function handleExecuteAssembly() {
             ui.updateProcessingProgress(70, 'Transcribing speech and extracting sentences...');
             let words = timelineState.globalWordTimestamps || state.masterAudioTranscript || [];
             
-            if (words.length === 0 && activeAudioFile) {
+            if (words.length === 0 && finalAudioBuffer && activeAudioBuffer) {
                 try {
                     const lightweightAudio = await utils.resampleAndEncodeAudio(finalAudioBuffer);
                     const wavBlob = new Blob([lightweightAudio], { type: 'audio/wav' });
@@ -1251,6 +1317,10 @@ async function handleExecuteAssembly() {
                     const res = await transcribeAudioLocal(filePayload);
                     if (res.words && res.words.length > 0) {
                         words = res.words;
+                        state.masterAudioTranscript = words;
+                        if (typeof (timelineState as any).setWordTimestampMode === 'function') {
+                            (timelineState as any).setWordTimestampMode('exact');
+                        }
                         timelineState.setGlobalWordTimestamps(words);
                     }
                 } catch (tErr) {
@@ -1264,14 +1334,36 @@ async function handleExecuteAssembly() {
                 for (let i = 0; i < words.length; i++) {
                     curWords.push(words[i]);
                     const w = words[i].word.trim();
-                    const isEnd = /[.?!]$/.test(w) || i === words.length - 1;
-                    if (isEnd && curWords.length >= 2) {
+                    const nextWord = words[i + 1];
+                    const pauseToNext = nextWord ? (nextWord.start - words[i].end) : 0;
+                    const isSentencePunct = /[.?!]["')\]}]?$/.test(w);
+                    const isClauseBreak = /[,;:]["')\]}]?$/.test(w) && curWords.length >= 8;
+                    const isPauseBreak = pauseToNext >= 0.65 && curWords.length >= 4;
+                    const isMaxLenBreak = curWords.length >= 14;
+                    const isLastWord = i === words.length - 1;
+
+                    if ((isSentencePunct || isClauseBreak || isPauseBreak || isMaxLenBreak) && curWords.length >= 2) {
                         sentenceSegments.push({
                             start: curWords[0].start,
                             end: curWords[curWords.length - 1].end,
                             text: curWords.map(x => x.word).join(' '),
                             words: [...curWords]
                         });
+                        curWords = [];
+                    } else if (isLastWord && curWords.length > 0) {
+                        if (curWords.length === 1 && sentenceSegments.length > 0) {
+                            const prev = sentenceSegments[sentenceSegments.length - 1];
+                            prev.words.push(curWords[0]);
+                            prev.end = curWords[0].end;
+                            prev.text = prev.words.map(x => x.word).join(' ');
+                        } else {
+                            sentenceSegments.push({
+                                start: curWords[0].start,
+                                end: curWords[curWords.length - 1].end,
+                                text: curWords.map(x => x.word).join(' '),
+                                words: [...curWords]
+                            });
+                        }
                         curWords = [];
                     }
                 }
@@ -1310,8 +1402,22 @@ async function handleExecuteAssembly() {
                 }
             }
 
+            // Make sentence segments contiguous from 0..totalAudioDuration so there are no timeline gaps
+            if (sentenceSegments.length > 0) {
+                sentenceSegments[0].start = 0;
+                for (let i = 0; i < sentenceSegments.length - 1; i++) {
+                    const boundary = Math.max(sentenceSegments[i].start + 0.5, sentenceSegments[i + 1].start);
+                    sentenceSegments[i].end = boundary;
+                    sentenceSegments[i + 1].start = boundary;
+                }
+                sentenceSegments[sentenceSegments.length - 1].end = Math.max(
+                    sentenceSegments[sentenceSegments.length - 1].start + 0.5,
+                    totalAudioDuration
+                );
+            }
+
             const pool = preparedAssets.length > 0 ? preparedAssets : [{
-                item: { type: 'video' as const, name: 'Scene' } as any,
+                item: { id: 'speech_placeholder', type: 'video' as const, name: 'Scene' } as any,
                 assetId: '',
                 objectUrl: '',
                 duration: 4
@@ -1322,10 +1428,11 @@ async function handleExecuteAssembly() {
 
             for (let i = 0; i < sentenceSegments.length; i++) {
                 const seg = sentenceSegments[i];
-                const segDur = Math.max(1, seg.end - seg.start);
+                const segDur = Math.max(0.5, seg.end - seg.start);
                 const asset = matchedAssets[i] || pool[i % pool.length];
                 const shotId = `shot_speech_${Date.now()}_${i}`;
                 const isVideo = asset.item.type === 'video';
+                const videoStartOffset = computeNextVideoOffset(asset, segDur);
 
                 let videoEl: HTMLVideoElement | undefined = undefined;
                 if (isVideo && asset.objectUrl) {
@@ -1348,7 +1455,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: !isVideo ? asset.objectUrl : undefined,
                     video_id: isVideo ? asset.assetId : null,
                     _videoObjectURL: isVideo ? asset.objectUrl : undefined,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     talkingHeadMode: 'none'
                 };
 
@@ -1362,7 +1469,7 @@ async function handleExecuteAssembly() {
                     _imageObjectURL: !isVideo ? asset.objectUrl : undefined,
                     image_id: shot.image_id,
                     video_id: shot.video_id,
-                    videoStartOffset: 0,
+                    videoStartOffset,
                     duration: segDur,
                     startTime: seg.start,
                     endTime: seg.end,
@@ -1375,6 +1482,8 @@ async function handleExecuteAssembly() {
                     useOriginalAudio: false,
                     hideSubtitles: false,
                 });
+
+                cursor = seg.end;
             }
 
             timelineState.setShowSubtitles(enableSubtitles);
@@ -1387,12 +1496,21 @@ async function handleExecuteAssembly() {
         state.currentScenes = newShots;
         timelineState.setClips(newTimelineClips);
         timelineState.setGraphics([]);
-        timelineState.setMode('audio_locked');
+        const isNativeSequence = currentAssemblyMode === 'native_duration';
+        timelineState.setMode(isNativeSequence ? 'free' : 'audio_locked');
         timelineState.setVideoGenerated(true);
         timelineState.setDrawerUserOpen(true);
 
-        normalizeTimeline(totalAudioDuration);
+        normalizeTimeline(isNativeSequence ? Math.max(1, cursor) : totalAudioDuration);
         updateVideoContext();
+
+        // Sync storyboard shot durations with reconciled timeline clips
+        for (const shot of state.currentScenes) {
+            const matchingClip = timelineState.clips.find(c => c.id === shot.id);
+            if (matchingClip && Number.isFinite(matchingClip.duration) && matchingClip.duration > 0) {
+                shot.duration_seconds = matchingClip.duration;
+            }
+        }
 
         // Render UI
         ui.renderResults(state.currentScenes);
@@ -1426,7 +1544,7 @@ async function handleExecuteAssembly() {
         closeMediaAssemblerModal();
 
         const modeLabel = currentAssemblyMode === 'ambient_loop' ? 'Sleep / Ambient Loop' : currentAssemblyMode === 'distribute_even' ? 'Montage' : currentAssemblyMode === 'speech_sync' ? 'Speech-Sync' : 'Sequence';
-        ui.showStatus(`✨ Assembled ${newShots.length} shots (${modeLabel}) matching your audio! Press Play to preview.`, false, 4500);
+        ui.showStatus(`✨ Assembled ${newShots.length} shots (${modeLabel}) matching your media! Press Play to preview.`, false, 4500);
 
     } catch (err: any) {
         console.error('Media Assembly Error:', err);

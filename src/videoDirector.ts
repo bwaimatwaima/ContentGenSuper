@@ -18,6 +18,7 @@ import { saveVersion } from './handlers-project';
 import type { GraphicEvent } from './graphics-engine';
 import type { ProceduralSfxType } from './audioSynthesizer';
 import { HYPERFRAME_PRESETS, buildHyperFrameHtml } from './hyperframes-engine';
+import { PUPPET_SCENE_PRESETS } from './puppet-engine';
 import type { DirectorReviewResult, DirectorSuggestion, DirectorActionResult, CameraKeyframesConfig } from './types';
 
 interface NarrationDirection {
@@ -961,6 +962,17 @@ interface GraphicsDetection {
   socialBadges?: { platform: 'youtube' | 'instagram' | 'tiktok' | 'x' | 'discord' | 'custom'; handle: string; anchor: string; importance?: Importance }[];
   spotlightFocus?: { title?: string; subtitle?: string; anchor: string; importance?: Importance }[];
   hyperFrames?: { title: string; subtitle?: string; badge?: string; statValue?: string; templateId?: string; anchor: string; importance?: Importance }[];
+  puppetStages?: {
+    presetId?: string;
+    title?: string;
+    subtitle?: string;
+    speechBubble?: string;
+    secondaryBubble?: string;
+    floatingCounter?: string;
+    statValues?: string;
+    anchor: string;
+    importance?: Importance;
+  }[];
 }
 
 interface IntensityConfig {
@@ -1468,6 +1480,35 @@ function buildGraphics(
     });
   }
 
+  for (const ps of det.puppetStages || []) {
+    if (!passesFilter(ps.importance)) continue;
+    const hit = findAnchorTime(words, ps.anchor || ps.title || '');
+    if (!hit) continue;
+    const preset = PUPPET_SCENE_PRESETS.find(p => p.id === ps.presetId) || PUPPET_SCENE_PRESETS[0];
+    const dur = 4.2;
+    candidates.push({
+      time: hit.start,
+      c: {
+        rank: IMPORTANCE_RANK[ps.importance || 'high'],
+        build: () => ({
+          id: `ps_${counter++}`,
+          type: 'puppetStage',
+          start: hit.start,
+          end: Math.min(hit.start + dur, totalDur),
+          puppetId: 'flag_fighter',
+          ...preset.config,
+          presetId: preset.id,
+          title: ps.title || preset.config.title,
+          subtitle: ps.subtitle || preset.config.subtitle,
+          bubbleText: ps.speechBubble || preset.config.bubbleText,
+          secondaryBubbleText: ps.secondaryBubble || preset.config.secondaryBubbleText,
+          floatingCounterText: ps.floatingCounter || preset.config.floatingCounterText,
+          statValues: ps.statValues || preset.config.statValues,
+        } as any),
+      },
+    });
+  }
+
   // --- Global density cap + duration-aware non-overlapping spacing ---
   const cap = overlayCapFor(totalDur, cfg);
 
@@ -1590,6 +1631,14 @@ export async function autoGenerateGraphics(isSilent = false, forceFresh = false)
      * "stat-metric": metric card ONLY when a specific number/stat is mentioned (populate "statValue").
      * "podcast-speaker": speaker/perspective pill.
    - NEVER use generic clickbait filler ("This Changes Everything", "Wait For It", "Don't Scroll"). Every "title" (2-5 words), "subtitle" (4-10 word supporting context from the script), and "badge" (1-3 word category label like "KEY INSIGHT", "TURNING POINT", "HISTORICAL FACT", "CRITICAL RISK") MUST be 100% specific to the narration topic.
+9) puppetStages: When the script involves historical wars, battles, monarchs/kings, rebellions/knights (e.g. Joan of Arc, Hundred Years' War), courtroom/heresy trials, or bull-vs-bear financial market clashes, include 1-4 animated 2.5D chibi cutout puppet scenes using presetId from:
+   - "hundred-years-duel": Flag-head fighters clashing swords on the map (great for wars/invasions between nations).
+   - "joan-rpg-upgrade": Heroic Rebel upgrading from peasant to knight armor with Paradox RPG stats (👑 0 | ⚔️ 0 | ✊ 100).
+   - "longbow-volley": 3x1 tactical archer squad firing a parabolic arrow volley (great for battles like Agincourt/Crécy).
+   - "royal-diplomacy": Two crowned monarchs debating claims or treaties.
+   - "inquisitor-trial": Judge/Inquisitor banging gavel in a dramatic trial verdict.
+   - "market-bull-bear": Wall Street Tycoon bull vs bear clash.
+   - "history-explainer": Scholar/Storyteller unrolling a chronicle scroll.
 
 Overlay density for this pass: ${cfg.promptGuidance}
 
@@ -1730,6 +1779,35 @@ If nothing qualifies for a category, return an empty array. Never invent facts.`
                 importance: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
               },
               required: ['title', 'anchor'],
+            },
+          },
+          puppetStages: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                presetId: {
+                  type: Type.STRING,
+                  enum: [
+                    'hundred-years-duel',
+                    'joan-rpg-upgrade',
+                    'longbow-volley',
+                    'royal-diplomacy',
+                    'inquisitor-trial',
+                    'market-bull-bear',
+                    'history-explainer',
+                  ],
+                },
+                title: { type: Type.STRING },
+                subtitle: { type: Type.STRING },
+                speechBubble: { type: Type.STRING },
+                secondaryBubble: { type: Type.STRING },
+                floatingCounter: { type: Type.STRING },
+                statValues: { type: Type.STRING },
+                anchor: { type: Type.STRING },
+                importance: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
+              },
+              required: ['presetId', 'anchor'],
             },
           },
         },

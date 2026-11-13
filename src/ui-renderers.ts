@@ -2034,6 +2034,8 @@ export function renderBrollEditor(
         (ev as any).customImageUrl || (ev as any).icon === "custom";
       const isLowerThird = ev.type === "lowerThird";
       const isTitleCard = ev.type === "titleCard";
+      const isPuppetStage = ev.type === "puppetStage";
+      const isHyperFrame = ev.type === "hyperFrame";
 
       let styleClasses = "bg-amber-900/80 border-amber-400 text-amber-100";
       let iconSymbol = "🖼️";
@@ -2047,6 +2049,14 @@ export function renderBrollEditor(
         styleClasses = "bg-rose-900/80 border-rose-400 text-rose-100";
         iconSymbol = "🅰️";
         typeText = "Title Card";
+      } else if (isPuppetStage) {
+        styleClasses = "bg-amber-950/90 border-amber-400 text-amber-200";
+        iconSymbol = "🎭";
+        typeText = "7-Puppet Stage";
+      } else if (isHyperFrame) {
+        styleClasses = "bg-sky-900/80 border-sky-400 text-sky-100";
+        iconSymbol = "🚀";
+        typeText = "HyperFrame";
       } else if (!isBroll) {
         styleClasses = "bg-teal-900/80 border-teal-400 text-teal-100";
         iconSymbol = (ev as any).icon || "⭐";

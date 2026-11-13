@@ -13,6 +13,9 @@ import { LRUCache } from './lru-cache';
 import { HyperFramesEngine, type HyperFrameEvent } from './hyperframes-engine';
 import { AudioSynthesizer, type ProceduralSfxType } from './audioSynthesizer';
 import { getAudioReactiveProvider } from './audio-reactive-provider';
+import { drawPuppetStage, type PuppetStageEvent } from './puppet-engine';
+export type { HyperFrameEvent, ProceduralSfxType, PuppetStageEvent };
+export { drawPuppetStage };
 
 export type GraphicTheme = 'corporate' | 'news' | 'minimal' | 'cyberpunk' | 'neon' | 'retro-vhs' | 'gradient-glass' | 'bold-badge' | 'solid-dark' | 'solid-box';
 
@@ -302,6 +305,7 @@ export type GraphicEvent = (
   | DonutChartEvent
   | SpectrumEvent
   | HyperFrameEvent
+  | PuppetStageEvent
 ) & GraphicEventBase;
 
 const FONT = '"Montserrat", sans-serif';
@@ -3588,6 +3592,15 @@ export function getGraphicBounds(ev: GraphicEvent, cvW: number, cvH: number): { 
     const baseY = isCenter ? (cvH - h) / 2 : isTop ? cvH * 0.18 : cvH * 0.82 - h / 2;
     x = ev.customX !== undefined ? ev.customX * cvW : (cvW - w) / 2;
     y = ev.customY !== undefined ? ev.customY * cvH : baseY;
+  } else if (ev.type === 'puppetStage') {
+    const isVertical = cvW < cvH;
+    const isDual = ev.dualMode && ev.dualMode !== 'single';
+    w = Math.round(Math.min(cvW, cvH) * (isDual ? 0.68 : 0.42) * sc);
+    h = Math.round(Math.min(cvW, cvH) * 0.44 * sc);
+    const cx = (ev.customX !== undefined ? ev.customX : 0.5) * cvW;
+    const cy = (ev.customY !== undefined ? ev.customY : (isVertical ? 0.54 : 0.56)) * cvH;
+    x = cx - w / 2;
+    y = cy - h / 2;
   }
 
   return { x, y, w, h };
@@ -3738,6 +3751,7 @@ export function drawGraphics(
       else if (ev.type === 'versusCard') drawVersusCard(ctx, ev, alpha, appear, cvW, cvH, time);
       else if (ev.type === 'donutChart') drawDonutChart(ctx, ev, alpha, appear, cvW, cvH, time);
       else if (ev.type === 'spectrum') drawSpectrum(ctx, ev as SpectrumEvent, alpha, appear, cvW, cvH, time);
+      else if (ev.type === 'puppetStage') drawPuppetStage(ctx, ev as PuppetStageEvent, alpha, appear, cvW, cvH, time);
       else if (ev.type === 'hyperFrame') {
         if (isExporting || typeof document === 'undefined') {
           HyperFramesEngine.drawToCanvas(ctx, ev as any, alpha, appear, cvW, cvH, time);

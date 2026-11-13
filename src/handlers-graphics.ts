@@ -16,6 +16,7 @@ import { t0, t1 } from './perfMonitor';
 import { markInteraction, scheduleFullQualityRedraw } from './interaction';
 import { vsIcon, type VsIconName } from './ui-icons';
 import { isVsWorkspaceEnabled } from './director-workspace';
+import { PUPPET_SCENE_PRESETS, drawPuppetStage } from './puppet-engine';
 
 let currentEditingGraphicId: string | null = null;
 let currentCustomImageUrl: string | null = null;
@@ -56,7 +57,7 @@ export function updatePositionInputsFromEvent(ev?: GraphicEvent) {
     let posXPercent = 50;
     let posYPercent = 50;
 
-    const isCenterAnchored = ev.type === 'hyperFrame' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
+    const isCenterAnchored = ev.type === 'hyperFrame' || ev.type === 'puppetStage' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
 
     if (ev.customX !== undefined && ev.customY !== undefined) {
         posXPercent = Math.round(ev.customX * 100);
@@ -108,7 +109,7 @@ export function handleNudgePosition(dx: number | 'center', dy: number | 'center'
     let curY = parseInt(dom.gePosY?.value || '50', 10);
 
     const ev = currentEditingGraphicId ? (timelineState.graphics || []).find(g => g.id === currentEditingGraphicId) : undefined;
-    const isCenterAnchored = !ev || ev.type === 'hyperFrame' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
+    const isCenterAnchored = !ev || ev.type === 'hyperFrame' || ev.type === 'puppetStage' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
     const bounds = ev && !isCenterAnchored ? getGraphicBounds({ ...ev, customX: undefined, customY: undefined }, 100, 100) : null;
 
     if (dx === 'center') {
@@ -192,6 +193,7 @@ export function getGraphicTypeLabel(type: string): string {
         case 'spectrum': return 'Audio Spectrum';
         case 'evidenceBoard': return 'Evidence Board';
         case 'hyperFrame': return '🚀 HyperFrame';
+        case 'puppetStage': return '🎭 Puppet Stage';
         default: return 'Graphic';
     }
 }
@@ -203,12 +205,16 @@ export function syncPresetChips(selectedType: string) {
         if (chipType === selectedType) {
             if (chipType === 'hyperFrame') {
                 chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-gradient-to-r from-sky-600 to-indigo-600 text-white font-bold border border-sky-400/60 shadow-md shadow-sky-950/50 transition cursor-pointer';
+            } else if (chipType === 'puppetStage') {
+                chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold border border-amber-400/60 shadow-md shadow-amber-950/50 transition cursor-pointer';
             } else {
                 chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-teal-600 text-white font-bold border border-teal-400/60 shadow-md transition cursor-pointer';
             }
         } else {
             if (chipType === 'hyperFrame') {
                 chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-sky-950/60 hover:bg-sky-900/60 text-sky-300 border border-sky-500/40 transition cursor-pointer font-semibold';
+            } else if (chipType === 'puppetStage') {
+                chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 border border-amber-500/40 transition cursor-pointer font-semibold';
             } else if (chipType === 'lowerThird') {
                 chip.className = 'ge-preset-chip shrink-0 px-2.5 py-1 rounded-lg bg-teal-950/60 hover:bg-teal-900/60 text-teal-300 border border-teal-500/40 transition cursor-pointer font-semibold';
             } else {
@@ -416,11 +422,17 @@ export function dropGraphicAtPlayhead(presetType: string = 'lowerThird') {
     let icon: string | undefined = undefined;
 
     const isHf = presetType.startsWith('hyperFrame:') || presetType === 'hyperFrame';
+    const isPs = presetType.startsWith('puppetStage:') || presetType === 'puppetStage';
 
     if (isHf) {
         const hfId = presetType.startsWith('hyperFrame:') ? presetType.replace('hyperFrame:', '') : 'launch-hero';
         const hfPreset = HYPERFRAME_PRESETS.find(p => p.id === hfId) || HYPERFRAME_PRESETS[0];
         title = hfPreset.name;
+    } else if (isPs) {
+        const psId = presetType.startsWith('puppetStage:') ? presetType.replace('puppetStage:', '') : 'hundred-years-duel';
+        const psPreset = PUPPET_SCENE_PRESETS.find(p => p.id === psId) || PUPPET_SCENE_PRESETS[0];
+        title = psPreset.config.title || psPreset.name;
+        subtitle = psPreset.config.subtitle;
     } else {
         switch (presetType) {
             case 'lowerThird':
@@ -469,7 +481,7 @@ export function dropGraphicAtPlayhead(presetType: string = 'lowerThird') {
 
     const newEv: any = {
         id: 'graphic_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 6),
-        type: isHf ? 'hyperFrame' : presetType,
+        type: isHf ? 'hyperFrame' : isPs ? 'puppetStage' : presetType,
         start,
         end,
         title,
@@ -565,6 +577,11 @@ export function dropGraphicAtPlayhead(presetType: string = 'lowerThird') {
         newEv.musicReactiveGlow = hfPreset.musicReactiveGlow ?? true;
         newEv.sfxTrigger = hfPreset.sfxTrigger ?? 'whoosh';
         newEv.beatPulseScale = hfPreset.beatPulseScale ?? 0.08;
+    } else if (isPs) {
+        const psId = presetType.startsWith('puppetStage:') ? presetType.replace('puppetStage:', '') : 'hundred-years-duel';
+        const psPreset = PUPPET_SCENE_PRESETS.find(p => p.id === psId) || PUPPET_SCENE_PRESETS[0];
+        Object.assign(newEv, psPreset.config);
+        newEv.presetId = psPreset.id;
     }
 
     timelineState.saveSnapshot();
@@ -931,6 +948,24 @@ export function openGraphicEditor(id?: string, defaultStart?: number) {
                 if (dom.geHfSfxTrigger) dom.geHfSfxTrigger.value = (ev as any).sfxTrigger || 'none';
                 if (dom.geHfBeatScale) dom.geHfBeatScale.value = String((ev as any).beatPulseScale || 0.08);
                 setCustomImagePreview(null);
+            } else if (ev.type === 'puppetStage') {
+                const sv = (id: string, val: string) => { const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null; if (el) el.value = val; };
+                sv('ge-ps-preset-select', (ev as any).presetId || 'hundred-years-duel');
+                sv('ge-ps-puppet', (ev as any).puppetId || (ev as any).puppet || 'flag_fighter');
+                sv('ge-ps-faction', (ev as any).faction || 'england');
+                sv('ge-ps-expression', (ev as any).expression || 'angry');
+                sv('ge-ps-action', (ev as any).action || 'sword-clash');
+                sv('ge-ps-dual-mode', (ev as any).dualMode || 'duel-clash');
+                sv('ge-ps-sec-puppet', (ev as any).secondaryPuppetId || (ev as any).secondaryPuppet || 'flag_fighter');
+                sv('ge-ps-sec-faction', (ev as any).secondaryFaction || 'france');
+                sv('ge-ps-sec-expression', (ev as any).secondaryExpression || 'shocked');
+                sv('ge-ps-bubble', (ev as any).bubbleText || (ev as any).speechBubble || '');
+                sv('ge-ps-sec-bubble', (ev as any).secondaryBubbleText || (ev as any).secondaryBubble || '');
+                sv('ge-ps-counter', (ev as any).floatingCounterText || (ev as any).floatingCounter || '');
+                sv('ge-ps-stat-values', (ev as any).statValues || '👑 0 | ⚔️ 0 | ✊ 100');
+                const rpgChk = document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null;
+                if (rpgChk) rpgChk.checked = !!(ev as any).showRpgStats;
+                setCustomImagePreview(null);
             }
             
             if (dom.graphicEditorTitle) dom.graphicEditorTitle.textContent = 'Edit Graphic';
@@ -987,6 +1022,26 @@ export function openGraphicEditor(id?: string, defaultStart?: number) {
         if (dom.geHfMusicGlow) dom.geHfMusicGlow.checked = true;
         if (dom.geHfSfxTrigger) dom.geHfSfxTrigger.value = 'whoosh';
         if (dom.geHfBeatScale) dom.geHfBeatScale.value = '0.08';
+        const defaultPs = PUPPET_SCENE_PRESETS[0]?.config;
+        const setPs = (id: string, val: string) => {
+            const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+            if (el) el.value = val;
+        };
+        setPs('ge-ps-preset-select', PUPPET_SCENE_PRESETS[0]?.id || 'hundred-years-duel');
+        setPs('ge-ps-puppet', defaultPs?.puppetId || 'flag_fighter');
+        setPs('ge-ps-faction', defaultPs?.faction || 'england');
+        setPs('ge-ps-expression', defaultPs?.expression || 'angry');
+        setPs('ge-ps-action', defaultPs?.action || 'sword-clash');
+        setPs('ge-ps-dual-mode', defaultPs?.dualMode || 'duel-clash');
+        setPs('ge-ps-sec-puppet', defaultPs?.secondaryPuppetId || 'flag_fighter');
+        setPs('ge-ps-sec-faction', defaultPs?.secondaryFaction || 'france');
+        setPs('ge-ps-sec-expression', defaultPs?.secondaryExpression || 'shocked');
+        setPs('ge-ps-bubble', defaultPs?.bubbleText || '');
+        setPs('ge-ps-sec-bubble', defaultPs?.secondaryBubbleText || '');
+        setPs('ge-ps-counter', defaultPs?.floatingCounterText || '');
+        setPs('ge-ps-stat-values', defaultPs?.statValues || '👑 0 | ⚔️ 0 | ✊ 100');
+        const psRpgChk = document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null;
+        if (psRpgChk) psRpgChk.checked = !!defaultPs?.showRpgStats;
         setCustomImagePreview(null);
         if (dom.graphicEditorTitle) dom.graphicEditorTitle.textContent = 'Add Graphic';
         if (dom.geDeleteCurrBtn) dom.geDeleteCurrBtn.classList.add('hidden');
@@ -1147,6 +1202,22 @@ export function updateGraphicFromEditorLive() {
             delete ev.customX;
             delete ev.customY;
         }
+    } else if (ev.type === 'puppetStage') {
+        const gv = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value;
+        (ev as any).presetId = gv('ge-ps-preset-select') || 'hundred-years-duel';
+        (ev as any).puppetId = gv('ge-ps-puppet') || 'flag_fighter';
+        (ev as any).faction = gv('ge-ps-faction') || 'england';
+        (ev as any).expression = gv('ge-ps-expression') || 'angry';
+        (ev as any).action = gv('ge-ps-action') || 'sword-clash';
+        (ev as any).dualMode = gv('ge-ps-dual-mode') || 'duel-clash';
+        (ev as any).secondaryPuppetId = gv('ge-ps-sec-puppet') || 'flag_fighter';
+        (ev as any).secondaryFaction = gv('ge-ps-sec-faction') || 'france';
+        (ev as any).secondaryExpression = gv('ge-ps-sec-expression') || 'shocked';
+        (ev as any).bubbleText = gv('ge-ps-bubble') || undefined;
+        (ev as any).secondaryBubbleText = gv('ge-ps-sec-bubble') || undefined;
+        (ev as any).floatingCounterText = gv('ge-ps-counter') || undefined;
+        (ev as any).statValues = gv('ge-ps-stat-values') || '👑 0 | ⚔️ 0 | ✊ 100';
+        (ev as any).showRpgStats = !!(document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null)?.checked;
     }
 
     updatePositionInputsFromEvent(ev);
@@ -1172,6 +1243,34 @@ export function updateGraphicEditorOptions() {
     dom.geDcOptions?.classList.toggle('hidden', type !== 'donutChart');
     dom.geSpOptions?.classList.toggle('hidden', type !== 'spectrum');
     dom.geHfOptions?.classList.toggle('hidden', type !== 'hyperFrame');
+    document.getElementById('ge-ps-options')?.classList.toggle('hidden', type !== 'puppetStage');
+    if (type === 'puppetStage') {
+        const currEv = currentEditingGraphicId ? (timelineState.graphics || []).find(g => g.id === currentEditingGraphicId) : null;
+        if (currEv && !(currEv as any).puppetId && !(currEv as any).puppet) {
+            const defaultPs = PUPPET_SCENE_PRESETS[0]?.config;
+            const setPs = (id: string, val: string) => {
+                const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+                if (el) el.value = val;
+            };
+            setPs('ge-ps-preset-select', PUPPET_SCENE_PRESETS[0]?.id || 'hundred-years-duel');
+            setPs('ge-ps-puppet', defaultPs?.puppetId || 'flag_fighter');
+            setPs('ge-ps-faction', defaultPs?.faction || 'england');
+            setPs('ge-ps-expression', defaultPs?.expression || 'angry');
+            setPs('ge-ps-action', defaultPs?.action || 'sword-clash');
+            setPs('ge-ps-dual-mode', defaultPs?.dualMode || 'duel-clash');
+            setPs('ge-ps-sec-puppet', defaultPs?.secondaryPuppetId || 'flag_fighter');
+            setPs('ge-ps-sec-faction', defaultPs?.secondaryFaction || 'france');
+            setPs('ge-ps-sec-expression', defaultPs?.secondaryExpression || 'shocked');
+            setPs('ge-ps-bubble', defaultPs?.bubbleText || '');
+            setPs('ge-ps-sec-bubble', defaultPs?.secondaryBubbleText || '');
+            setPs('ge-ps-counter', defaultPs?.floatingCounterText || '');
+            setPs('ge-ps-stat-values', defaultPs?.statValues || '👑 0 | ⚔️ 0 | ✊ 100');
+            const psRpgChk = document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null;
+            if (psRpgChk) psRpgChk.checked = !!defaultPs?.showRpgStats;
+        }
+        const dualMode = (document.getElementById('ge-ps-dual-mode') as HTMLSelectElement | null)?.value || 'duel-clash';
+        document.getElementById('ge-ps-secondary-wrap')?.classList.toggle('hidden', dualMode === 'single');
+    }
     if (type === 'donutChart') {
         const isBreakdown = dom.geDcMode?.value === 'breakdown';
         dom.geDcSegmentsContainer?.classList.toggle('hidden', !isBreakdown);
@@ -1374,6 +1473,22 @@ export function saveGraphicEvent() {
                     delete ev.customX;
                     delete ev.customY;
                 }
+            } else if (type === 'puppetStage') {
+                const gv = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value;
+                (ev as any).presetId = gv('ge-ps-preset-select') || 'hundred-years-duel';
+                (ev as any).puppetId = gv('ge-ps-puppet') || 'flag_fighter';
+                (ev as any).faction = gv('ge-ps-faction') || 'england';
+                (ev as any).expression = gv('ge-ps-expression') || 'angry';
+                (ev as any).action = gv('ge-ps-action') || 'sword-clash';
+                (ev as any).dualMode = gv('ge-ps-dual-mode') || 'duel-clash';
+                (ev as any).secondaryPuppetId = gv('ge-ps-sec-puppet') || 'flag_fighter';
+                (ev as any).secondaryFaction = gv('ge-ps-sec-faction') || 'france';
+                (ev as any).secondaryExpression = gv('ge-ps-sec-expression') || 'shocked';
+                (ev as any).bubbleText = gv('ge-ps-bubble') || undefined;
+                (ev as any).secondaryBubbleText = gv('ge-ps-sec-bubble') || undefined;
+                (ev as any).floatingCounterText = gv('ge-ps-counter') || undefined;
+                (ev as any).statValues = gv('ge-ps-stat-values') || '👑 0 | ⚔️ 0 | ✊ 100';
+                (ev as any).showRpgStats = !!(document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null)?.checked;
             }
         }
     } else {
@@ -1382,7 +1497,7 @@ export function saveGraphicEvent() {
             type,
             start,
             end,
-            title: title || (type === 'iconOverlay' ? '' : (type === 'bulletPanel' ? 'Key Takeaways' : (type === 'evidenceBoard' ? 'Evidence Board' : (type === 'revealRoute' ? 'Step Route' : (type === 'statCounter' ? 'Active Metric' : (type === 'spotlightFocus' ? 'Focus Target' : (type === 'socialBadge' ? '' : 'Comparison'))))))),
+            title: title || (type === 'iconOverlay' ? '' : (type === 'puppetStage' ? '7-Puppet Stage' : (type === 'hyperFrame' ? 'HyperFrame' : (type === 'bulletPanel' ? 'Key Takeaways' : (type === 'evidenceBoard' ? 'Evidence Board' : (type === 'revealRoute' ? 'Step Route' : (type === 'statCounter' ? 'Active Metric' : (type === 'spotlightFocus' ? 'Focus Target' : (type === 'socialBadge' ? '' : 'Comparison'))))))))),
             subtitle: subtitle || undefined,
             accentWords,
             textColor,
@@ -1495,6 +1610,22 @@ export function saveGraphicEvent() {
             newEv.musicReactiveGlow = dom.geHfMusicGlow ? dom.geHfMusicGlow.checked : false;
             newEv.sfxTrigger = dom.geHfSfxTrigger?.value || 'none';
             newEv.beatPulseScale = parseFloat(dom.geHfBeatScale?.value) || 0.08;
+        } else if (type === 'puppetStage') {
+            const gv = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value;
+            newEv.presetId = gv('ge-ps-preset-select') || 'hundred-years-duel';
+            newEv.puppetId = gv('ge-ps-puppet') || 'flag_fighter';
+            newEv.faction = gv('ge-ps-faction') || 'england';
+            newEv.expression = gv('ge-ps-expression') || 'angry';
+            newEv.action = gv('ge-ps-action') || 'sword-clash';
+            newEv.dualMode = gv('ge-ps-dual-mode') || 'duel-clash';
+            newEv.secondaryPuppetId = gv('ge-ps-sec-puppet') || 'flag_fighter';
+            newEv.secondaryFaction = gv('ge-ps-sec-faction') || 'france';
+            newEv.secondaryExpression = gv('ge-ps-sec-expression') || 'shocked';
+            newEv.bubbleText = gv('ge-ps-bubble') || undefined;
+            newEv.secondaryBubbleText = gv('ge-ps-sec-bubble') || undefined;
+            newEv.floatingCounterText = gv('ge-ps-counter') || undefined;
+            newEv.statValues = gv('ge-ps-stat-values') || '👑 0 | ⚔️ 0 | ✊ 100';
+            newEv.showRpgStats = !!(document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null)?.checked;
         }
         events.push(newEv);
     }
@@ -2009,7 +2140,30 @@ export function initGraphicPresetCanvasPreviews(): void {
         break;
       }
       default: {
-        renderHyperFrameOrGenericPreview(ctx, w, h, presetId, ease, accent);
+        if (presetId.startsWith('puppetStage')) {
+          const psId = presetId.startsWith('puppetStage:') ? presetTypeId(presetId) : 'hundred-years-duel';
+          function presetTypeId(id: string) { return id.replace('puppetStage:', ''); }
+          const psPreset = PUPPET_SCENE_PRESETS.find(p => p.id === psId) || PUPPET_SCENE_PRESETS[0];
+          drawPuppetStage(
+            ctx,
+            {
+              id: 'preview',
+              type: 'puppetStage',
+              start: 0,
+              end: 4,
+              puppetId: 'flag_fighter',
+              ...psPreset.config,
+              scale: 0.78,
+            },
+            1.0,
+            ease,
+            w,
+            h,
+            t * 2.2
+          );
+        } else {
+          renderHyperFrameOrGenericPreview(ctx, w, h, presetId, ease, accent);
+        }
         break;
       }
     }
@@ -2930,6 +3084,50 @@ export function setupCanvasInteraction() {
         });
     }
     if (dom.geHfBeatScale) dom.geHfBeatScale.addEventListener('change', updateGraphicFromEditorLive);
+
+    // 7-Puppet Stage Event Listeners
+    const psPresetSelect = document.getElementById('ge-ps-preset-select') as HTMLSelectElement | null;
+    if (psPresetSelect) {
+        psPresetSelect.addEventListener('change', () => {
+            const preset = PUPPET_SCENE_PRESETS.find(p => p.id === psPresetSelect.value);
+            if (preset) {
+                const sv = (id: string, val: string) => { const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null; if (el) el.value = val; };
+                if (dom.geTitle) dom.geTitle.value = preset.config.title || preset.name;
+                if (dom.geSubtitle) dom.geSubtitle.value = preset.config.subtitle || '';
+                if (dom.geColor && preset.config.accentColor) dom.geColor.value = preset.config.accentColor;
+                sv('ge-ps-puppet', preset.config.puppetId || 'flag_fighter');
+                sv('ge-ps-faction', preset.config.faction || 'england');
+                sv('ge-ps-expression', preset.config.expression || 'angry');
+                sv('ge-ps-action', preset.config.action || 'sword-clash');
+                sv('ge-ps-dual-mode', preset.config.dualMode || 'single');
+                sv('ge-ps-sec-puppet', preset.config.secondaryPuppetId || 'flag_fighter');
+                sv('ge-ps-sec-faction', preset.config.secondaryFaction || 'france');
+                sv('ge-ps-sec-expression', preset.config.secondaryExpression || 'shocked');
+                sv('ge-ps-bubble', preset.config.bubbleText || '');
+                sv('ge-ps-sec-bubble', preset.config.secondaryBubbleText || '');
+                sv('ge-ps-counter', preset.config.floatingCounterText || '');
+                sv('ge-ps-stat-values', preset.config.statValues || '👑 0 | ⚔️ 0 | ✊ 100');
+                const rpgChk = document.getElementById('ge-ps-rpg-stats') as HTMLInputElement | null;
+                if (rpgChk) rpgChk.checked = !!preset.config.showRpgStats;
+                document.getElementById('ge-ps-secondary-wrap')?.classList.toggle('hidden', preset.config.dualMode === 'single');
+                updateGraphicFromEditorLive();
+            }
+        });
+    }
+    const psDualModeSelect = document.getElementById('ge-ps-dual-mode') as HTMLSelectElement | null;
+    if (psDualModeSelect) {
+        psDualModeSelect.addEventListener('change', () => {
+            document.getElementById('ge-ps-secondary-wrap')?.classList.toggle('hidden', psDualModeSelect.value === 'single');
+            updateGraphicFromEditorLive();
+        });
+    }
+    ['ge-ps-puppet', 'ge-ps-faction', 'ge-ps-expression', 'ge-ps-action', 'ge-ps-sec-puppet', 'ge-ps-sec-faction', 'ge-ps-sec-expression', 'ge-ps-rpg-stats'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', updateGraphicFromEditorLive);
+    });
+    ['ge-ps-bubble', 'ge-ps-sec-bubble', 'ge-ps-counter', 'ge-ps-stat-values'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', updateGraphicFromEditorLive);
+    });
+
     if (dom.geHfAiGenerateBtn) {
         dom.geHfAiGenerateBtn.addEventListener('click', async () => {
             const prompt = dom.geHfAiPrompt?.value.trim();
@@ -3422,7 +3620,7 @@ User Request: "${prompt}"`
             const ev = events.find(g => g.id === draggingGraphicId);
 
             if (ev) {
-                const isCenterAnchored = ev.type === 'hyperFrame' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
+                const isCenterAnchored = ev.type === 'hyperFrame' || ev.type === 'puppetStage' || ev.type === 'titleCard' || ev.type === 'iconOverlay' || ev.type === 'evidenceBoard' || ev.type === 'revealRoute' || ev.type === 'spotlightFocus';
 
                 if (ev.customX === undefined || ev.customY === undefined) {
                     const bounds = getGraphicBounds(ev, cvW, cvH);

@@ -170,7 +170,74 @@ async function testMediaAssemblerMatching() {
   assert.strictEqual(matched[2].assetId, 'a1', 'Sentence 2 (city/skyscrapers) should match city_traffic_night.mp4');
 }
 
-testMediaAssemblerMatching().then(() => {
-  console.log('All model routing, cloud render parity, and media assembler tests passed!');
+// 8. 7-Puppet System (OverSimplified / Paradox RTS 2.5D Rigged Cutouts) & Cloud Parity
+async function testPuppetStageEngine() {
+  const { PUPPET_SCENE_PRESETS, PUPPET_ARCHETYPE_META, drawPuppetStage } = await import('../src/puppet-engine');
+  const { drawGraphics, getGraphicBounds } = await import('../src/graphics-engine');
+
+  assert.strictEqual(Object.keys(PUPPET_ARCHETYPE_META).length, 7, 'Must have exactly 7 puppet archetypes');
+  assert.strictEqual(PUPPET_SCENE_PRESETS.length, 7, 'Must have 7 one-click puppet scene presets');
+
+  let drawCalls = 0;
+  const noop = () => { drawCalls++; };
+  const baseTarget: Record<string, any> = {
+    font: '',
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    globalAlpha: 1,
+    measureText: (txt: string) => ({ width: txt.length * 10 }),
+    createLinearGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: () => ({ addColorStop: noop }),
+  };
+  const mockCanvasCtx: any = new Proxy(baseTarget, {
+    get(target, prop: string) {
+      if (prop in target) return target[prop];
+      return noop;
+    },
+    set(target, prop: string, value) {
+      target[prop] = value;
+      return true;
+    },
+  });
+
+  const renderedTexts: string[] = [];
+  baseTarget.fillText = (txt: string) => {
+    drawCalls++;
+    renderedTexts.push(String(txt));
+  };
+
+  for (const preset of PUPPET_SCENE_PRESETS) {
+    const ev: any = {
+      id: `test_${preset.id}`,
+      type: 'puppetStage',
+      start: 0,
+      end: 6,
+      puppetId: 'flag_fighter',
+      ...preset.config,
+    };
+    const bounds = getGraphicBounds(ev, 1080, 1920);
+    assert.ok(bounds.w > 100 && bounds.h > 100, `Preset ${preset.id} must have valid canvas selection bounds`);
+    drawPuppetStage(mockCanvasCtx, ev, 1.0, 1.0, 1080, 1920, 1.5);
+    drawGraphics(mockCanvasCtx, 1.5, 1080, 1920, [ev], { isExporting: true, graphicsAccentColor: '#F5C542' });
+    // Also verify 160x90 Motion Graphics gallery mini-preview rendering and paused-at-start (time = 0) inspector preview
+    renderedTexts.length = 0;
+    drawGraphics(mockCanvasCtx, 0, 160, 90, [ev], { isExporting: false, graphicsAccentColor: '#F5C542' });
+    if (preset.id === 'joan-rpg-upgrade') {
+      assert.ok(renderedTexts.includes('100'), 'Paused-at-start preview of joan-rpg-upgrade must render RPG stat pills');
+    }
+    if (preset.id === 'royal-diplomacy') {
+      assert.ok(
+        renderedTexts.some((t) => t.includes('Um... no.')),
+        'Paused-at-start preview of royal-diplomacy must render secondary puppet speech bubble'
+      );
+    }
+  }
+  assert.ok(drawCalls > 500, '7-Puppet engine must execute canvas drawing primitives across all 7 archetypes');
+}
+
+Promise.all([testMediaAssemblerMatching(), testPuppetStageEngine()]).then(() => {
+  console.log('All model routing, cloud render parity, media assembler, and 7-Puppet stage tests passed!');
 });
+
 

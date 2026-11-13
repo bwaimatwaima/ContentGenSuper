@@ -9,6 +9,7 @@ import { state } from './state';
 import { getActiveAspectRatio } from './handlers-effects';
 import { vsIcon } from './ui-icons';
 import { buildTransitionsStudioPanel, syncTransitionsPanel } from './transitions-studio-panel';
+import { buildPuppetsStudioPanel, syncPuppetsStudioPanel } from './puppets-studio-panel';
 import { initPanelCollapse } from './vs-panel-collapse';
 
 const WORKSPACE_FLAG_KEY = 'cg_flag_vs_workspace';
@@ -467,12 +468,14 @@ export function activateVsWorkspace(): boolean {
             <div class="panel-head assets-panel-head"><span class="panel-heading">Library</span><span class="panel-kicker">Browse & add</span></div>
             <div class="tablist asset-tabs" role="tablist" aria-label="Asset categories">
               <button type="button" class="tab" role="tab" aria-selected="true" data-vs-left-tab="graphics">${vsIcon('layers', 13)} <span>Graphics</span></button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="puppets">🎭 <span>Puppets</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="audio">${vsIcon('music', 13)} <span>Audio</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="captions">${vsIcon('captions', 13)} <span>Captions</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="transitions">${vsIcon('shuffle', 13)} <span>Transitions</span></button>
               <button type="button" class="tab" role="tab" aria-selected="false" data-vs-left-tab="effects">${vsIcon('sparkles', 13)} <span>Effects</span></button>
             </div>
             <div class="assets-body" id="vs-left-tab-graphics"></div>
+            <div class="assets-body hidden" id="vs-left-tab-puppets"></div>
             <div class="assets-body hidden" id="vs-left-tab-audio"><div class="vs-section-intro"><strong>Audio & voice</strong><span>Existing narration and music controls</span></div></div>
             <div class="assets-body hidden" id="vs-left-tab-captions"><div class="vs-section-intro"><strong>Captions & subtitles</strong><span>Existing subtitle controls</span></div></div>
             <div class="assets-body hidden" id="vs-left-tab-transitions"></div>
@@ -559,6 +562,7 @@ export function activateVsWorkspace(): boolean {
     directorRoot.prepend(shellEl);
 
     const graphicsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-graphics');
+    const puppetsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-puppets');
     const audioSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-audio');
     const captionsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-captions');
     const transitionsSlot = shellEl.querySelector<HTMLElement>('#vs-left-tab-transitions');
@@ -671,6 +675,7 @@ export function activateVsWorkspace(): boolean {
     if (responsivePreviewToggle?.parentElement && topbarCenter) moveNode(responsivePreviewToggle.parentElement, topbarCenter);
 
     organizeGraphicsBrowser();
+    if (puppetsSlot) puppetsSlot.appendChild(buildPuppetsStudioPanel());
     if (transitionsSlot) transitionsSlot.appendChild(buildTransitionsStudioPanel());
     if (effectsSlot) effectsSlot.appendChild(buildEffectsStudioPanel());
 
@@ -714,11 +719,13 @@ export function activateVsWorkspace(): boolean {
         shellEl?.querySelectorAll<HTMLButtonElement>('[data-vs-left-tab]').forEach((b) => {
           b.setAttribute('aria-selected', String(b === btn));
         });
-        ['graphics', 'audio', 'captions', 'transitions', 'effects'].forEach((key) => {
+        ['graphics', 'puppets', 'audio', 'captions', 'transitions', 'effects'].forEach((key) => {
           shellEl?.querySelector(`#vs-left-tab-${key}`)?.classList.toggle('hidden', key !== target);
         });
         if (target === 'transitions') {
           syncTransitionsPanel();
+        } else if (target === 'puppets') {
+          syncPuppetsStudioPanel();
         }
       });
     });
@@ -734,9 +741,12 @@ export function activateVsWorkspace(): boolean {
         });
         const context = shellEl?.querySelector<HTMLElement>('#vs-inspector-context');
         if (context) {
+          const isPuppet = dom.geType?.value === 'puppetStage';
           context.textContent =
             target === 'graphic'
-              ? 'Graphic overlay'
+              ? isPuppet
+                ? 'Puppet Stage & Choreography'
+                : 'Graphic overlay'
               : target === 'cinema'
               ? 'Camera & movement'
               : target === 'production'

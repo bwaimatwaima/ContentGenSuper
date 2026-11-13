@@ -1382,7 +1382,9 @@ export function renderBrollEditor(
         (ev.sfxTrigger && ev.sfxTrigger !== 'none' && (ev.id?.startsWith('sfx_') || ev.title?.includes('SFX') || ev.isSfxOnly)) ||
         ev.type === 'sfxCue'
       );
-      const visualEvents = graphicsEvents.filter(ev => !isSfxEvent(ev));
+      const isPuppetEvent = (ev: any) => ev && ev.type === 'puppetStage';
+      const puppetEvents = graphicsEvents.filter(ev => !isSfxEvent(ev) && isPuppetEvent(ev));
+      const visualEvents = graphicsEvents.filter(ev => !isSfxEvent(ev) && !isPuppetEvent(ev));
       const sfxEvents = graphicsEvents.filter(ev => isSfxEvent(ev));
 
       // N-TRACK LAYERING LOGIC FOR OVERLAYS (V2, V3...)
@@ -1429,6 +1431,7 @@ export function renderBrollEditor(
                     <div id="timeline-multi-track-container" class="timeline-track timeline-multi-track-container relative flex flex-col shrink-0 min-h-full pb-6" style="width: ${trackWidth}px">
                         <!-- Top Time Ruler (Sticky) -->
                         <div id="timeline-ruler" class="timeline-ruler sticky top-0 z-30 h-7 bg-[#11121d]/95 border-b border-white/10 cursor-pointer backdrop-blur-md relative overflow-hidden" title="Click or drag to scrub playhead"></div>
+                        <div id="track-puppets-container" class="timeline-track-row relative h-12 border-b border-white/10 bg-amber-950/15 flex items-center overflow-hidden shrink-0"></div>
                         <div id="track-overlays-container" class="timeline-track-row relative border-b border-white/10 bg-black/20 overflow-visible shrink-0"></div>
                         <div id="track-video-container" class="timeline-track-row relative h-16 border-b border-white/10 bg-black/30 flex items-center shrink-0"></div>
                         <div id="track-captions-container" class="timeline-track-row relative h-10 border-b border-white/10 bg-black/20 flex items-center overflow-hidden shrink-0"></div>
@@ -1528,6 +1531,7 @@ export function renderBrollEditor(
       }
 
       // Dynamic asset presence checks for tracks
+      const hasPuppets = puppetEvents.length > 0;
       const hasOverlays = visualEvents.length > 0 || Boolean((timelineState as any).overlaysTrack && (timelineState as any).overlaysTrack.length > 0);
       const hasCaptions = Boolean(
         (state as any).videoSubtitlesEnabled ||
@@ -1567,7 +1571,7 @@ export function renderBrollEditor(
         ((state as any).sfxAudioTrack && (state as any).sfxAudioTrack.length > 0)
       );
 
-      const activeTracksCount = 1 + (hasOverlays ? overlayTracksCount : 0) + (hasCaptions ? 1 : 0) + (hasAudio ? 1 : 0) + (hasMusic ? 1 : 0) + (hasSfx ? 1 : 0);
+      const activeTracksCount = 1 + (hasPuppets ? 1 : 0) + (hasOverlays ? overlayTracksCount : 0) + (hasCaptions ? 1 : 0) + (hasAudio ? 1 : 0) + (hasMusic ? 1 : 0) + (hasSfx ? 1 : 0);
 
       // Adjust timeline container height to fit active tracks + top toolbar + ruler + bottom Scroll Assistant bar
       if (dom.timelineEditorContainer && !dom.timelineEditorContainer.classList.contains('is-collapsed')) {
@@ -1575,7 +1579,7 @@ export function renderBrollEditor(
         const toolbarH = Math.max(42, toolbarEl?.offsetHeight || 42);
         const bottomBarEl = document.getElementById('timeline-bottom-scrubber-bar');
         const bottomBarH = bottomBarEl && !bottomBarEl.classList.contains('hidden') ? Math.max(32, bottomBarEl.offsetHeight || 32) : 0;
-        const tracksH = 28 + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 48 : 0) + (hasMusic ? 48 : 0) + (hasSfx ? 48 : 0) + 16;
+        const tracksH = 28 + (hasPuppets ? 48 : 0) + (hasOverlays ? overlayContainerHeight : 0) + 64 + (hasCaptions ? 40 : 0) + (hasAudio ? 48 : 0) + (hasMusic ? 48 : 0) + (hasSfx ? 48 : 0) + 16;
         const activeHeight = toolbarH + tracksH + bottomBarH;
         const maxAllowedH = Math.min(480, Math.floor((window.innerHeight || 800) * 0.54));
         dom.timelineEditorContainer.style.height = `${Math.min(maxAllowedH, Math.max(180, activeHeight))}px`;
@@ -1586,6 +1590,8 @@ export function renderBrollEditor(
         "#timeline-track-headers",
       ) as HTMLElement;
       if (trackHeaders) {
+        const isPuppetsHidden = timelineState.isTrackHidden('puppets');
+        const isPuppetsLocked = timelineState.isTrackLocked('puppets');
         const isOverlaysHidden = timelineState.isTrackHidden('overlays');
         const isOverlaysLocked = timelineState.isTrackLocked('overlays');
         const isVideoHidden = timelineState.isTrackHidden('video');
@@ -1598,6 +1604,23 @@ export function renderBrollEditor(
         const isMusicLocked = timelineState.isTrackLocked('music');
         const isSfxHidden = timelineState.isTrackHidden('sfx');
         const isSfxLocked = timelineState.isTrackLocked('sfx');
+
+        const puppetsHeaderHtml = hasPuppets ? `
+              <div class="h-12 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-amber-300 bg-amber-950/30 hover:bg-amber-950/40 transition-colors">
+                  <div class="flex items-center gap-1.5 truncate">
+                      <span class="text-xs shrink-0">🎭</span>
+                      <span class="truncate font-semibold text-[11px] text-amber-200">Puppets Stage</span>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                      <button class="track-vis-btn p-1 rounded hover:bg-white/10 transition-colors cursor-pointer ${isPuppetsHidden ? 'text-rose-400 bg-rose-950/60' : 'text-gray-400 hover:text-white'}" data-track-key="puppets" title="${isPuppetsHidden ? 'Show Puppets Track' : 'Hide Puppets Track'}">
+                          ${isPuppetsHidden ? '👁‍🗨' : '👁'}
+                      </button>
+                      <button class="track-lock-btn p-1 rounded hover:bg-white/10 transition-colors cursor-pointer ${isPuppetsLocked ? 'text-amber-400 bg-amber-950/60' : 'text-gray-400 hover:text-white'}" data-track-key="puppets" title="${isPuppetsLocked ? 'Unlock Track' : 'Lock Track'}">
+                          ${isPuppetsLocked ? '🔒' : '🔓'}
+                      </button>
+                      <button class="track-add-btn text-[11px] bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white px-1.5 py-0.5 rounded border border-amber-500/40 transition-colors cursor-pointer font-bold" data-track-key="puppets" title="Add Puppet Scene at Playhead">+</button>
+                  </div>
+              </div>` : '';
 
         let overlaysHeaderHtml = "";
         if (hasOverlays) {
@@ -1697,6 +1720,7 @@ export function renderBrollEditor(
                   <span>Track Details</span>
                   <span class="text-[9px] text-gray-500">${activeTracksCount} Active Track${activeTracksCount === 1 ? '' : 's'}</span>
               </div>
+              ${puppetsHeaderHtml}
               ${overlaysHeaderHtml}
               <div class="h-16 shrink-0 flex items-center justify-between px-2.5 sm:px-3 border-b border-white/10 text-indigo-300 bg-indigo-950/20 hover:bg-indigo-950/30 transition-colors">
                   <div class="flex items-center gap-1.5 truncate">
@@ -1753,7 +1777,10 @@ export function renderBrollEditor(
             e.stopPropagation();
             const trackKey = btn.getAttribute('data-track-key');
             const curTime = state.lastRenderedTime || state.videoPauseTime || 0;
-            if (trackKey === 'overlays') {
+            if (trackKey === 'puppets') {
+              document.querySelector<HTMLButtonElement>('[data-vs-left-tab="puppets"]')?.click();
+              import('./handlers-graphics').then(m => m.dropGraphicAtPlayhead('puppetStage:hundred-years-duel'));
+            } else if (trackKey === 'overlays') {
               switchTab('graphics');
               openGraphicEditor(undefined, curTime);
             } else if (trackKey === 'video') {
@@ -1851,6 +1878,9 @@ export function renderBrollEditor(
     const visibleStartTime = Math.max(0, visibleStartX / pps);
     const visibleEndTime = visibleEndX / pps;
 
+    const trackPuppets = dom.timelineClipsContainer.querySelector(
+      "#track-puppets-container",
+    ) as HTMLElement | null;
     const trackOverlays = dom.timelineClipsContainer.querySelector(
       "#track-overlays-container",
     ) as HTMLElement;
@@ -1877,10 +1907,13 @@ export function renderBrollEditor(
       (ev.sfxTrigger && ev.sfxTrigger !== 'none' && (ev.id?.startsWith('sfx_') || ev.title?.includes('SFX') || ev.isSfxOnly)) ||
       ev.type === 'sfxCue'
     );
-    const visualEvents = graphicsEvents.filter(ev => !isSfxEvent(ev));
+    const isPuppetEvent = (ev: any) => ev && ev.type === 'puppetStage';
+    const puppetEvents = graphicsEvents.filter(ev => !isSfxEvent(ev) && isPuppetEvent(ev));
+    const visualEvents = graphicsEvents.filter(ev => !isSfxEvent(ev) && !isPuppetEvent(ev));
     const sfxEvents = graphicsEvents.filter(ev => isSfxEvent(ev) || Boolean((ev as any).sfxTrigger && (ev as any).sfxTrigger !== 'none'));
 
     // Dynamic asset presence checks
+    const hasPuppets = puppetEvents.length > 0;
     const hasOverlays = visualEvents.length > 0 || ((timelineState as any).overlaysTrack && (timelineState as any).overlaysTrack.length > 0);
     const hasCaptions = Boolean(
       (state as any).videoSubtitlesEnabled ||
@@ -1921,6 +1954,7 @@ export function renderBrollEditor(
     );
 
     // Toggle track container row display style based on asset presence
+    if (trackPuppets) trackPuppets.style.display = hasPuppets ? 'flex' : 'none';
     if (trackOverlays) trackOverlays.style.display = hasOverlays ? 'block' : 'none';
     if (trackCaptions) trackCaptions.style.display = hasCaptions ? 'flex' : 'none';
     if (trackAudio) trackAudio.style.display = hasAudio ? 'flex' : 'none';
@@ -1928,6 +1962,13 @@ export function renderBrollEditor(
     if (trackSfx) trackSfx.style.display = hasSfx ? 'flex' : 'none';
 
     // Apply Track Visibility & Lock States to Lanes
+    const isPuppetsHidden = timelineState.isTrackHidden('puppets');
+    const isPuppetsLocked = timelineState.isTrackLocked('puppets');
+    if (trackPuppets) {
+      trackPuppets.classList.toggle('opacity-25', isPuppetsHidden);
+      trackPuppets.classList.toggle('pointer-events-none', isPuppetsHidden || isPuppetsLocked);
+    }
+
     const isOverlaysHidden = timelineState.isTrackHidden('overlays');
     const isOverlaysLocked = timelineState.isTrackLocked('overlays');
     trackOverlays.classList.toggle('opacity-25', isOverlaysHidden);
@@ -1994,6 +2035,60 @@ export function renderBrollEditor(
           </div>`;
       }
       timelineRuler.innerHTML = ticksHtml;
+    }
+
+    if (trackPuppets) {
+      trackPuppets.innerHTML = "";
+      const puppetsFrag = document.createDocumentFragment();
+      puppetEvents.forEach((ev) => {
+        if ((ev.end ?? 0) < visibleStartTime || (ev.start ?? 0) > visibleEndTime) return;
+        const evWidth = Math.max(36, ((ev.end ?? 0) - (ev.start ?? 0)) * pps);
+        const evLeft = (ev.start ?? 0) * pps;
+        const isSelected = timelineState.isGraphicSelected(ev.id);
+        const selectionClasses = isSelected
+          ? "ring-2 ring-amber-400 border-white shadow-amber-500/50 scale-[1.01] z-30"
+          : "z-20";
+        const puppetTitle = ev.title || "Puppet Stage";
+        const moveLabel = (ev as any).movementPath && (ev as any).movementPath !== 'stationary' ? ` · ${(ev as any).movementPath}` : '';
+
+        const el = document.createElement("div");
+        el.className = `timeline-overlay-clip absolute h-10 rounded border-2 bg-amber-950/90 border-amber-400 text-amber-100 backdrop-blur-sm flex items-center justify-between px-1.5 overflow-hidden cursor-pointer shadow-md group transition-all hover:brightness-125 ${selectionClasses}`;
+        el.dataset.graphicId = ev.id;
+        el.style.left = `${evLeft}px`;
+        el.style.width = `${evWidth}px`;
+        el.style.top = `4px`;
+        el.innerHTML = `
+              <div class="resize-handle left-handle left-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-white/40"></div>
+              <div class="flex items-center gap-1.5 truncate pointer-events-none w-full">
+                  <span class="text-xs flex-shrink-0">🎭</span>
+                  <div class="flex flex-col truncate leading-tight">
+                      <span class="text-[9px] font-bold truncate drop-shadow">${escapeHtml(puppetTitle)}</span>
+                      <span class="text-[8px] opacity-80 font-mono tabular-nums">${(ev.start ?? 0).toFixed(1)}s - ${(ev.end ?? 0).toFixed(1)}s${escapeHtml(moveLabel)}</span>
+                  </div>
+              </div>
+              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-30 bg-black/80 px-1 py-0.5 rounded absolute right-2 pointer-events-auto shadow-md border border-white/10">
+                  <button type="button" class="overlay-edit-btn p-0.5 hover:text-amber-300 text-[9px] cursor-pointer" title="Edit Puppet Choreography (✏️)">✏️</button>
+                  <button type="button" class="overlay-delete-btn p-0.5 hover:text-red-400 text-[9px] cursor-pointer" title="Delete Puppet Scene (🗑️)">🗑️</button>
+              </div>
+              <div class="resize-handle right-handle right-0 top-0 bottom-0 w-2.5 absolute z-30 cursor-col-resize hover:bg-white/40"></div>
+          `;
+        el.querySelector(".overlay-edit-btn")?.addEventListener("mousedown", (e) => e.stopPropagation());
+        el.querySelector(".overlay-edit-btn")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          timelineState.setSelectedGraphicId(ev.id);
+          openGraphicEditor(ev.id);
+        });
+        el.querySelector(".overlay-delete-btn")?.addEventListener("mousedown", (e) => e.stopPropagation());
+        el.querySelector(".overlay-delete-btn")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          deleteGraphicEvent(ev.id);
+        });
+        el.addEventListener("dblclick", () => openGraphicEditor(ev.id));
+        puppetsFrag.appendChild(el);
+      });
+      trackPuppets.appendChild(puppetsFrag);
     }
 
     trackOverlays.innerHTML =

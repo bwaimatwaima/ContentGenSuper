@@ -4095,6 +4095,26 @@
                         </div>
                     </div>
 
+                    <!-- Stage Choreography: Movement Path & Audio Lip-Sync -->
+                    <div class="grid grid-cols-2 gap-2.5 p-2.5 rounded-xl bg-gray-900/90 border border-gray-800">
+                        <div>
+                            <label for="ge-ps-movement" class="block text-[11px] font-medium text-amber-300 mb-1">Stage Movement Path</label>
+                            <select id="ge-ps-movement" class="w-full bg-gray-800 text-white border border-gray-700 rounded-lg p-1.5 text-xs">
+                                <option value="converge-center">⚔️ Converge to Center (Charge In)</option>
+                                <option value="enter-left">➡️ Walk / Ride In from Left</option>
+                                <option value="enter-right">⬅️ Walk / Ride In from Right</option>
+                                <option value="march-across">🐎 March Continuously Across</option>
+                                <option value="stationary">🧍 Stationary Stage</option>
+                            </select>
+                        </div>
+                        <div class="flex flex-col justify-end pb-1">
+                            <label class="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
+                                <input type="checkbox" id="ge-ps-lipsync" checked class="w-4 h-4 rounded bg-gray-800 border-gray-700 text-amber-500 focus:ring-amber-500">
+                                <span>🗣️ Voiceover Lip-Sync Mouth</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Speech Bubbles & Floating Counter -->
                     <div class="grid grid-cols-3 gap-2">
                         <div>
@@ -4109,6 +4129,12 @@
                             <label for="ge-ps-counter" class="block text-[11px] text-gray-400 mb-1">Floating Badge</label>
                             <input type="text" id="ge-ps-counter" placeholder="e.g. 116 years" class="w-full bg-gray-800 text-white border border-gray-700 rounded-lg p-1.5 text-xs">
                         </div>
+                    </div>
+
+                    <!-- Multi-Beat Comic Dialogue Script -->
+                    <div>
+                        <label for="ge-ps-dialogue-script" class="block text-[11px] font-medium text-gray-300 mb-1">Multi-Beat Dialogue Script (Optional — 1 beat per line)</label>
+                        <textarea id="ge-ps-dialogue-script" rows="3" placeholder="Left: Why not become King of France too?&#10;Right: Um... no.&#10;Left: Then it's WAR!" class="w-full bg-gray-800 text-white border border-gray-700 rounded-lg p-2 text-xs font-sans"></textarea>
                     </div>
 
                     <!-- RPG Stat Card Banner -->

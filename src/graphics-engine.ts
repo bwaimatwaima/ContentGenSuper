@@ -3729,6 +3729,15 @@ export function drawGraphics(
       continue;
     }
 
+    if (typeof timelineState !== 'undefined') {
+      if (ev.type === 'puppetStage' && timelineState.isTrackHidden('puppets')) {
+        continue;
+      }
+      if (ev.type !== 'puppetStage' && timelineState.isTrackHidden('overlays')) {
+        continue;
+      }
+    }
+
     let { alpha, appear } = timeline(ev, time);
 
     if ((!isExporting && typeof state !== 'undefined' && !state.isVideoPlaying) || isEditing) {

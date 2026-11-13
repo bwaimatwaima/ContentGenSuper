@@ -2247,10 +2247,11 @@ function drawVideoFrameImpl(
       cvW = targetW;
       cvH = targetH;
     }
+    if (typeof ctx.setTransform === 'function') ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cvW, cvH);
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, cvW, cvH);
-    if (!options?.backgroundOnly && state.motionGraphicsEnabled && !timelineState.isTrackHidden('overlays')) {
+    if (!options?.backgroundOnly && state.motionGraphicsEnabled && (!timelineState.isTrackHidden('overlays') || !timelineState.isTrackHidden('puppets'))) {
       drawGraphics(ctx, time, cvW, cvH, timelineState.graphics);
     }
     if (!targetCanvas && !state.isExporting && previouslyActiveVideos.size > 0) {
@@ -2312,6 +2313,7 @@ function drawVideoFrameImpl(
     cvH = targetH;
   }
 
+  if (typeof ctx.setTransform === 'function') ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, cvW, cvH);
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, cvW, cvH);
@@ -3142,9 +3144,9 @@ function drawVideoFrameImpl(
   }
   t1('stage.subtitles', sSubs);
 
-  // Draw Motion Graphics (respecting track visibility)
+  // Draw Motion Graphics & Puppets Stage (each track checks its own visibility inside drawGraphics)
   const sGraphics = t0();
-  if (state.motionGraphicsEnabled && !timelineState.isTrackHidden('overlays')) {
+  if (state.motionGraphicsEnabled && (!timelineState.isTrackHidden('overlays') || !timelineState.isTrackHidden('puppets'))) {
     drawGraphics(ctx, time, cvW, cvH, timelineState.graphics);
   }
   t1('stage.graphics', sGraphics);

@@ -53,6 +53,13 @@ export type PuppetDualMode =
   | 'dialogue-versus'
   | 'trial-scene';
 
+export type PuppetMovementPath =
+  | 'stationary'
+  | 'enter-left'
+  | 'enter-right'
+  | 'march-across'
+  | 'converge-center';
+
 export interface PuppetStageEvent {
   id: string;
   type: 'puppetStage';
@@ -68,6 +75,9 @@ export interface PuppetStageEvent {
   expression?: PuppetExpression;
   action?: PuppetAction;
   dualMode?: PuppetDualMode;
+  movementPath?: PuppetMovementPath;
+  audioLipSync?: boolean;
+  dialogueLines?: string;     // Multi-beat back-and-forth comic dialogue (one beat per line, e.g. "Left: ...\nRight: ...")
   secondaryPuppetId?: PuppetArchetype;
   secondaryPuppet?: PuppetArchetype;
   secondaryFaction?: PuppetFaction;
@@ -165,6 +175,8 @@ export const PUPPET_SCENE_PRESETS: PuppetPreset[] = [
       expression: 'angry',
       action: 'sword-clash',
       dualMode: 'duel-clash',
+      movementPath: 'converge-center',
+      audioLipSync: true,
       secondaryPuppetId: 'flag_fighter',
       secondaryFaction: 'france',
       secondaryExpression: 'angry',
@@ -185,6 +197,8 @@ export const PUPPET_SCENE_PRESETS: PuppetPreset[] = [
       expression: 'talking',
       action: 'equip-upgrade',
       dualMode: 'single',
+      movementPath: 'enter-left',
+      audioLipSync: true,
       showRpgStats: true,
       statValues: '👑 0 | ⚔️ 0 | ✊ 100',
       bubbleText: 'I must save France!',
@@ -204,6 +218,8 @@ export const PUPPET_SCENE_PRESETS: PuppetPreset[] = [
       expression: 'scheming',
       action: 'bow-volley',
       dualMode: 'single',
+      movementPath: 'stationary',
+      audioLipSync: true,
       showRpgStats: false,
       bubbleText: 'Hehehe yeah boy!',
       scale: 1.0,
@@ -221,6 +237,8 @@ export const PUPPET_SCENE_PRESETS: PuppetPreset[] = [
       expression: 'happy',
       action: 'talk-gesture',
       dualMode: 'dialogue-versus',
+      movementPath: 'converge-center',
+      audioLipSync: true,
       secondaryPuppetId: 'monarch',
       secondaryFaction: 'france_royal',
       secondaryExpression: 'shocked',
@@ -242,6 +260,8 @@ export const PUPPET_SCENE_PRESETS: PuppetPreset[] = [
       expression: 'angry',
       action: 'read-scroll',
       dualMode: 'trial-scene',
+      movementPath: 'stationary',
+      audioLipSync: true,
       secondaryPuppetId: 'hero_rebel',
       secondaryFaction: 'france_royal',
       secondaryExpression: 'angry',
@@ -298,6 +318,10 @@ function easeOutBack(t: number): number {
   const c1 = 1.70158;
   const c3 = c1 + 1;
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
 }
 
 function roundRectPath(
@@ -475,7 +499,8 @@ function drawChibiFace(
   headR: number,
   expression: PuppetExpression,
   localT: number,
-  facingRight: boolean
+  facingRight: boolean,
+  lipSyncEnergy: number = 0
 ) {
   const dir = facingRight ? 1 : -1;
   const eyeOffsetX = headR * 0.34;
@@ -540,15 +565,16 @@ function drawChibiFace(
     ctx.stroke();
   }
 
-  // Mouth
+  // Mouth (supports both expression === 'talking' and audio-reactive lipSyncEnergy)
   const mouthX = dir * headR * 0.06;
   const mouthY = headY + headR * 0.44;
   ctx.lineWidth = Math.max(2, headR * 0.075);
 
-  const talkOpen = expression === 'talking' || Math.sin(localT * 16) > 0.25;
-  if (expression === 'talking' && talkOpen) {
-    // Animated open talking mouth (like Joan at 0:50)
-    const openH = headR * (0.14 + 0.08 * Math.abs(Math.sin(localT * 14)));
+  const isTalkingMouth = (expression === 'talking' && Math.sin(localT * 16) > -0.2) || lipSyncEnergy > 0.12;
+  if (isTalkingMouth) {
+    // Animated open talking mouth synced with voiceover cadence or talking expression
+    const cadence = lipSyncEnergy > 0.12 ? lipSyncEnergy : Math.abs(Math.sin(localT * 14));
+    const openH = headR * (0.11 + 0.14 * clamp01(cadence));
     ctx.fillStyle = '#7F1D1D';
     ctx.beginPath();
     ctx.ellipse(mouthX, mouthY, headR * 0.18, openH, 0, 0, Math.PI * 2);
@@ -591,7 +617,8 @@ function drawSinglePuppet(
   cx: number,
   cy: number,
   unitH: number,
-  facingRight: boolean
+  facingRight: boolean,
+  lipSyncEnergy: number = 0
 ) {
   ctx.save();
   ctx.translate(cx, cy);
@@ -839,7 +866,7 @@ function drawSinglePuppet(
     }
 
     // Facial features
-    drawChibiFace(ctx, headY, headR, expression, localT, facingRight);
+    drawChibiFace(ctx, headY, headR, expression, localT, facingRight, lipSyncEnergy);
 
     // Headgear
     if (archetype === 'monarch') {
@@ -1084,6 +1111,7 @@ function drawSinglePuppet(
     ctx.lineTo(rightShoulderX + unitH * 0.15, shoulderY - unitH * 0.08 + wave);
     ctx.stroke();
   }
+  ctx.restore();
 
   // 6. Hero Banner & Shield & Warhorse (like Joan of Arc at 0:54-0:56)
   if (archetype === 'hero_rebel' && hasArmor) {
@@ -1351,6 +1379,80 @@ export function drawPuppetStage(
   const primaryBubble = ev.bubbleText || ev.speechBubble;
   const secBubble = ev.secondaryBubbleText || ev.secondaryBubble;
   const counterText = ev.floatingCounterText || ev.floatingCounter;
+  const movePath: PuppetMovementPath = ev.movementPath || 'stationary';
+  const useLipSync = ev.audioLipSync !== false;
+
+  // Compute stage movement horizontal offset & walking step bounce
+  let stageMoveOffsetX = 0;
+  let convergeSpread = 0;
+  let walkStepBounceY = 0;
+
+  if (movePath === 'enter-left') {
+    const prog = easeOutCubic(clamp01(clipProgress / 0.35));
+    stageMoveOffsetX = -(1 - prog) * cvW * 0.28;
+    if (prog < 0.99) walkStepBounceY = Math.abs(Math.sin(localT * 16)) * (-baseUnitH * 0.035);
+  } else if (movePath === 'enter-right') {
+    const prog = easeOutCubic(clamp01(clipProgress / 0.35));
+    stageMoveOffsetX = (1 - prog) * cvW * 0.28;
+    if (prog < 0.99) walkStepBounceY = Math.abs(Math.sin(localT * 16)) * (-baseUnitH * 0.035);
+  } else if (movePath === 'march-across') {
+    stageMoveOffsetX = (clipProgress - 0.5) * cvW * 0.38;
+    walkStepBounceY = Math.abs(Math.sin(localT * 15)) * (-baseUnitH * 0.03);
+  } else if (movePath === 'converge-center') {
+    const prog = easeOutCubic(clamp01(clipProgress / 0.38));
+    convergeSpread = (1 - prog) * cvW * 0.16;
+    if (prog < 0.99) walkStepBounceY = Math.abs(Math.sin(localT * 16)) * (-baseUnitH * 0.035);
+  }
+
+  stageX += stageMoveOffsetX;
+  const puppetBaseY = stageY + walkStepBounceY;
+
+  // Parse optional multi-beat dialogue script (e.g. "Left: Why not become King of France too?\nRight: Um... no.")
+  let activeBeatSpeaker: 'left' | 'right' | null = null;
+  let activeBeatText: string | null = null;
+  if (ev.dialogueLines && ev.dialogueLines.trim()) {
+    const rawLines = ev.dialogueLines
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+    if (rawLines.length > 0) {
+      const beatIdx = Math.min(rawLines.length - 1, Math.floor(clipProgress * rawLines.length));
+      const rawBeat = rawLines[beatIdx];
+      const rightMatch = rawBeat.match(/^(?:right|r|2|rival|b)\s*:\s*(.+)$/i);
+      const leftMatch = rawBeat.match(/^(?:left|l|1|primary|a)\s*:\s*(.+)$/i);
+      if (rightMatch) {
+        activeBeatSpeaker = 'right';
+        activeBeatText = rightMatch[1].trim();
+      } else if (leftMatch) {
+        activeBeatSpeaker = 'left';
+        activeBeatText = leftMatch[1].trim();
+      } else {
+        activeBeatSpeaker = beatIdx % 2 === 1 && dualMode !== 'single' ? 'right' : 'left';
+        activeBeatText = rawBeat;
+      }
+    }
+  }
+
+  // Compute deterministic lip-sync mouth energy from speech cadence
+  const baseSpeechCadence = useLipSync
+    ? clamp01(0.45 + 0.45 * Math.sin(localT * 15.5) * Math.cos(localT * 6.3))
+    : 0;
+  const leftLipEnergy =
+    activeBeatSpeaker === 'left'
+      ? Math.max(0.25, baseSpeechCadence)
+      : activeBeatSpeaker === 'right'
+        ? 0
+        : primaryBubble && (!secBubble || clipProgress < 0.45)
+          ? baseSpeechCadence
+          : 0;
+  const rightLipEnergy =
+    activeBeatSpeaker === 'right'
+      ? Math.max(0.25, baseSpeechCadence)
+      : activeBeatSpeaker === 'left'
+        ? 0
+        : secBubble && clipProgress >= 0.42
+          ? baseSpeechCadence
+          : 0;
 
   if (primaryId === 'squad_army' && dualMode === 'single') {
     // Multi-Unit Formation (e.g. 4 English Longbowmen firing arrow volleys or charging knights)
@@ -1373,9 +1475,10 @@ export function drawPuppetStage(
         localT + i * 0.18,
         clipProgress,
         stageX + ox + marchShift,
-        stageY + oy,
+        puppetBaseY + oy,
         baseUnitH * 0.72,
-        true
+        true,
+        leftLipEnergy
       );
     }
 
@@ -1387,7 +1490,7 @@ export function drawPuppetStage(
       for (let a = 0; a < 9; a++) {
         const arrowProg = ((localT * 1.35 + a * 0.14) % 1.0);
         const ax = stageX - baseUnitH * 0.4 + arrowProg * (cvW * 0.55);
-        const ay = stageY - Math.sin(arrowProg * Math.PI) * (baseUnitH * 0.95) - (a % 3) * (baseUnitH * 0.12);
+        const ay = puppetBaseY - Math.sin(arrowProg * Math.PI) * (baseUnitH * 0.95) - (a % 3) * (baseUnitH * 0.12);
         const angle = Math.atan2(-Math.cos(arrowProg * Math.PI) * 0.9, 1);
 
         ctx.save();
@@ -1410,12 +1513,13 @@ export function drawPuppetStage(
       ctx.restore();
     }
 
-    if (primaryBubble) {
-      drawSpeechBubble(ctx, stageX, stageY - baseUnitH * 0.48, baseUnitH * 0.85, primaryBubble);
+    const squadBubble = activeBeatText || primaryBubble;
+    if (squadBubble) {
+      drawSpeechBubble(ctx, stageX, puppetBaseY - baseUnitH * 0.48, baseUnitH * 0.85, squadBubble);
     }
   } else if (dualMode !== 'single') {
     // Dual-Puppet Rivalry / Dialogue / Trial Scene
-    const sep = dualMode === 'duel-clash' ? baseUnitH * 0.44 : baseUnitH * 0.72;
+    const sep = (dualMode === 'duel-clash' ? baseUnitH * 0.44 : baseUnitH * 0.72) + convergeSpread;
     const leftX = stageX - sep;
     const rightX = stageX + sep;
 
@@ -1429,18 +1533,18 @@ export function drawPuppetStage(
       ctx.fillStyle = '#451A03';
       ctx.strokeStyle = '#111827';
       ctx.lineWidth = 3;
-      ctx.fillRect(leftX - baseUnitH * 0.07, stageY - baseUnitH * 0.65, baseUnitH * 0.14, baseUnitH * 1.05);
-      ctx.strokeRect(leftX - baseUnitH * 0.07, stageY - baseUnitH * 0.65, baseUnitH * 0.14, baseUnitH * 1.05);
+      ctx.fillRect(leftX - baseUnitH * 0.07, puppetBaseY - baseUnitH * 0.65, baseUnitH * 0.14, baseUnitH * 1.05);
+      ctx.strokeRect(leftX - baseUnitH * 0.07, puppetBaseY - baseUnitH * 0.65, baseUnitH * 0.14, baseUnitH * 1.05);
       ctx.restore();
 
-      drawSinglePuppet(ctx, secId, secFaction, secExpr, 'idle-bob', localT, 0.35, leftX, stageY - baseUnitH * 0.06, baseUnitH * 0.88, true);
-      drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, 'read-scroll', localT, clipProgress, rightX, stageY, baseUnitH * 0.88, false);
+      drawSinglePuppet(ctx, secId, secFaction, secExpr, 'idle-bob', localT, 0.35, leftX, puppetBaseY - baseUnitH * 0.06, baseUnitH * 0.88, true, rightLipEnergy);
+      drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, 'read-scroll', localT, clipProgress, rightX, puppetBaseY, baseUnitH * 0.88, false, leftLipEnergy);
 
       // Rising fire embers at base of stake (like 1:28-1:30)
       for (let f = 0; f < 10; f++) {
         const fp = (localT * 1.4 + f * 0.13) % 1;
         const fx = leftX + Math.sin(f * 2.1 + localT * 5) * (baseUnitH * 0.35);
-        const fy = stageY + baseUnitH * 0.38 - fp * (baseUnitH * 0.75);
+        const fy = puppetBaseY + baseUnitH * 0.38 - fp * (baseUnitH * 0.75);
         const fr = (1 - fp) * (baseUnitH * 0.09);
         ctx.fillStyle = fp < 0.45 ? 'rgba(250, 204, 21, 0.85)' : 'rgba(239, 68, 68, 0.75)';
         ctx.beginPath();
@@ -1449,7 +1553,7 @@ export function drawPuppetStage(
       }
     } else {
       // Duel Clash or Dialogue Versus
-      drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, primaryAction, localT, clipProgress, leftX, stageY, baseUnitH * 0.9, true);
+      drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, primaryAction, localT, clipProgress, leftX, puppetBaseY, baseUnitH * 0.9, true, leftLipEnergy);
       drawSinglePuppet(
         ctx,
         secId,
@@ -1459,17 +1563,18 @@ export function drawPuppetStage(
         localT + 0.25,
         clipProgress,
         rightX,
-        stageY,
+        puppetBaseY,
         baseUnitH * 0.9,
-        false
+        false,
+        rightLipEnergy
       );
 
       // Metallic sword clash sparks in the middle when duel-clash is active (like 0:02-0:08)
-      if (dualMode === 'duel-clash') {
+      if (dualMode === 'duel-clash' && convergeSpread < baseUnitH * 0.15) {
         const sparkPulse = Math.abs(Math.sin(localT * 15));
         if (sparkPulse > 0.55) {
           ctx.save();
-          ctx.translate(stageX, stageY - baseUnitH * 0.16);
+          ctx.translate(stageX, puppetBaseY - baseUnitH * 0.16);
           ctx.strokeStyle = '#FEF08A';
           ctx.lineWidth = Math.max(2.5, baseUnitH * 0.018);
           for (let s = 0; s < 6; s++) {
@@ -1484,18 +1589,31 @@ export function drawPuppetStage(
       }
     }
 
-    if (primaryBubble) {
-      drawSpeechBubble(ctx, dualMode === 'trial-scene' ? rightX : leftX, stageY - baseUnitH * 0.52, baseUnitH * 0.85, primaryBubble);
-    }
-    if (secBubble && clipProgress >= 0.42) {
-      drawSpeechBubble(ctx, rightX, stageY - baseUnitH * 0.52, baseUnitH * 0.85, secBubble);
+    if (activeBeatText) {
+      const bubbleX =
+        activeBeatSpeaker === 'right'
+          ? dualMode === 'trial-scene'
+            ? leftX
+            : rightX
+          : dualMode === 'trial-scene'
+            ? rightX
+            : leftX;
+      drawSpeechBubble(ctx, bubbleX, puppetBaseY - baseUnitH * 0.52, baseUnitH * 0.85, activeBeatText);
+    } else {
+      if (primaryBubble) {
+        drawSpeechBubble(ctx, dualMode === 'trial-scene' ? rightX : leftX, puppetBaseY - baseUnitH * 0.52, baseUnitH * 0.85, primaryBubble);
+      }
+      if (secBubble && clipProgress >= 0.42) {
+        drawSpeechBubble(ctx, rightX, puppetBaseY - baseUnitH * 0.52, baseUnitH * 0.85, secBubble);
+      }
     }
   } else {
     // Single Hero / Monarch / Storyteller / Tycoon Stage
-    drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, primaryAction, localT, clipProgress, stageX, stageY, baseUnitH, true);
+    drawSinglePuppet(ctx, primaryId, primaryFaction, primaryExpr, primaryAction, localT, clipProgress, stageX, puppetBaseY, baseUnitH, movePath !== 'enter-right', leftLipEnergy);
 
-    if (primaryBubble) {
-      drawSpeechBubble(ctx, stageX, stageY - baseUnitH * (ev.showRpgStats ? 0.95 : 0.55), baseUnitH * 0.9, primaryBubble);
+    const singleBubble = activeBeatText || primaryBubble;
+    if (singleBubble) {
+      drawSpeechBubble(ctx, stageX, puppetBaseY - baseUnitH * (ev.showRpgStats ? 0.95 : 0.55), baseUnitH * 0.9, singleBubble);
     }
   }
 

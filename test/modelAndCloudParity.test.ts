@@ -201,7 +201,16 @@ async function testPuppetStageEngine() {
     },
   });
 
+  let saveDepth = 0;
   const renderedTexts: string[] = [];
+  baseTarget.save = () => {
+    drawCalls++;
+    saveDepth++;
+  };
+  baseTarget.restore = () => {
+    drawCalls++;
+    saveDepth--;
+  };
   baseTarget.fillText = (txt: string) => {
     drawCalls++;
     renderedTexts.push(String(txt));
@@ -219,10 +228,13 @@ async function testPuppetStageEngine() {
     const bounds = getGraphicBounds(ev, 1080, 1920);
     assert.ok(bounds.w > 100 && bounds.h > 100, `Preset ${preset.id} must have valid canvas selection bounds`);
     drawPuppetStage(mockCanvasCtx, ev, 1.0, 1.0, 1080, 1920, 1.5);
+    assert.strictEqual(saveDepth, 0, `Preset ${preset.id} must have balanced ctx.save() and ctx.restore() in drawPuppetStage (leaked depth: ${saveDepth})`);
     drawGraphics(mockCanvasCtx, 1.5, 1080, 1920, [ev], { isExporting: true, graphicsAccentColor: '#F5C542' });
+    assert.strictEqual(saveDepth, 0, `Preset ${preset.id} must have balanced ctx.save() and ctx.restore() in drawGraphics (leaked depth: ${saveDepth})`);
     // Also verify 160x90 Motion Graphics gallery mini-preview rendering and paused-at-start (time = 0) inspector preview
     renderedTexts.length = 0;
     drawGraphics(mockCanvasCtx, 0, 160, 90, [ev], { isExporting: false, graphicsAccentColor: '#F5C542' });
+    assert.strictEqual(saveDepth, 0, `Preset ${preset.id} mini-preview must have balanced ctx.save()/ctx.restore()`);
     if (preset.id === 'joan-rpg-upgrade') {
       assert.ok(renderedTexts.includes('100'), 'Paused-at-start preview of joan-rpg-upgrade must render RPG stat pills');
     }
@@ -234,6 +246,45 @@ async function testPuppetStageEngine() {
     }
   }
   assert.ok(drawCalls > 500, '7-Puppet engine must execute canvas drawing primitives across all 7 archetypes');
+
+  // Verify movementPath, multi-beat dialogueLines, and audioLipSync preserve balanced ctx.save()/ctx.restore()
+  const choreoPaths = ['stationary', 'enter-left', 'enter-right', 'march-across', 'converge-center'] as const;
+  for (const path of choreoPaths) {
+    renderedTexts.length = 0;
+    const choreoEv: any = {
+      id: `test_choreo_${path}`,
+      type: 'puppetStage',
+      start: 0,
+      end: 6,
+      puppetId: 'monarch',
+      faction: 'england',
+      expression: 'happy',
+      action: 'talk-gesture',
+      dualMode: 'dialogue-versus',
+      movementPath: path,
+      audioLipSync: true,
+      dialogueLines: 'Left: Why not become King of France too?\nRight: Um... no.\nLeft: Then it is WAR!',
+      secondaryPuppetId: 'monarch',
+      secondaryFaction: 'france_royal',
+      secondaryExpression: 'shocked',
+    };
+    // Beat 1 (t = 1.0 => progress ~ 0.16)
+    drawPuppetStage(mockCanvasCtx, choreoEv, 1.0, 1.0, 1920, 1080, 1.0);
+    assert.strictEqual(saveDepth, 0, `Movement path ${path} beat 1 must preserve saveDepth === 0`);
+    assert.ok(renderedTexts.some(t => t.includes('Why not become King of France too?')), `Beat 1 bubble missing for ${path}`);
+
+    // Beat 2 (t = 3.0 => progress = 0.5)
+    renderedTexts.length = 0;
+    drawPuppetStage(mockCanvasCtx, choreoEv, 1.0, 1.0, 1920, 1080, 3.0);
+    assert.strictEqual(saveDepth, 0, `Movement path ${path} beat 2 must preserve saveDepth === 0`);
+    assert.ok(renderedTexts.some(t => t.includes('Um... no.')), `Beat 2 bubble missing for ${path}`);
+
+    // Beat 3 (t = 5.0 => progress ~ 0.83)
+    renderedTexts.length = 0;
+    drawPuppetStage(mockCanvasCtx, choreoEv, 1.0, 1.0, 1920, 1080, 5.0);
+    assert.strictEqual(saveDepth, 0, `Movement path ${path} beat 3 must preserve saveDepth === 0`);
+    assert.ok(renderedTexts.some(t => t.includes('Then it is WAR!')), `Beat 3 bubble missing for ${path}`);
+  }
 }
 
 Promise.all([testMediaAssemblerMatching(), testPuppetStageEngine()]).then(() => {
